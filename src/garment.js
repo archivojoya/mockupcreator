@@ -20,6 +20,70 @@ const smooth = (a, b, v) => {
   return t * t * (3 - 2 * t);
 };
 
+// ---------- sección del cuerpo: media elipse con largo de arco fijo ----------
+// Una camiseta colgada no es plana: frente y espalda se separan y los costados
+// se curvan hacia atrás. Para que la tela conserve su ancho real (el del
+// molde), cada fila del cuerpo se reparte sobre media elipse cuyo arco mide
+// lo mismo que la fila plana; así, cuanto más volumen, más angosta la silueta.
+
+const ARC_K = 33; // relaciones profundidad/ancho tabuladas (0…1)
+const ARC_N = 96; // muestras de ángulo por tabla
+const ARC = (() => {
+  const tables = [];
+  for (let ki = 0; ki < ARC_K; ki++) {
+    const k = ki / (ARC_K - 1);
+    const cum = new Float32Array(ARC_N + 1);
+    for (let i = 1; i <= ARC_N; i++) {
+      const p0 = -Math.PI / 2 + (Math.PI * (i - 1)) / ARC_N;
+      const p1 = -Math.PI / 2 + (Math.PI * i) / ARC_N;
+      const pm = (p0 + p1) / 2;
+      cum[i] = cum[i - 1] + Math.sqrt(Math.cos(pm) ** 2 + (k * Math.sin(pm)) ** 2) * (p1 - p0);
+    }
+    tables.push(cum);
+  }
+  return tables;
+})();
+
+// Largo de media elipse de semiejes (1, k).
+function halfArc(k) {
+  const f = clamp(k, 0, 1) * (ARC_K - 1);
+  const i = Math.min(Math.floor(f), ARC_K - 2);
+  return lerp(ARC[i][ARC_N], ARC[i + 1][ARC_N], f - i);
+}
+
+// Ángulo (−π/2…π/2) donde el arco recorrido es la fracción `t` del total.
+function arcAngle(k, t) {
+  const f = clamp(k, 0, 1) * (ARC_K - 1);
+  const i = Math.min(Math.floor(f), ARC_K - 2);
+  const w = f - i;
+  const target = clamp(t, 0, 1);
+  const total = lerp(ARC[i][ARC_N], ARC[i + 1][ARC_N], w);
+  let lo = 0;
+  let hi = ARC_N;
+  while (hi - lo > 1) {
+    const m = (lo + hi) >> 1;
+    if (lerp(ARC[i][m], ARC[i + 1][m], w) / total <= target) lo = m;
+    else hi = m;
+  }
+  const c0 = lerp(ARC[i][lo], ARC[i + 1][lo], w) / total;
+  const c1 = lerp(ARC[i][hi], ARC[i + 1][hi], w) / total;
+  const a = lo + (c1 > c0 ? (target - c0) / (c1 - c0) : 0);
+  return -Math.PI / 2 + (Math.PI * a) / ARC_N;
+}
+
+// Semiancho visible de una fila de ancho plano 2·W con profundidad B.
+function ellipseHalfWidth(W, B) {
+  if (B <= 1e-6) return W;
+  let A = W;
+  for (let it = 0; it < 6; it++) A = (2 * W) / halfArc(B / A);
+  return A;
+}
+
+// Profundidad (semieje frente-espalda) del cuerpo según la altura.
+function bodyDepth(b) {
+  return 0.012 + 0.036 * smooth(0.02, 0.3, b) - 0.008 * smooth(0.55, 1, b);
+}
+
 function pointInPoly(pts, x, y) {
   let inside = false;
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
@@ -219,25 +283,33 @@ export class GarmentModel {
     const s = (x - xl) / (xr - xl || 1);
     const W = this.Wb(b);
     const sign = panel.kind === 'front' ? 1 : -1;
-    let X = (2 * s - 1) * W * sign;
     const Y = -b * BODY_LENGTH;
-    let sE = s;
-    if (b < this.bSh) sE = (x - panel.shL.x) / (panel.shR.x - panel.shL.x);
-    const u = clamp(Math.abs(2 * sE - 1), 0, 1);
-    const g = Math.sqrt(Math.max(0, 1 - u ** 4));
-    const ta = (b - this.bSh) / (this.bUA - this.bSh);
-    const e = ta > 0 && ta < 1 ? ARM_OPEN * Math.sin(Math.PI * ta) ** 0.75 : 0;
-    const Dc = 0.012 + 0.012 * smooth(0, 0.22, b) * (1 - 0.3 * smooth(0.35, 1, b));
-    const base = e + (Dc - e) * g;
+    // Junto a la costura de hombros frente y espalda se juntan (sin volumen).
     const dy = Math.max(0, (y - panel.ysh(x)) * panel.S);
     const q = Math.min(dy / 0.03, 1);
     const h = Math.sqrt(1 - (1 - q) ** 2);
+    const B = bodyDepth(b) * h;
+    const A = ellipseHalfWidth(W, B);
+    const phi = arcAngle(B / A, s);
+    // En los hombros la tela apoya sobre la percha: perfil plano hasta los
+    // bordes. Hacia abajo pasa a la media elipse.
+    const flat = Math.sqrt(Math.max(0, 1 - Math.abs(Math.sin(phi)) ** 4));
+    const g = lerp(flat, Math.cos(phi), smooth(this.bSh, this.bUA, b));
+    let X = A * Math.sin(phi) * sign;
+    // Apertura de la sisa: frente y espalda se separan donde va la manga.
+    const ta = (b - this.bSh) / (this.bUA - this.bSh);
+    const e = ta > 0 && ta < 1 ? ARM_OPEN * Math.sin(Math.PI * ta) ** 0.75 : 0;
     const fold = this.fold(panel.kind, X, b, Y);
     // Ondulación leve del costado (igual en frente y espalda: la costura cierra).
     const rip = 0.005 * smooth(0.45, 1, b) * Math.sin(b * 23 + (X > 0 ? 0.8 : 2.1));
     X += Math.sign(X) * rip * Math.abs(2 * s - 1) ** 3;
-    const Z = base * h * (1 + fold * g * g);
+    const Z = (B * g + e * h * (1 - g) + 0.022 * fold * g * g * h);
     return out.set(X, Y, Z * sign);
+  }
+
+  // Semiancho visible del cuerpo (con volumen) a la altura b.
+  halfWidth(b) {
+    return ellipseHalfWidth(this.Wb(b), bodyDepth(b));
   }
 
   // Pliegues de caída: ondas verticales abajo, diagonales desde los hombros.
@@ -425,7 +497,7 @@ export class GarmentModel {
           const P = curve(fr, iu / Nu, k / 6, A[iu], tmpP);
           const b = -P.y / BODY_LENGTH;
           if (b < this.bUA) continue;
-          worst = Math.max(worst, this.Wb(b) + 0.002 - P.x * side);
+          worst = Math.max(worst, this.halfWidth(b) + 0.002 - P.x * side);
         }
       }
       return worst;
@@ -638,7 +710,11 @@ export class GarmentModel {
       }
       return { key, geo, rest2D };
     };
-    const pieces = [mk('front', geos.front, this.front.S), mk('back', geos.back, this.back.S)];
+    // El cuerpo conserva su curvatura (volumen) al asentarse.
+    const pieces = [
+      { ...mk('front', geos.front, this.front.S), bendRest3D: true },
+      { ...mk('back', geos.back, this.back.S), bendRest3D: true },
+    ];
     // Las mangas cuelgan con algo más de cuerpo (costura de hombro y dobladillo).
     // Las mangas toman como largo de reposo su forma inicial lisa (no el
     // molde): así no se arrugan al asentarse y quedan como planchadas.
@@ -726,7 +802,7 @@ export class GarmentModel {
       const k = i * 3;
       const b = -pos[k + 1] / BODY_LENGTH;
       if (b < this.bUA + 0.01 || Math.abs(pos[k + 2]) > 0.035) return;
-      const lim = this.Wb(b) + 0.004;
+      const lim = this.halfWidth(b) + 0.004;
       if (pos[k] * side < lim) pos[k] = side * lim;
     };
     drape.buildTethers();

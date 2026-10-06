@@ -56,9 +56,10 @@ export class Drape {
       const r2 = pc.rest2D;
       const r3 = pc.geo.attributes.position.array;
       // Largo de reposo: el del molde (2D) o, sin molde, el de la forma inicial.
-      const d2 = r2
-        ? (a, b) => Math.hypot(r2[a * 2] - r2[b * 2], r2[a * 2 + 1] - r2[b * 2 + 1])
-        : (a, b) => Math.hypot(r3[a * 3] - r3[b * 3], r3[a * 3 + 1] - r3[b * 3 + 1], r3[a * 3 + 2] - r3[b * 3 + 2]);
+      const d3 = (a, b) => Math.hypot(r3[a * 3] - r3[b * 3], r3[a * 3 + 1] - r3[b * 3 + 1], r3[a * 3 + 2] - r3[b * 3 + 2]);
+      const d2 = r2 ? (a, b) => Math.hypot(r2[a * 2] - r2[b * 2], r2[a * 2 + 1] - r2[b * 2 + 1]) : d3;
+      // La flexión puede tomar como reposo la forma 3D inicial (conserva curvatura).
+      const db = pc.bendRest3D ? d3 : d2;
       const edges = new Map();
       for (let t = 0; t < idx.length; t += 3) {
         const tri = [idx[t], idx[t + 1], idx[t + 2]];
@@ -83,10 +84,10 @@ export class Drape {
           sJ.push(o + b);
           sR.push(d2(a, b));
         }
-        if (rec.length === 4 && d2(rec[2], rec[3]) >= MIN_REST) {
+        if (rec.length === 4 && db(rec[2], rec[3]) >= MIN_REST) {
           bI.push(o + rec[2]);
           bJ.push(o + rec[3]);
-          bR.push(d2(rec[2], rec[3]));
+          bR.push(db(rec[2], rec[3]));
           bA.push(pc.bendCompliance ?? BEND_COMPLIANCE);
         } else if (rec.length === 3) {
           pc.boundary.add(a);

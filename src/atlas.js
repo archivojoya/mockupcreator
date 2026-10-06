@@ -20,6 +20,7 @@ export class Atlas {
     this.texture.anisotropy = 8;
     this.layers = null;
     this.layerKey = '';
+    this.metersPerUnit = null;
   }
 
   uv(x, y) {
@@ -71,6 +72,7 @@ export class Atlas {
       ctx.fillStyle = ps.color;
       ctx.fillRect(0, 0, width, height);
       if (ps.design) ctx.drawImage(this.layers.parts, 0, 0, width, height);
+      if (this.metersPerUnit && part.key !== 'collar') this.drawHem(part);
       ctx.restore();
     }
     if (this.layers.loose && state.logos) {
@@ -82,6 +84,34 @@ export class Atlas {
     this.dropFringe();
     this.dilate(4, 3);
     this.texture.needsUpdate = true;
+  }
+
+  // Dobladillo con doble costura de recubridora a ~2 cm del ruedo.
+  drawHem(part) {
+    const { ctx } = this;
+    const vb = this.mold.viewBox;
+    const k = this.scale / this.metersPerUnit; // px por metro
+    const yB = (part.bbox.maxY - vb.y) * this.scale;
+    const x0 = (part.bbox.minX - vb.x) * this.scale;
+    const x1 = (part.bbox.maxX - vb.x) * this.scale;
+    ctx.fillStyle = 'rgba(0,0,0,0.045)';
+    ctx.fillRect(x0, yB - 0.025 * k, x1 - x0, 0.025 * k);
+    ctx.lineWidth = Math.max(1, 0.0007 * k);
+    ctx.setLineDash([0.0028 * k, 0.0013 * k]);
+    for (const d of [0.0155, 0.0215]) {
+      const y = yB - d * k;
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.moveTo(x0, y);
+      ctx.lineTo(x1, y);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.beginPath();
+      ctx.moveTo(x0, y + ctx.lineWidth);
+      ctx.lineTo(x1, y + ctx.lineWidth);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
   }
 
   // Elimina los píxeles semitransparentes del borde (mezclados con el fondo)
@@ -111,23 +141,46 @@ export class Atlas {
   }
 }
 
-// Mapa de normales de tejido de punto (jersey) que se repite en mosaico.
-export function makeKnitNormalMap() {
-  const N = 128;
+// Mapa de normales de la tela: punto jersey (columnas de 1,25 mm) más
+// ondulaciones suaves de la tela, en un mosaico que representa 8 × 8 cm.
+export const FABRIC_TILE_M = 0.08;
+export function makeFabricNormalMap() {
+  const N = 1024;
   const h = new Float32Array(N * N);
-  const wale = 16; // ancho de columna de punto en píxeles
-  const course = 12; // alto de pasada
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const waves = Array.from({ length: 12 }, () => {
+    const fx = Math.floor(rnd() * 7) - 3;
+    const fy = Math.floor(rnd() * 6) + 1;
+    const amp = 2.6 / Math.hypot(fx, fy);
+    return { fx, fy, amp, ph: rnd() * Math.PI * 2 };
+  });
+  const knit = new Float32Array(16 * 16);
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const cx = x - 8 + 0.5;
+      const cy = y - 8 + 0.5;
+      const side = cx < 0 ? -1 : 1;
+      const ax = cx - side * 3.5;
+      const rx = ax * Math.cos(0.45 * side) - cy * Math.sin(0.45 * side);
+      const ry = ax * Math.sin(0.45 * side) + cy * Math.cos(0.45 * side);
+      const d = (rx / 3.2) ** 2 + (ry / 7.5) ** 2;
+      knit[y * 16 + x] = Math.max(0, 1 - d) ** 0.6;
+    }
+  }
+  const sinRow = waves.map((w) => {
+    const row = new Float32Array(N);
+    for (let x = 0; x < N; x++) row[x] = (2 * Math.PI * w.fx * x) / N + w.ph;
+    return row;
+  });
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
-      const cx = (x % wale) - wale / 2;
-      const cy = (y % course) - course / 2;
-      // Dos "patas" inclinadas formando la V del punto.
-      const side = cx < 0 ? -1 : 1;
-      const ax = cx - side * wale * 0.22;
-      const rx = ax * Math.cos(0.5 * side) - cy * Math.sin(0.5 * side);
-      const ry = ax * Math.sin(0.5 * side) + cy * Math.cos(0.5 * side);
-      const d = (rx / (wale * 0.2)) ** 2 + (ry / (course * 0.62)) ** 2;
-      h[y * N + x] = Math.max(0, 1 - d) ** 0.6 + 0.08 * Math.random();
+      let v = 0;
+      for (let k = 0; k < waves.length; k++) {
+        const w = waves[k];
+        v += w.amp * Math.sin(sinRow[k][x] + (2 * Math.PI * w.fy * y) / N);
+      }
+      h[y * N + x] = v + 0.7 * knit[(y % 16) * 16 + (x % 16)] + 0.06 * rnd();
     }
   }
   const canvas = document.createElement('canvas');
@@ -137,8 +190,8 @@ export function makeKnitNormalMap() {
   const at = (x, y) => h[((y + N) % N) * N + ((x + N) % N)];
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
-      const dx = (at(x + 1, y) - at(x - 1, y)) * 1.2;
-      const dy = (at(x, y + 1) - at(x, y - 1)) * 1.2;
+      const dx = (at(x + 1, y) - at(x - 1, y)) * 0.9;
+      const dy = (at(x, y + 1) - at(x, y - 1)) * 0.9;
       const l = Math.hypot(dx, dy, 1);
       const i = (y * N + x) * 4;
       img.data[i] = ((-dx / l) * 0.5 + 0.5) * 255;

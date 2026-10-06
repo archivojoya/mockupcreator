@@ -1,12 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { SvgMold, PART_DEFS } from './svgMold.js';
 import { GarmentModel } from './garment.js';
-import { Atlas, makeKnitNormalMap, makeRibNormalMap } from './atlas.js';
+import { Atlas, makeFabricNormalMap, makeRibNormalMap, FABRIC_TILE_M } from './atlas.js';
+import { bakeAO, ensureAOAttributes } from './bakeAO.js';
 import './style.css';
 
 const SPACING = 0.43;
@@ -22,9 +20,25 @@ renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
+// La escena no se mueve (sólo la cámara): las sombras se calculan una vez.
+renderer.shadowMap.autoUpdate = false;
 viewport.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
+// Luz ambiente de estudio (difusa): la tela es mate, así que no refleja.
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.32;
+
+let needsRender = true;
+function requestRender() {
+  needsRender = true;
+}
+function refreshShadows() {
+  renderer.shadowMap.needsUpdate = true;
+  requestRender();
+}
+renderer.shadowMap.needsUpdate = true;
 const camera = new THREE.PerspectiveCamera(26, 1, 0.05, 20);
 camera.position.set(0, -0.3, 2.7);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -34,26 +48,27 @@ controls.minDistance = 0.6;
 controls.maxDistance = 4;
 controls.minPolarAngle = Math.PI * 0.2;
 controls.maxPolarAngle = Math.PI * 0.75;
+controls.addEventListener('change', requestRender);
 controls.update();
 
-// Luz de estudio suave: sin mapa de entorno para evitar reflejos.
-const hemi = new THREE.HemisphereLight(0xffffff, 0xcfc9c0, 1.2);
+// Luz principal suave con sombra y relleno frío.
+const hemi = new THREE.HemisphereLight(0xffffff, 0xcfc9c0, 0.4);
 scene.add(hemi);
-const key = new THREE.DirectionalLight(0xfff8f0, 1.75);
+const key = new THREE.DirectionalLight(0xfff8f0, 1.9);
 key.position.set(1.9, 1.7, 2.8);
 key.castShadow = true;
-key.shadow.mapSize.set(2048, 2048);
+key.shadow.mapSize.set(4096, 4096);
 key.shadow.camera.left = -1.1;
 key.shadow.camera.right = 1.1;
 key.shadow.camera.top = 0.5;
 key.shadow.camera.bottom = -1.1;
 key.shadow.camera.near = 0.5;
 key.shadow.camera.far = 6;
-key.shadow.radius = 6;
+key.shadow.radius = 8;
 key.shadow.bias = -0.0004;
 key.shadow.normalBias = 0.01;
 scene.add(key, key.target);
-const fill = new THREE.DirectionalLight(0xf0f4ff, 0.55);
+const fill = new THREE.DirectionalLight(0xf0f4ff, 0.3);
 fill.position.set(-2.5, 0.4, 2);
 scene.add(fill);
 
@@ -63,51 +78,62 @@ wall.position.set(0, -0.5, -0.16);
 wall.receiveShadow = true;
 scene.add(wall);
 
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-const gtao = new GTAOPass(scene, camera, 1, 1);
-gtao.updateGtaoMaterial({ radius: 0.06, distanceExponent: 1.5, thickness: 1, scale: 1.1, samples: 16 });
-gtao.blendIntensity = 0.85;
-composer.addPass(gtao);
-composer.addPass(new OutputPass());
-
 function resize() {
   const w = viewport.clientWidth;
   const h = viewport.clientHeight;
   renderer.setSize(w, h, false);
-  composer.setSize(w, h);
   camera.aspect = w / h;
   // Encuadre: que entren ambas camisetas en pantallas angostas.
   camera.fov = w / h < 1.2 ? 26 * (1.25 / Math.max(w / h, 0.55)) : 26;
   camera.updateProjectionMatrix();
+  requestRender();
 }
 window.addEventListener('resize', resize);
 
 // ---------- materiales ----------
 
-const knit = makeKnitNormalMap();
+const fabricNormal = makeFabricNormalMap();
 const rib = makeRibNormalMap();
+const aoStrength = { value: 1 };
 
 function fabricMaterial(map, normalMap) {
   const m = new THREE.MeshPhysicalMaterial({
     map,
     roughness: 1,
     metalness: 0,
-    specularIntensity: 0.12,
+    specularIntensity: 0.1,
+    // Brillo muy suave en ángulos rasantes, propio del poliéster.
+    sheen: 0.3,
+    sheenRoughness: 0.8,
+    sheenColor: new THREE.Color(0xffffff),
     normalMap,
-    normalScale: new THREE.Vector2(0.35, 0.35),
+    normalScale: new THREE.Vector2(0.5, 0.5),
     side: THREE.DoubleSide,
   });
   // El interior de la prenda (caras traseras) muestra la tela sin estampar,
-  // algo más oscura, como en una prenda sublimada.
+  // algo más oscura, como en una prenda sublimada. La oclusión precalculada
+  // oscurece pliegues, axilas e interior.
   m.userData.inside = { value: new THREE.Color(0xffffff) };
   m.onBeforeCompile = (shader) => {
     shader.uniforms.insideColor = m.userData.inside;
+    shader.uniforms.aoStrength = aoStrength;
+    shader.vertexShader = shader.vertexShader.replace(
+      'void main() {',
+      'attribute float aoF;\nattribute float aoB;\nvarying float vAoF;\nvarying float vAoB;\nvoid main() {\n vAoF = aoF;\n vAoB = aoB;',
+    );
     shader.fragmentShader = shader.fragmentShader
-      .replace('void main() {', 'uniform vec3 insideColor;\nvoid main() {')
+      .replace('void main() {', 'uniform vec3 insideColor;\nuniform float aoStrength;\nvarying float vAoF;\nvarying float vAoB;\nvoid main() {')
       .replace(
         '#include <color_fragment>',
         '#include <color_fragment>\n if (!gl_FrontFacing) diffuseColor.rgb = insideColor * 0.8;',
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        `#include <lights_fragment_end>
+  float bakedAo = mix(1.0, gl_FrontFacing ? vAoF : vAoB, aoStrength);
+  reflectedLight.indirectDiffuse *= bakedAo;
+  reflectedLight.indirectSpecular *= bakedAo;
+  reflectedLight.directDiffuse *= mix(1.0, bakedAo, 0.5);`,
       );
   };
   return m;
@@ -137,6 +163,7 @@ let atlas = null;
 let garmentGroup = null;
 let materials = {};
 let pickables = [];
+let buildToken = 0;
 
 async function loadMold(text, name) {
   setStatus('Procesando molde…');
@@ -164,12 +191,13 @@ function buildGarment() {
   const model = new GarmentModel(mold);
   const P = mold.parts;
   const tex = atlas.texture;
-  knit.repeat.set(mold.viewBox.w * model.front.S / 0.0028, (mold.viewBox.h * model.front.S) / 0.0021);
+  atlas.metersPerUnit = model.front.S;
+  fabricNormal.repeat.set((mold.viewBox.w * model.front.S) / FABRIC_TILE_M, (mold.viewBox.h * model.front.S) / FABRIC_TILE_M);
   materials = {
-    front: fabricMaterial(tex, knit),
-    back: fabricMaterial(tex, knit),
-    sleeveL: fabricMaterial(tex, knit),
-    sleeveR: fabricMaterial(tex, knit),
+    front: fabricMaterial(tex, fabricNormal),
+    back: fabricMaterial(tex, fabricNormal),
+    sleeveL: fabricMaterial(tex, fabricNormal),
+    sleeveR: fabricMaterial(tex, fabricNormal),
     collar: fabricMaterial(P.collar ? tex : null, rib),
   };
   rib.repeat.set(220, 1);
@@ -182,6 +210,7 @@ function buildGarment() {
   if (sl) parts.push(['sleeveL', model.buildSleeve(sl, +1, atlas)]);
   if (sr) parts.push(['sleeveR', model.buildSleeve(sr, -1, atlas)]);
   parts.push(['collar', model.buildCollar(atlas, P.collar)]);
+  for (const [, geo] of parts) ensureAOAttributes(geo);
   const hanger = model.buildHanger();
 
   const makeShirt = () => {
@@ -224,6 +253,38 @@ function buildGarment() {
   backShirt.position.z = 2 * hanger.rodZ;
   garmentGroup.position.y = 0.02;
   scene.add(garmentGroup);
+  refreshShadows();
+  settle(model, Object.fromEntries(parts), hanger);
+}
+
+const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
+
+// Deja caer la tela sobre la percha y después precalcula la oclusión.
+async function settle(model, geos, hanger) {
+  const token = ++buildToken;
+  const cancelled = () => token !== buildToken;
+  await nextFrame();
+  const drape = model.setupDrape(geos, hanger);
+  const FRAMES = 110;
+  while (drape.frame < FRAMES) {
+    setStatus(`Acomodando la tela… ${Math.round((drape.frame / FRAMES) * 100)}%`);
+    // Simula por tiempo (no por cuadros) para no frenar la interfaz.
+    const t = performance.now();
+    do drape.step(1);
+    while (drape.frame < FRAMES && performance.now() - t < 25);
+    drape.apply();
+    requestRender();
+    await nextFrame();
+    if (cancelled()) return;
+  }
+  refreshShadows();
+  setStatus('Calculando sombras de los pliegues…');
+  await nextFrame();
+  const fabric = ['front', 'back', 'sleeveL', 'sleeveR', 'collar'].map((k) => geos[k]).filter(Boolean);
+  const done = await bakeAO(fabric, [...fabric, hanger.bar, ...hanger.caps], cancelled);
+  if (!done || cancelled()) return;
+  refreshShadows();
+  setStatus('');
 }
 
 let composing = null;
@@ -238,6 +299,7 @@ async function refreshTexture() {
   composing = (async () => {
     try {
       await atlas.compose(state);
+      requestRender();
     } catch (err) {
       console.error(err);
       setStatus('No se pudo dibujar el diseño del SVG.');
@@ -351,15 +413,18 @@ document.getElementById('hanger').addEventListener('change', (e) => {
   garmentGroup?.traverse((o) => {
     if (o.userData.hanger) o.material = hangerMats[state.hanger];
   });
+  requestRender();
 });
 document.getElementById('ao').addEventListener('change', (e) => {
   state.ao = e.target.checked;
-  gtao.enabled = state.ao;
+  aoStrength.value = state.ao ? 1 : 0;
+  requestRender();
 });
 const bgInput = document.getElementById('background');
 bgInput.addEventListener('input', () => {
   state.background = bgInput.value;
   wallMat.color.set(bgInput.value);
+  requestRender();
 });
 document.getElementById('reset-view').addEventListener('click', () => {
   camera.position.set(0, -0.3, 2.7);
@@ -370,7 +435,7 @@ document.getElementById('download').addEventListener('click', () => {
   const prev = renderer.getPixelRatio();
   renderer.setPixelRatio(Math.max(prev, 2));
   resize();
-  composer.render();
+  renderer.render(scene, camera);
   const url = renderer.domElement.toDataURL('image/png');
   renderer.setPixelRatio(prev);
   resize();
@@ -411,6 +476,7 @@ function highlight(key) {
   if (hovered && materials[hovered]) materials[hovered].emissive.setHex(0x000000);
   hovered = key;
   if (key && materials[key]) materials[key].emissive.setHex(0x1c2a3a);
+  requestRender();
   for (const li of partsList.children) li.classList.toggle('active', li.dataset.part === key);
   renderer.domElement.style.cursor = key ? 'pointer' : '';
 }
@@ -440,9 +506,12 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 // ---------- arranque ----------
 
 resize();
+// Se dibuja sólo cuando algo cambió (cámara, texturas, simulación).
 renderer.setAnimationLoop(() => {
   controls.update();
-  composer.render();
+  if (!needsRender) return;
+  needsRender = false;
+  renderer.render(scene, camera);
 });
 
 fetch(`${import.meta.env.BASE_URL}molde-ejemplo.svg`)
@@ -453,4 +522,4 @@ fetch(`${import.meta.env.BASE_URL}molde-ejemplo.svg`)
     setStatus(err.message, true);
   });
 
-window.__mockup = { state, refreshTexture, scene, camera, controls, getAtlas: () => atlas, getMold: () => mold };
+window.__mockup = { state, refreshTexture, scene, camera, controls, materials: () => materials, getAtlas: () => atlas, getMold: () => mold };

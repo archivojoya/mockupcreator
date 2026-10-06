@@ -45,6 +45,18 @@ cuello como una tira horizontal.
 
 - `src/svgMold.js` — lectura del SVG, detección de piezas, contornos y paleta.
 - `src/garment.js` — geometría 3D generada desde los contornos (cuerpo, mangas,
-  cuello y percha) con caída y pliegues de prenda colgada.
-- `src/atlas.js` — textura con todas las piezas coloreadas y mapa de tejido.
+  cuello y percha) y preparación de la simulación (costuras, fijaciones).
+- `src/drape.js` — simulación de caída de la tela: las piezas usan los largos
+  reales del molde, se cosen entre sí y cuelgan de la percha con gravedad.
+- `src/bakeAO.js` — sombras de pliegues (oclusión ambiental) calculadas una vez
+  por vértice cuando la tela se asienta.
+- `src/atlas.js` — textura con todas las piezas coloreadas, dobladillo con
+  costura y mapa de relieve del tejido.
 - `src/main.js` — escena, iluminación de estudio suave y panel de control.
+
+## Rendimiento
+
+Al cargar un molde la tela se acomoda en un par de segundos y después se
+calculan las sombras de los pliegues. A partir de ahí la escena queda quieta:
+las sombras ya están calculadas y sólo se redibuja cuando se mueve la cámara o
+cambia un color, así que girar es fluido incluso en equipos modestos.

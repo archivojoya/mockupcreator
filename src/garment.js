@@ -4,10 +4,11 @@
 // percha: hombros apoyados, costuras cerradas y caída con pliegues suaves.
 
 import * as THREE from 'three';
+import { Drape } from './drape.js';
 
 const BODY_LENGTH = 0.72; // m, del punto de cuello al ruedo
 const ARM_OPEN = 0.03; // apertura (media) de la sisa
-const HANGER_R = 0.0065; // radio de la barra de la percha
+const HANGER_R = 0.0055; // radio de la barra de la percha
 
 // ---------- utilidades 2D ----------
 
@@ -259,9 +260,8 @@ export class GarmentModel {
 
   // ---------- mallas ----------
 
-  buildBody(panel, atlas) {
+  buildBody(panel, atlas, cols = 60) {
     const pts = panel.pts;
-    const cols = 96;
     const cell = (panel.maxX - panel.minX) / cols;
     const rows = Math.ceil((panel.maxY - panel.minY) / cell);
     const positions = [];
@@ -269,6 +269,8 @@ export class GarmentModel {
     const normals = [];
     const index = [];
     const keyMap = new Map();
+    const px = [];
+    const py = [];
     const v = new THREE.Vector3();
     const dx = new THREE.Vector3();
     const dy = new THREE.Vector3();
@@ -281,6 +283,8 @@ export class GarmentModel {
       if (id !== undefined) return id;
       id = positions.length / 3;
       keyMap.set(key, id);
+      px.push(x);
+      py.push(y);
       this.bodyPos(panel, x, y, v);
       positions.push(v.x, v.y, v.z);
       const [u, w] = atlas.uv(x, y);
@@ -325,7 +329,9 @@ export class GarmentModel {
         }
       }
     }
-    return finishGeometry(positions, normals, uvs, index);
+    const geo = finishGeometry(positions, normals, uvs, index);
+    geo.userData = { panel, px: Float32Array.from(px), py: Float32Array.from(py) };
+    return geo;
   }
 
   // Bucle de la sisa en 3D. u: 0 axila → 0.5 hombro (por delante) → 1 axila (por detrás)
@@ -410,6 +416,8 @@ export class GarmentModel {
     const positions = [];
     const uvs = [];
     const index = [];
+    const px = [];
+    const py = [];
     const T0 = new THREE.Vector3();
     const T1 = new THREE.Vector3();
     const P = new THREE.Vector3();
@@ -446,6 +454,8 @@ export class GarmentModel {
         }
         positions.push(P.x, P.y, P.z);
         const q = coons(pu, t);
+        px.push(q.x);
+        py.push(q.y);
         uvs.push(...atlas.uv(q.x, q.y));
       }
     }
@@ -465,6 +475,7 @@ export class GarmentModel {
     const mid = Ac.clone().lerp(fr.Hc, 0.5);
     orientOutward(geo, (n, p) => n.dot(p.clone().sub(mid)), index);
     weldSeamNormals(geo, Nu, row);
+    geo.userData = { px: Float32Array.from(px), py: Float32Array.from(py), Nu, row, side, weld: (g) => weldSeamNormals(g, Nu, row) };
     return geo;
   }
 
@@ -572,6 +583,7 @@ export class GarmentModel {
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     geo.setIndex(index);
     geo.computeVertexNormals();
+    geo.userData = { row };
     return geo;
   }
 
@@ -580,7 +592,7 @@ export class GarmentModel {
     const f = this.front;
     const pts = [];
     const S = f.S;
-    const drop = (HANGER_R + 0.004) / S;
+    const drop = (HANGER_R + 0.006) / S;
     const sampleLine = (line, from, to, n) => {
       for (let i = 0; i <= n; i++) {
         const p = line.at(lerp(from, to, i / n));
@@ -589,10 +601,10 @@ export class GarmentModel {
         pts.push(v);
       }
     };
-    sampleLine(f.shoulderLineL, 0.8, 0, 10);
+    sampleLine(f.shoulderLineL, 0.72, 0, 10);
     const yN = pts.at(-1).y;
     pts.push(new THREE.Vector3(0, yN + 0.012, 0));
-    sampleLine(f.shoulderLineR, 0, 0.8, 10);
+    sampleLine(f.shoulderLineR, 0, 0.72, 10);
     const bar = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 120, HANGER_R, 16, false);
     const hookBase = new THREE.Vector3(0, yN + 0.012, 0);
     const r = 0.022;
@@ -606,7 +618,89 @@ export class GarmentModel {
     const tip = new THREE.SphereGeometry(0.0032, 12, 8).translate(hookPts.at(-1).x, hookPts.at(-1).y, hookPts.at(-1).z);
     const caps = [pts[0], pts.at(-1)].map((p) => new THREE.SphereGeometry(HANGER_R, 16, 10).translate(p.x, p.y, p.z));
     const rodY = stemTop.y + r - 0.0028 - 0.006;
-    return { bar, hook, tip, caps, rodY, rodZ: -r };
+    return { bar, hook, tip, caps, rodY, rodZ: -r, barPts: pts };
+  }
+
+  // Prepara la simulación de caída: piezas, costuras, fijaciones y colisiones.
+  setupDrape(geos, hanger) {
+    const mk = (key, geo, S) => {
+      const { px, py } = geo.userData;
+      const rest2D = new Float32Array(px.length * 2);
+      for (let i = 0; i < px.length; i++) {
+        rest2D[i * 2] = px[i] * S;
+        rest2D[i * 2 + 1] = py[i] * S;
+      }
+      return { key, geo, rest2D };
+    };
+    const pieces = [mk('front', geos.front, this.front.S), mk('back', geos.back, this.back.S)];
+    // Las mangas cuelgan con algo más de cuerpo (costura de hombro y dobladillo).
+    if (geos.sleeveL) pieces.push({ ...mk('sleeveL', geos.sleeveL, this.front.S), side: 1, bendCompliance: 2e-6 });
+    if (geos.sleeveR) pieces.push({ ...mk('sleeveR', geos.sleeveR, this.front.S), side: -1, bendCompliance: 2e-6 });
+    const collar = { key: 'collar', geo: geos.collar, rest2D: null };
+    pieces.push(collar);
+    const hangerEnd = Math.max(...hanger.barPts.map((p) => Math.abs(p.x)));
+    // Distancia (m) de cada punto del molde al escote: el escote y el cuello
+    // acanalado conservan su forma, el resto de la tela cae.
+    const neckDist = (panel, x, y) => {
+      let best = Infinity;
+      for (const q of panel.neckCurve.pts) best = Math.min(best, (q.x - x) ** 2 + (q.y - y) ** 2);
+      return Math.sqrt(best) * panel.S;
+    };
+    const drape = new Drape({
+      pieces,
+      hanger: hanger.barPts,
+      hangerRadius: HANGER_R + 0.0025,
+      isPinned: (orig, pc, i) => {
+        if (pc.key === 'collar') return true;
+        if (pc.key !== 'front' && pc.key !== 'back') return false;
+        const panel = pc.key === 'front' ? this.front : this.back;
+        const { px, py } = pc.geo.userData;
+        if (neckDist(panel, px[i], py[i]) < 0.014) return true;
+        const dy = (py[i] - panel.ysh(px[i])) * panel.S;
+        const X = orig[(pc.offset + i) * 3];
+        return dy < 0.012 && Math.abs(X) < hangerEnd + 0.004;
+      },
+    });
+    const [front, back] = pieces;
+    const sleeves = pieces.filter((pc) => pc.side);
+    const z0 = (i) => drape.orig[i * 3 + 2];
+    // Costuras laterales y de hombro: donde frente y espalda se tocan.
+    drape.sewBoundaries(front, [back], 0.008, (i) => Math.abs(z0(i)) < 0.003, false);
+    drape.sewBoundaries(back, [front], 0.008, (i) => Math.abs(z0(i)) < 0.003, false);
+    for (const sl of sleeves) {
+      const { Nu, row } = sl.geo.userData;
+      // Costura bajo el brazo (primera y última columna) y unión a la sisa.
+      for (let j = 0; j < row; j++) drape.stitch(sl.offset + j, sl.offset + Nu * row + j);
+      drape.sewBoundaries(sl, [front, back], 0.03, (i) => (i - sl.offset) % row === 0);
+    }
+    // El cuello se cose por su borde inferior al escote.
+    const crow = collar.geo.userData.row;
+    drape.sewBoundaries(collar, [front, back], 0.015, (i) => (i - collar.offset) % crow <= 1);
+    // La tela no atraviesa el plano entre frente y espalda (ni entre las dos
+    // caras de la manga), salvo en las costuras donde se juntan.
+    for (const pc of pieces) {
+      for (let k = 0; k < pc.count; k++) {
+        const i = pc.offset + k;
+        const z = z0(i);
+        if (pc.key === 'front') drape.halfZ[i] = z > 0.002 ? 0.0015 : 0;
+        else if (pc.key === 'back') drape.halfZ[i] = z < -0.002 ? -0.0015 : 0;
+        else if (pc.side) drape.halfZ[i] = z > 0.003 ? 0.0012 : z < -0.003 ? -0.0012 : 0;
+      }
+    }
+    // Las mangas no se meten dentro del cuerpo.
+    const sleeveOf = pieces.map((pc) => pc.side || 0);
+    drape.collide = (i, pos) => {
+      const side = sleeveOf[drape.owner[i]];
+      if (!side) return;
+      const k = i * 3;
+      const b = -pos[k + 1] / BODY_LENGTH;
+      if (b < this.bUA + 0.01 || Math.abs(pos[k + 2]) > 0.035) return;
+      const lim = this.Wb(b) + 0.004;
+      if (pos[k] * side < lim) pos[k] = side * lim;
+    };
+    drape.buildTethers();
+    for (const sl of sleeves) sl.afterApply = sl.geo.userData.weld;
+    return drape;
   }
 }
 

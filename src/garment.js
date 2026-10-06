@@ -8,7 +8,8 @@ import { Drape } from './drape.js';
 
 const BODY_LENGTH = 0.72; // m, del punto de cuello al ruedo
 const ARM_OPEN = 0.03; // apertura (media) de la sisa
-const HANGER_R = 0.0055; // radio de la barra de la percha
+const HANGER_R = 0.0055;
+const DROP_DEG = 66; // caída preferida de las mangas bajo la horizontal // radio de la barra de la percha
 
 // ---------- utilidades 2D ----------
 
@@ -424,7 +425,7 @@ export class GarmentModel {
           const P = curve(fr, iu / Nu, k / 6, A[iu], tmpP);
           const b = -P.y / BODY_LENGTH;
           if (b < this.bUA) continue;
-          worst = Math.max(worst, this.Wb(b) + 0.012 - P.x * side);
+          worst = Math.max(worst, this.Wb(b) + 0.002 - P.x * side);
         }
       }
       return worst;
@@ -436,7 +437,7 @@ export class GarmentModel {
         const fr = hemFrame((a * Math.PI) / 180, Ls);
         const e1 = hemPoint(fr, 0.5).distanceTo(A[Nu / 2]) - topLen;
         const e2 = hemPoint(fr, 0).distanceTo(A[0]) - underLen;
-        const err = e1 * e1 + e2 * e2 + 1e-5 * (a - 55) ** 2;
+        const err = e1 * e1 + e2 * e2 + 6e-5 * (a - DROP_DEG) ** 2;
         if (best && err > best.err) continue;
         const pen = insideBody(fr);
         const total = err + 4 * pen * pen;
@@ -451,7 +452,6 @@ export class GarmentModel {
     const px = [];
     const py = [];
     const P = new THREE.Vector3();
-    const axisPt = new THREE.Vector3();
     for (let i = 0; i <= Nu; i++) {
       const u = i / Nu;
       const a0 = A[i];
@@ -459,15 +459,6 @@ export class GarmentModel {
       for (let j = 0; j <= Nt; j++) {
         const t = j / Nt;
         curve(fr, u, t, a0, P);
-        // Pliegues suaves en la manga.
-        axisPt.copy(Ac).lerp(fr.Hc, t);
-        const radial = P.clone().sub(axisPt);
-        const rl = radial.length();
-        if (rl > 1e-5) {
-          const under = Math.exp(-(((u > 0.5 ? 1 - u : u) / 0.2) ** 2));
-          const w = Math.sin(Math.PI * t) * (0.004 * Math.sin(2 * Math.PI * u * 3 + 1.2 + side) + 0.003 * Math.sin(2 * Math.PI * u * 5 + t * 4) + 0.006 * under * Math.sin(t * 14 + side));
-          P.addScaledVector(radial, w / rl);
-        }
         if (j === 0) {
           P.addScaledVector(T0, -0.004);
           P.z *= 0.75;
@@ -649,8 +640,10 @@ export class GarmentModel {
     };
     const pieces = [mk('front', geos.front, this.front.S), mk('back', geos.back, this.back.S)];
     // Las mangas cuelgan con algo más de cuerpo (costura de hombro y dobladillo).
-    if (geos.sleeveL) pieces.push({ ...mk('sleeveL', geos.sleeveL, this.front.S), side: 1, bendCompliance: 1e-6, shapeMemory: 0.0015 });
-    if (geos.sleeveR) pieces.push({ ...mk('sleeveR', geos.sleeveR, this.front.S), side: -1, bendCompliance: 1e-6, shapeMemory: 0.0015 });
+    // Las mangas toman como largo de reposo su forma inicial lisa (no el
+    // molde): así no se arrugan al asentarse y quedan como planchadas.
+    if (geos.sleeveL) pieces.push({ key: 'sleeveL', geo: geos.sleeveL, rest2D: null, side: 1, bendCompliance: 2e-8, shapeMemory: 0.004 });
+    if (geos.sleeveR) pieces.push({ key: 'sleeveR', geo: geos.sleeveR, rest2D: null, side: -1, bendCompliance: 2e-8, shapeMemory: 0.004 });
     const collar = { key: 'collar', geo: geos.collar, rest2D: null };
     pieces.push(collar);
     const hangerEnd = Math.max(...hanger.barPts.map((p) => Math.abs(p.x)));

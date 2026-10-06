@@ -46,8 +46,9 @@ controls.target.set(0, -0.3, 0);
 controls.enableDamping = true;
 controls.minDistance = 0.6;
 controls.maxDistance = 4;
-controls.minPolarAngle = Math.PI * 0.2;
-controls.maxPolarAngle = Math.PI * 0.75;
+// La pared queda quieta: se giran las camisetas, la cámara sólo acerca.
+controls.enableRotate = false;
+controls.enablePan = false;
 controls.addEventListener('change', requestRender);
 controls.update();
 
@@ -57,14 +58,14 @@ scene.add(hemi);
 const key = new THREE.DirectionalLight(0xfff8f0, 1.9);
 key.position.set(1.9, 1.7, 2.8);
 key.castShadow = true;
-key.shadow.mapSize.set(4096, 4096);
+key.shadow.mapSize.set(2048, 2048);
 key.shadow.camera.left = -1.1;
 key.shadow.camera.right = 1.1;
 key.shadow.camera.top = 0.5;
 key.shadow.camera.bottom = -1.1;
 key.shadow.camera.near = 0.5;
 key.shadow.camera.far = 6;
-key.shadow.radius = 8;
+key.shadow.radius = 6;
 key.shadow.bias = -0.0004;
 key.shadow.normalBias = 0.01;
 scene.add(key, key.target);
@@ -74,7 +75,7 @@ scene.add(fill);
 
 const wallMat = new THREE.MeshStandardMaterial({ color: 0xf7f5f1, roughness: 1, metalness: 0 });
 const wall = new THREE.Mesh(new THREE.PlaneGeometry(8, 5), wallMat);
-wall.position.set(0, -0.5, -0.16);
+wall.position.set(0, -0.5, -0.42);
 wall.receiveShadow = true;
 scene.add(wall);
 
@@ -163,6 +164,7 @@ let atlas = null;
 let garmentGroup = null;
 let materials = {};
 let pickables = [];
+let shirts = [];
 let buildToken = 0;
 
 async function loadMold(text, name) {
@@ -213,13 +215,15 @@ function buildGarment() {
   for (const [, geo] of parts) ensureAOAttributes(geo);
   const hanger = model.buildHanger();
 
-  const makeShirt = () => {
+  // Cada camiseta gira sobre el eje vertical de su gancho.
+  const makeShirt = (index) => {
     const g = new THREE.Group();
     for (const [key, geo] of parts) {
       const mesh = new THREE.Mesh(geo, materials[key]);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.userData.part = key;
+      mesh.userData.shirt = index;
       g.add(mesh);
       pickables.push(mesh);
     }
@@ -235,22 +239,24 @@ function buildGarment() {
       mesh.castShadow = true;
       g.add(mesh);
     }
-    return g;
+    g.position.z = -hanger.rodZ;
+    const pivot = new THREE.Group();
+    pivot.add(g);
+    return pivot;
   };
   pickables = [];
   garmentGroup = new THREE.Group();
-  const frontShirt = makeShirt();
-  frontShirt.position.x = -SPACING;
-  const backShirt = makeShirt();
-  backShirt.position.x = SPACING;
-  backShirt.rotation.y = Math.PI;
-  garmentGroup.add(frontShirt, backShirt);
+  shirts = [-SPACING, SPACING].map((x, i) => {
+    const pivot = makeShirt(i);
+    pivot.position.set(x, 0, hanger.rodZ);
+    garmentGroup.add(pivot);
+    // La segunda se muestra de espaldas.
+    return { pivot, base: i ? Math.PI : 0, angle: 0, vel: 0, hover: 0, hoverTarget: 0 };
+  });
   const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 2.4, 20).rotateZ(Math.PI / 2), rodMat);
   rod.position.set(0, hanger.rodY, hanger.rodZ);
   rod.castShadow = true;
   garmentGroup.add(rod);
-  // Contrarrota la posición z del gancho en la camiseta girada.
-  backShirt.position.z = 2 * hanger.rodZ;
   garmentGroup.position.y = 0.02;
   scene.add(garmentGroup);
   refreshShadows();
@@ -363,7 +369,7 @@ function buildUI() {
       ps.design = e.target.checked;
       refreshTexture();
     });
-    li.addEventListener('pointerenter', () => highlight(def.key));
+    li.addEventListener('pointerenter', () => highlight(def.key, true));
     li.addEventListener('pointerleave', () => highlight(null));
     partsList.appendChild(li);
   }
@@ -430,6 +436,12 @@ document.getElementById('reset-view').addEventListener('click', () => {
   camera.position.set(0, -0.3, 2.7);
   controls.target.set(0, -0.3, 0);
   controls.update();
+  for (const s of shirts) {
+    // Vuelve a la vista de frente / espalda por el camino más corto.
+    s.angle = Math.atan2(Math.sin(s.angle), Math.cos(s.angle));
+    s.vel = -s.angle * 2.8;
+  }
+  requestRender();
 });
 document.getElementById('download').addEventListener('click', () => {
   const prev = renderer.getPixelRatio();
@@ -466,49 +478,153 @@ window.addEventListener('drop', (e) => {
   if (f) openFile(f);
 });
 
-// ---------- selección en 3D ----------
+// ---------- selección y giro en 3D ----------
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
+const RAD_PER_PX = 0.011;
+const HOVER_TURN = 0.35; // giro máximo al pasar el mouse (rad)
 let hovered = null;
-function highlight(key) {
+let drag = null;
+
+// Marca la parte en el panel; con `tint` también la aclara en 3D (sólo al
+// pasar por la lista, para no alterar los colores mientras se gira).
+function highlight(key, tint = false) {
+  const tinted = tint ? key : null;
+  for (const [k, m] of Object.entries(materials)) {
+    const v = k === tinted ? 0x262626 : 0x000000;
+    if (m.emissive.getHex() !== v) {
+      m.emissive.setHex(v);
+      requestRender();
+    }
+  }
   if (hovered === key) return;
-  if (hovered && materials[hovered]) materials[hovered].emissive.setHex(0x000000);
   hovered = key;
-  if (key && materials[key]) materials[key].emissive.setHex(0x1c2a3a);
-  requestRender();
   for (const li of partsList.children) li.classList.toggle('active', li.dataset.part === key);
-  renderer.domElement.style.cursor = key ? 'pointer' : '';
 }
 function pick(e) {
   const r = renderer.domElement.getBoundingClientRect();
   pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   raycaster.setFromCamera(pointer, camera);
   const hit = raycaster.intersectObjects(pickables, false)[0];
-  return hit ? hit.object.userData.part : null;
+  return hit ? { part: hit.object.userData.part, shirt: shirts[hit.object.userData.shirt] } : null;
 }
-renderer.domElement.addEventListener('pointermove', (e) => {
-  if (e.buttons) return;
-  highlight(pick(e));
+// Posición horizontal del puntero respecto del centro de la camiseta (−1…1).
+const _c = new THREE.Vector3();
+const _e = new THREE.Vector3();
+function relativeX(e, s) {
+  const r = renderer.domElement.getBoundingClientRect();
+  s.pivot.getWorldPosition(_c);
+  _e.copy(_c).add(new THREE.Vector3(0.3, 0, 0));
+  _c.project(camera);
+  _e.project(camera);
+  const cx = r.left + ((_c.x + 1) / 2) * r.width;
+  const hw = Math.abs(_e.x - _c.x) * 0.5 * r.width || 1;
+  return Math.max(-1, Math.min(1, (e.clientX - cx) / hw));
+}
+function setHover(target, e) {
+  for (const s of shirts) s.hoverTarget = s === target && e ? relativeX(e, s) * HOVER_TURN : 0;
+  requestRender();
+}
+
+const canvas = renderer.domElement;
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  const hit = pick(e);
+  drag = { x: e.clientX, y: e.clientY, lastX: e.clientX, lastT: performance.now(), vel: 0, moved: false, hit };
+  if (hit) {
+    hit.shirt.vel = 0;
+    hit.shirt.hoverTarget = hit.shirt.hover;
+    canvas.setPointerCapture(e.pointerId);
+    canvas.style.cursor = 'grabbing';
+  }
 });
-renderer.domElement.addEventListener('pointerleave', () => highlight(null));
-let downAt = null;
-renderer.domElement.addEventListener('pointerdown', (e) => (downAt = [e.clientX, e.clientY]));
-renderer.domElement.addEventListener('pointerup', (e) => {
-  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
-  const key = pick(e);
-  if (!key) return;
-  const li = partsList.querySelector(`[data-part="${key}"]`);
+canvas.addEventListener('pointermove', (e) => {
+  if (drag) {
+    if (!drag.hit) return;
+    const s = drag.hit.shirt;
+    const now = performance.now();
+    const dx = e.clientX - drag.lastX;
+    if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 4) drag.moved = true;
+    s.angle += dx * RAD_PER_PX;
+    const dt = Math.max(now - drag.lastT, 1) / 1000;
+    drag.vel = drag.vel * 0.6 + ((dx * RAD_PER_PX) / dt) * 0.4;
+    drag.lastX = e.clientX;
+    drag.lastT = now;
+    requestRender();
+    return;
+  }
+  const hit = pick(e);
+  highlight(hit ? hit.part : null);
+  setHover(hit ? hit.shirt : null, e);
+  canvas.style.cursor = hit ? 'grab' : '';
+});
+canvas.addEventListener('pointerleave', () => {
+  if (drag) return;
+  highlight(null);
+  setHover(null);
+});
+function endDrag(e) {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  canvas.style.cursor = d.hit ? 'grab' : '';
+  if (!d.hit) return;
+  if (d.moved) {
+    // Inercia: sigue girando y frena solo.
+    d.hit.shirt.vel = performance.now() - d.lastT < 80 ? Math.max(-12, Math.min(12, d.vel)) : 0;
+    return;
+  }
+  if (e.type !== 'pointerup') return;
+  const li = partsList.querySelector(`[data-part="${d.hit.part}"]`);
   li?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   li?.querySelector('input[type=color]').click();
+}
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+
+// Teclado: flechas giran ambas camisetas.
+canvas.tabIndex = 0;
+canvas.setAttribute('aria-label', 'Vista 3D: flechas izquierda y derecha para girar las camisetas');
+canvas.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  e.preventDefault();
+  for (const s of shirts) s.vel += e.key === 'ArrowRight' ? 2.5 : -2.5;
+  requestRender();
 });
+
+// Avanza giros, inercia y el giro suave al pasar el mouse.
+function updateShirts(dt) {
+  let moving = false;
+  for (const s of shirts) {
+    if (!(drag && drag.hit && drag.hit.shirt === s)) {
+      if (Math.abs(s.vel) > 0.01) {
+        s.angle += s.vel * dt;
+        s.vel *= Math.exp(-2.8 * dt);
+      } else s.vel = 0;
+    }
+    const dh = s.hoverTarget - s.hover;
+    if (Math.abs(dh) > 1e-4) s.hover += dh * (1 - Math.exp(-7 * dt));
+    else s.hover = s.hoverTarget;
+    const rot = s.base + s.angle + s.hover;
+    if (rot !== s.pivot.rotation.y) {
+      s.pivot.rotation.y = rot;
+      moving = true;
+    }
+  }
+  return moving;
+}
 
 // ---------- arranque ----------
 
 resize();
-// Se dibuja sólo cuando algo cambió (cámara, texturas, simulación).
-renderer.setAnimationLoop(() => {
+// Se dibuja sólo cuando algo cambió (cámara, giro, texturas, simulación).
+let lastT = performance.now();
+renderer.setAnimationLoop((now) => {
+  const dt = Math.min((now - lastT) / 1000, 0.05);
+  lastT = now;
   controls.update();
+  if (updateShirts(dt)) refreshShadows();
   if (!needsRender) return;
   needsRender = false;
   renderer.render(scene, camera);

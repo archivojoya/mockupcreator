@@ -111,6 +111,10 @@ export class Drape {
     this.hangerRadius = opts.hangerRadius;
     this.collide = opts.collide;
     this.halfZ = new Float32Array(n); // >0: z >= v ; <0: z <= v ; 0: libre
+    // Memoria de forma por pieza: atrae suavemente cada partícula a su
+    // posición inicial (da cuerpo a piezas que si no colapsarían).
+    this.memory = new Float32Array(n);
+    for (const pc of this.pieces) if (pc.shapeMemory) this.memory.fill(pc.shapeMemory, pc.offset, pc.offset + pc.count);
     this.frame = 0;
   }
 
@@ -311,6 +315,12 @@ export class Drape {
                 pos[k + 2] += dz * m;
               }
             }
+          }
+          const mem = this.memory[i];
+          if (mem) {
+            pos[k] += (this.orig[k] - pos[k]) * mem;
+            pos[k + 1] += (this.orig[k + 1] - pos[k + 1]) * mem;
+            pos[k + 2] += (this.orig[k + 2] - pos[k + 2]) * mem;
           }
           const hz = halfZ[i];
           if (hz > 0 && pos[k + 2] < hz) pos[k + 2] = hz;

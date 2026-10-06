@@ -400,15 +400,47 @@ export class GarmentModel {
       const th = Math.PI - 2 * Math.PI * u;
       return fr.Hc.clone().addScaledVector(fr.up, Math.cos(th) * rY).add(new THREE.Vector3(0, 0, Math.sin(th) * rZ));
     };
+    // Curva de la manga (Hermite) desde la sisa hasta el ruedo para cada u.
+    const T0 = new THREE.Vector3();
+    const curve = (fr, u, t, a0, out) => {
+      const h1 = hemPoint(fr, u);
+      const top = (1 - Math.cos(2 * Math.PI * u)) / 2;
+      T0.set(side, -1.1 + 0.6 * top, 0).normalize();
+      const m = a0.distanceTo(h1) * 0.9;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      return out.copy(a0).multiplyScalar(2 * t3 - 3 * t2 + 1)
+        .addScaledVector(T0, (t3 - 2 * t2 + t) * m)
+        .addScaledVector(h1, -2 * t3 + 3 * t2)
+        .addScaledVector(fr.D, (t3 - t2) * m);
+    };
+    // La manga no puede empezar metida dentro del cuerpo: se mide cuánto
+    // entra la parte de abajo (axila) en el ancho del cuerpo.
+    const tmpP = new THREE.Vector3();
+    const insideBody = (fr) => {
+      let worst = 0;
+      for (const iu of [0, Math.round(Nu * 0.1), Math.round(Nu * 0.2), Nu - Math.round(Nu * 0.2), Nu - Math.round(Nu * 0.1)]) {
+        for (let k = 1; k <= 6; k++) {
+          const P = curve(fr, iu / Nu, k / 6, A[iu], tmpP);
+          const b = -P.y / BODY_LENGTH;
+          if (b < this.bUA) continue;
+          worst = Math.max(worst, this.Wb(b) + 0.012 - P.x * side);
+        }
+      }
+      return worst;
+    };
     // Ángulo de caída y largo que respetan los largos del molde.
     let best = null;
-    for (let a = 40; a <= 80; a += 1) {
+    for (let a = 30; a <= 75; a += 1) {
       for (let Ls = 0.03; Ls <= 0.4; Ls += 0.004) {
         const fr = hemFrame((a * Math.PI) / 180, Ls);
         const e1 = hemPoint(fr, 0.5).distanceTo(A[Nu / 2]) - topLen;
         const e2 = hemPoint(fr, 0).distanceTo(A[0]) - underLen;
-        const err = e1 * e1 + e2 * e2 + 1e-5 * (a - 62) ** 2;
-        if (!best || err < best.err) best = { err, fr, a, Ls, e1, e2 };
+        const err = e1 * e1 + e2 * e2 + 1e-5 * (a - 55) ** 2;
+        if (best && err > best.err) continue;
+        const pen = insideBody(fr);
+        const total = err + 4 * pen * pen;
+        if (!best || total < best.err) best = { err: total, fr };
       }
     }
     const fr = best.fr;
@@ -418,27 +450,15 @@ export class GarmentModel {
     const index = [];
     const px = [];
     const py = [];
-    const T0 = new THREE.Vector3();
-    const T1 = new THREE.Vector3();
     const P = new THREE.Vector3();
     const axisPt = new THREE.Vector3();
     for (let i = 0; i <= Nu; i++) {
       const u = i / Nu;
       const a0 = A[i];
-      const h1 = hemPoint(fr, u);
-      const top = (1 - Math.cos(2 * Math.PI * u)) / 2;
-      T0.set(side, -1.1 + 0.6 * top, 0).normalize();
-      T1.copy(fr.D);
-      const m = a0.distanceTo(h1) * 0.9;
       const pu = side > 0 ? u : 1 - u;
       for (let j = 0; j <= Nt; j++) {
         const t = j / Nt;
-        const t2 = t * t;
-        const t3 = t2 * t;
-        P.copy(a0).multiplyScalar(2 * t3 - 3 * t2 + 1)
-          .addScaledVector(T0, (t3 - 2 * t2 + t) * m)
-          .addScaledVector(h1, -2 * t3 + 3 * t2)
-          .addScaledVector(T1, (t3 - t2) * m);
+        curve(fr, u, t, a0, P);
         // Pliegues suaves en la manga.
         axisPt.copy(Ac).lerp(fr.Hc, t);
         const radial = P.clone().sub(axisPt);
@@ -502,7 +522,7 @@ export class GarmentModel {
 
   buildCollar(atlas, collarPart) {
     const loop = this.neckLoop();
-    const height = 0.017;
+    const height = 0.0135;
     const thick = 0.0035;
     // Perfil: cara exterior subiendo, borde redondeado y cara interior bajando.
     const prof = [];
@@ -553,18 +573,13 @@ export class GarmentModel {
       }
       ups[n].copy(ups[0]);
     }
-    // Puntos de unión frente/espalda (esquinas del escote).
-    const corners = [];
-    for (let i = 1; i < loop.length; i++) if (loop[i].panel !== loop[i - 1].panel) corners.push(i);
     loop.forEach((s, i) => {
       const N = pos3[i];
       const up = ups[i];
-      const dc = Math.min(...corners.map((c) => Math.abs(c - i)));
-      const shrink = 1 - 0.55 * Math.exp(-((dc / 6) ** 2));
       const inn = new THREE.Vector3(-N.x, 0, -N.z).normalize();
       const u = lengths[i] / total;
       for (const pr of prof) {
-        const P = N.clone().addScaledVector(up, pr.up * shrink).addScaledVector(inn, pr.inn);
+        const P = N.clone().addScaledVector(up, pr.up).addScaledVector(inn, pr.inn);
         positions.push(P.x, P.y, P.z);
         if (bb) uvs.push(...atlas.uv(lerp(bb.minX, bb.maxX, u), lerp(bb.minY, bb.maxY, pr.v)));
         else uvs.push(u, pr.v);
@@ -634,8 +649,8 @@ export class GarmentModel {
     };
     const pieces = [mk('front', geos.front, this.front.S), mk('back', geos.back, this.back.S)];
     // Las mangas cuelgan con algo más de cuerpo (costura de hombro y dobladillo).
-    if (geos.sleeveL) pieces.push({ ...mk('sleeveL', geos.sleeveL, this.front.S), side: 1, bendCompliance: 2e-6 });
-    if (geos.sleeveR) pieces.push({ ...mk('sleeveR', geos.sleeveR, this.front.S), side: -1, bendCompliance: 2e-6 });
+    if (geos.sleeveL) pieces.push({ ...mk('sleeveL', geos.sleeveL, this.front.S), side: 1, bendCompliance: 1e-6, shapeMemory: 0.0015 });
+    if (geos.sleeveR) pieces.push({ ...mk('sleeveR', geos.sleeveR, this.front.S), side: -1, bendCompliance: 1e-6, shapeMemory: 0.0015 });
     const collar = { key: 'collar', geo: geos.collar, rest2D: null };
     pieces.push(collar);
     const hangerEnd = Math.max(...hanger.barPts.map((p) => Math.abs(p.x)));
@@ -673,6 +688,28 @@ export class GarmentModel {
       for (let j = 0; j < row; j++) drape.stitch(sl.offset + j, sl.offset + Nu * row + j);
       drape.sewBoundaries(sl, [front, back], 0.03, (i) => (i - sl.offset) % row === 0);
     }
+    // Y al revés: el borde de la sisa del cuerpo se cose a la manga, para que
+    // no quede abierto entre puntadas.
+    if (sleeves.length) {
+      const ring = (pc) => [...pc.boundary].filter((l) => l % pc.geo.userData.row === 0).map((l) => pc.offset + l);
+      const ringPts = sleeves.flatMap(ring);
+      for (const body of [front, back]) {
+        for (const l of body.boundary) {
+          const i = body.offset + l;
+          if (drape.w[i] === 0) continue;
+          let best = -1;
+          let bd = 0.012 ** 2;
+          for (const j of ringPts) {
+            const d = (drape.orig[i * 3] - drape.orig[j * 3]) ** 2 + (drape.orig[i * 3 + 1] - drape.orig[j * 3 + 1]) ** 2 + (drape.orig[i * 3 + 2] - drape.orig[j * 3 + 2]) ** 2;
+            if (d < bd) {
+              bd = d;
+              best = j;
+            }
+          }
+          if (best >= 0) drape.stitch(i, best);
+        }
+      }
+    }
     // El cuello se cose por su borde inferior al escote.
     const crow = collar.geo.userData.row;
     drape.sewBoundaries(collar, [front, back], 0.015, (i) => (i - collar.offset) % crow <= 1);
@@ -684,7 +721,8 @@ export class GarmentModel {
         const z = z0(i);
         if (pc.key === 'front') drape.halfZ[i] = z > 0.002 ? 0.0015 : 0;
         else if (pc.key === 'back') drape.halfZ[i] = z < -0.002 ? -0.0015 : 0;
-        else if (pc.side) drape.halfZ[i] = z > 0.003 ? 0.0012 : z < -0.003 ? -0.0012 : 0;
+        // Las mangas conservan parte de su volumen: no se aplastan del todo.
+        else if (pc.side) drape.halfZ[i] = Math.abs(z) > 0.003 ? z * 0.65 : 0;
       }
     }
     // Las mangas no se meten dentro del cuerpo.

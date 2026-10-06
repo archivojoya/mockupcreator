@@ -18,8 +18,11 @@ archivo a la ventana) se carga cualquier otro molde.
 - **Partes**: cada pieza (frente, espalda, mangas, cuello) tiene su color base y
   un interruptor para mostrar u ocultar el diseño del SVG encima.
 - **Colores del diseño**: reemplaza globalmente cualquier color del estampado.
-- Clic sobre la camiseta → abre el color de esa parte. Pasar el mouse resalta la
-  parte en 3D y en el panel.
+- Cada camiseta gira sola: arrastrala (con inercia) o pasá el mouse por encima
+  para girarla un poco; la pared y la cámara quedan quietas. La rueda acerca y
+  aleja, y las flechas del teclado giran las dos.
+- Clic sobre la camiseta → abre el color de esa parte. Pasar el mouse por la
+  lista de partes la resalta en 3D.
 - **Descargar PNG** guarda el render actual en alta resolución.
 
 ## Cómo preparar el SVG

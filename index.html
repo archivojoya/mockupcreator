@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mockup de camiseta 3D</title>
+  </head>
+  <body>
+    <main class="app">
+      <section id="viewport" class="viewport">
+        <div id="status" class="status" hidden></div>
+        <p class="hint">Arrastrá para girar · rueda para acercar · clic en una parte para colorearla</p>
+      </section>
+      <aside class="panel">
+        <header>
+          <h1>Mockup de camiseta</h1>
+          <p>Molde: <span id="mold-name">—</span></p>
+          <label class="button">
+            <input id="file" type="file" accept=".svg,image/svg+xml" hidden />
+            Cargar molde SVG
+          </label>
+        </header>
+
+        <section>
+          <div class="section-head">
+            <h2>Partes</h2>
+            <div class="inline">
+              <label class="swatch small" title="Mismo color para todas las partes">
+                <input id="all-color" type="color" value="#ffffff" /><span></span>
+              </label>
+              <label class="toggle" title="Diseño en todas las partes">
+                <input id="all-design" type="checkbox" checked /><span>Todas</span>
+              </label>
+            </div>
+          </div>
+          <ul id="parts" class="parts"></ul>
+        </section>
+
+        <section id="palette-section">
+          <div class="section-head">
+            <h2>Colores del diseño</h2>
+            <button id="palette-reset" class="link" type="button">Restablecer</button>
+          </div>
+          <ul id="palette" class="palette"></ul>
+        </section>
+
+        <section>
+          <h2>Escena</h2>
+          <label class="row"><input id="logos" type="checkbox" checked /> Mostrar logos y textos</label>
+          <label class="row"><input id="ao" type="checkbox" checked /> Sombras de pliegues (oclusión)</label>
+          <label class="row">Percha
+            <select id="hanger">
+              <option value="madera">Madera</option>
+              <option value="negra">Negra</option>
+              <option value="blanca">Blanca</option>
+            </select>
+          </label>
+          <label class="row">Fondo <input id="background" type="color" value="#f7f5f1" /></label>
+          <div class="buttons">
+            <button id="reset-view" type="button">Centrar vista</button>
+            <button id="download" type="button" class="primary">Descargar PNG</button>
+          </div>
+        </section>
+
+        <footer>
+          <p>Nombrá los grupos del SVG con <code>frente</code>, <code>espalda</code>, <code>manga_izquierda</code>, <code>manga_derecha</code> y <code>cuello</code>. Cada pieza toma su contorno de la línea de corte o del recorte (clip-path) del grupo.</p>
+        </footer>
+      </aside>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

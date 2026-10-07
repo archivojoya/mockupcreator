@@ -20,7 +20,9 @@ const HANGER_REACH = 0.985; // hasta dónde llega la punta redondeada sobre la l
 const SLEEVE_HEM_EASE = 0.9; // contorno de la manga en el ruedo respecto de la forma inicial
 const SLEEVE_UNDER_EASE = 0.06;
 const SLEEVE_PIT_EASE = 0.18; // tela que se quita en la axila de la manga // acortamiento del lado de abajo de la manga
-const DROP_DEG = 72; // caída preferida de las mangas bajo la horizontal
+const DROP_DEG = 78; // caída preferida de las mangas bajo la horizontal
+const SLEEVE_CLEARANCE = 0.012; // separación de la manga al cuerpo al elegir su caída (m)
+const SLEEVE_CONTACT = -0.003; // la manga apoyada contra el costado queda apenas por dentro de su borde (m)
 
 // ---------- utilidades 2D ----------
 
@@ -90,12 +92,9 @@ function ellipseHalfWidth(W, B) {
   return A;
 }
 
-// Calce: fracción del ancho del molde que se muestra (entallado deportivo,
-// algo más ceñido en la cintura). Compensa que el cuerpo colgado es casi
-// plano y por eso se ve más ancho que con volumen.
-function fitAt(b) {
-  return 0.88 - 0.02 * Math.exp(-(((b - 0.62) / 0.2) ** 2));
-}
+// Calce: fracción del ancho del molde que se muestra arriba (hombros y sisa).
+// Debajo de la axila manda la silueta recta (ver GarmentModel.buildWidths).
+const BODY_FIT = 0.88;
 
 // Caída extra de los hombros hacia la punta (m), para evitar el hombro cuadrado.
 const SHOULDER_DROP = 0.014;
@@ -109,7 +108,11 @@ function bodyDepth(b) {
 }
 
 // Profundidad (m) de los pliegues verticales de caída.
-const FOLD_DEPTH = 0.01;
+const FOLD_DEPTH = 0.016;
+
+// Memoria del ancho (x) debajo de la axila: la simulación deja caer la tela
+// pero no deja que los pliegues junten los costados hacia adentro.
+const BODY_SIDE_MEMORY = 0.003;
 
 // Cesión al corte al bies del cuerpo (compliance de las aristas diagonales).
 const BODY_SHEAR = 2e-3;
@@ -315,7 +318,65 @@ export class GarmentModel {
     }
     this.seeds = { front: [0.7, 2.1, 4.0], back: [2.4, 0.3, 1.2] };
     this._profiles = new Map();
+    this.buildWidths();
     this.computeHangerReach();
+  }
+
+  // Ancho de tela de cada fila (por pieza). Colgada, una camiseta cae con los
+  // costados rectos desde la axila hasta el ruedo: debajo de la axila se fija
+  // el ancho visible (igual para frente y espalda) y cada fila lleva
+  // exactamente la tela que necesita su perfil (volumen y pliegues). Arriba
+  // se respeta el molde (hombros y sisa), escalado para que la esquina de la
+  // axila caiga justo en la línea del costado.
+  buildWidths() {
+    const kinds = ['front', 'back'];
+    const n = this.wRows;
+    const bOf = (r) => lerp(this.bMin, 1, r / n);
+    const FULL = 0.08; // lejos de la costura de hombros: perfil con todo su volumen
+    // Ancho visible del costado: el que daría el molde en promedio.
+    let sum = 0;
+    let cnt = 0;
+    for (let r = 0; r <= n; r++) {
+      const b = bOf(r);
+      if (b < this.bUA + 0.05 || b > 0.95) continue;
+      const W = this.Wb(b) * BODY_FIT;
+      sum += (2 * W * W) / this.profileArc('front', b, FULL, W);
+      cnt++;
+    }
+    this.sideHalfWidth = cnt ? sum / cnt : this.Wb(0.6) * BODY_FIT;
+    this.WK = {};
+    for (const kind of kinds) {
+      const t = new Float32Array(n + 1);
+      const below = (b) => this.profileArc(kind, b, FULL, this.sideHalfWidth) / 2;
+      const atUA = below(this.bUA);
+      const k = atUA / (this.Wb(this.bUA) * BODY_FIT);
+      for (let r = 0; r <= n; r++) {
+        const b = bOf(r);
+        if (b >= this.bUA) t[r] = below(b);
+        else t[r] = this.Wb(b) * BODY_FIT * lerp(1, k, smooth(this.bSh, this.bUA, b));
+      }
+      this.WK[kind] = t;
+    }
+  }
+
+  // Largo de un perfil de semiancho visible A (de costado a costado).
+  profileArc(kind, b, dy, A, cum) {
+    const N = 48;
+    const Y = -b * BODY_LENGTH;
+    let px = -A;
+    let pz = this.profileZ(kind, b, dy, A, -Math.PI / 2, Y);
+    let total = 0;
+    if (cum) cum[0] = 0;
+    for (let i = 1; i <= N; i++) {
+      const phi = -Math.PI / 2 + (Math.PI * i) / N;
+      const x = A * Math.sin(phi);
+      const z = this.profileZ(kind, b, dy, A, phi, Y);
+      total += Math.hypot(x - px, z - pz);
+      if (cum) cum[i] = total;
+      px = x;
+      pz = z;
+    }
+    return total;
   }
 
   Wb(b) {
@@ -324,9 +385,12 @@ export class GarmentModel {
     return lerp(this.W[r], this.W[r + 1], f - r);
   }
 
-  // Semiancho plano con el calce aplicado.
-  Wfit(b) {
-    return this.Wb(b) * fitAt(b);
+  // Semiancho de tela de la fila b de una pieza (con calce y silueta).
+  Wfit(b, kind = 'front') {
+    const t = this.WK[kind];
+    const f = clamp((b - this.bMin) / (1 - this.bMin), 0, 1) * this.wRows;
+    const r = Math.min(Math.floor(f), this.wRows - 1);
+    return lerp(t[r], t[r + 1], f - r);
   }
 
   // Posición 3D de un punto (x, y) del molde de una pieza del cuerpo.
@@ -334,20 +398,17 @@ export class GarmentModel {
     const b = panel.b(y);
     const [xl, xr] = panel.ext(y);
     const s = (x - xl) / (xr - xl || 1);
-    const W = this.Wfit(b);
+    const W = this.Wfit(b, panel.kind);
     const sign = panel.kind === 'front' ? 1 : -1;
     let Y = -b * BODY_LENGTH;
     // Distancia (m) a la costura de hombros.
     const dy = Math.max(0, (y - panel.ysh(x)) * panel.S);
     // Cada fila se reparte sobre su perfil real (volumen, apertura de sisa y
-    // pliegues) midiendo su largo: la fila 3D mide lo mismo que en el molde.
+    // pliegues) midiendo su largo: la fila 3D mide lo mismo que su tela.
     const prof = this.rowProfile(panel.kind, b, dy, W);
     const phi = prof.phiAt(s);
-    let X = prof.A * Math.sin(phi) * sign;
+    const X = prof.A * Math.sin(phi) * sign;
     const Z = this.profileZ(panel.kind, b, dy, prof.A, phi, Y);
-    // Ondulación leve del costado (igual en frente y espalda: la costura cierra).
-    const rip = 0.005 * smooth(0.45, 1, b) * Math.sin(b * 23 + (X > 0 ? 0.8 : 2.1));
-    X += Math.sign(X) * rip * Math.abs(2 * s - 1) ** 3;
     // Hombros caídos: desde el cuello hacia la punta la tela baja un poco más.
     Y -= this.shoulderDrop(X, b);
     return out.set(X, Y, Z * sign);
@@ -428,23 +489,10 @@ export class GarmentModel {
     if (p) return p;
     const bb = bq / 4000;
     const dd = dq / 2000;
-    const Y = -bb * BODY_LENGTH;
     const N = 48;
     const cum = new Float64Array(N + 1);
     let A = ellipseHalfWidth(W, bodyDepth(bb));
-    const arc = () => {
-      let px = -A;
-      let pz = this.profileZ(kind, bb, dd, A, -Math.PI / 2, Y);
-      for (let i = 1; i <= N; i++) {
-        const phi = -Math.PI / 2 + (Math.PI * i) / N;
-        const x = A * Math.sin(phi);
-        const z = this.profileZ(kind, bb, dd, A, phi, Y);
-        cum[i] = cum[i - 1] + Math.hypot(x - px, z - pz);
-        px = x;
-        pz = z;
-      }
-      return cum[N];
-    };
+    const arc = () => this.profileArc(kind, bb, dd, A, cum);
     for (let it = 0; it < 5; it++) A *= (2 * W) / (arc() || 1e-9);
     arc();
     const total = cum[N] || 1e-9;
@@ -473,7 +521,7 @@ export class GarmentModel {
 
   // Semiancho visible del cuerpo (con volumen) a la altura b.
   halfWidth(b) {
-    return ellipseHalfWidth(this.Wfit(b), bodyDepth(b));
+    return b >= this.bUA ? this.sideHalfWidth : ellipseHalfWidth(this.Wfit(b), bodyDepth(b));
   }
 
   // Cuánto entra el punto (x, z) en la sección elíptica del cuerpo a la
@@ -743,7 +791,7 @@ export class GarmentModel {
           // Por encima de la axila sólo cuenta la mitad de la manga hacia el
           // ruedo: la copa vive junto a la sisa y no debe empujarse.
           if (b < this.bSh + 0.02 || (b < this.bUA && k < 3)) continue;
-          worst = Math.max(worst, this.bodyPenetration(P.x, P.z, b, 0.003));
+          worst = Math.max(worst, this.bodyPenetration(P.x, P.z, b, SLEEVE_CLEARANCE));
         }
       }
       return worst;
@@ -967,7 +1015,7 @@ export class GarmentModel {
           const b = panel.b(py[i]);
           const [xl, xr] = panel.ext(py[i]);
           const cx = (xl + xr) / 2;
-          x = cx + (x - cx) * fitAt(b);
+          x = cx + (x - cx) * (this.Wfit(b, panel.kind) / this.Wb(b));
           yExtra = this.shoulderDrop(pos[i * 3], b);
         }
         rest2D[i * 2] = x * S;
@@ -996,10 +1044,20 @@ export class GarmentModel {
       const near = (i) => (py[i] - panel.ysh(px[i])) * panel.S < HANGER_H + HANGER_GAP + 0.012;
       return (a, b) => near(a) && near(b);
     };
-    const bodyOpts = { bendRest3D: true, shearCompliance: BODY_SHEAR };
+    // Cede al bies sólo cerca de la axila (deja caer la esquina de la sisa);
+    // más abajo el punto mantiene su ancho y los costados caen rectos.
+    const pitShear = (geo, panel) => {
+      const { py } = geo.userData;
+      const yUA = Math.max(panel.uaL.y, panel.uaR.y);
+      return (a, b) => {
+        const d = ((py[a] + py[b]) / 2 - yUA) * panel.S; // m por debajo de la axila
+        return BODY_SHEAR * (1 - smooth(0, 0.06, d));
+      };
+    };
+    const bodyOpts = { bendRest3D: true };
     const pieces = [
-      { ...mk('front', geos.front, this.front.S), ...bodyOpts, bendComplianceAt: softPit(geos.front, this.front), keepInitialLength: overHanger(geos.front, this.front) },
-      { ...mk('back', geos.back, this.back.S), ...bodyOpts, bendComplianceAt: softPit(geos.back, this.back), keepInitialLength: overHanger(geos.back, this.back) },
+      { ...mk('front', geos.front, this.front.S), ...bodyOpts, shearComplianceAt: pitShear(geos.front, this.front), bendComplianceAt: softPit(geos.front, this.front), keepInitialLength: overHanger(geos.front, this.front) },
+      { ...mk('back', geos.back, this.back.S), ...bodyOpts, shearComplianceAt: pitShear(geos.back, this.back), bendComplianceAt: softPit(geos.back, this.back), keepInitialLength: overHanger(geos.back, this.back) },
     ];
     // Las mangas cuelgan con algo más de cuerpo (costura de hombro y dobladillo).
     // Las mangas toman como largo de reposo su forma inicial lisa (no el
@@ -1157,7 +1215,11 @@ export class GarmentModel {
       // Por encima de la axila sólo se aparta del pecho la parte del ruedo; la
       // copa queda libre para caer junto a la sisa.
       if (b < this.bSh + 0.02 || (b < this.bUA && j < row * 0.45)) return;
-      if (this.bodyPenetration(pos[k], pos[k + 2], b, 0.003, pushed) > 0) {
+      // Debajo de la axila la cara interna de la manga apoya contra el costado
+      // y queda apenas por dentro de su borde: aplastada contra el cuerpo no
+      // asoma como una aleta por debajo del ruedo.
+      const margin = b < this.bUA ? 0.003 : lerp(0.003, SLEEVE_CONTACT, smooth(this.bUA, this.bUA + 0.05, b));
+      if (this.bodyPenetration(pos[k], pos[k + 2], b, margin, pushed) > 0) {
         pos[k] = pushed.x;
         pos[k + 2] = pushed.z;
       }
@@ -1177,6 +1239,13 @@ export class GarmentModel {
     // sostiene de más: las ataduras sólo impiden que la tela se alargue más
     // de lo que mide.
     drape.setThreads(this.bodyThreads(pieces.slice(0, 2)));
+    // Debajo de la axila los costados caen rectos: memoria del ancho.
+    for (const pc of pieces.slice(0, 2)) {
+      const { py, panel } = pc.geo.userData;
+      for (let k = 0; k < pc.count; k++) {
+        drape.memoryX[pc.offset + k] = BODY_SIDE_MEMORY * smooth(this.bUA - 0.02, this.bUA + 0.08, panel.b(py[k]));
+      }
+    }
     drape.buildTethers(1.04);
     for (const sl of sleeves) sl.afterApply = sl.geo.userData.weld;
     return drape;

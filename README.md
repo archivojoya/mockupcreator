@@ -88,23 +88,28 @@ depender del dibujo concreto:
 
 ## Qué garantiza el motor con cualquier molde
 
-- **Largo de tela:** cada fila del cuerpo en 3D mide lo mismo que en el molde
-  (con el calce aplicado). El volumen, la apertura de la sisa y los pliegues se
-  reparten midiendo el perfil real, así no sobra ni falta tela en ninguna zona.
-- **Deformaciones intencionales:** calce entallado y hombros caídos se aplican
-  igual a la forma 3D y a la tela en reposo, para que no generen arrugas.
-- **Caída:** el cuerpo cuelga como una prenda real: sólo se abre arriba
-  (percha y hombros) y de ahí frente y espalda bajan verticales, acercándose
-  hacia el ruedo, sin volumen que parezca sostenido por un cuerpo invisible.
-  La tela no se estira por su peso (hilos verticales largos), cede al bies
-  como el punto y nada la sostiene de más: las ataduras se miden sobre la
-  tela, no en línea recta.
+- **Largo de tela:** cada fila del cuerpo en 3D mide lo mismo que su tela en
+  reposo. El volumen, la apertura de la sisa y los pliegues se reparten
+  midiendo el perfil real, así no sobra ni falta tela en ninguna zona.
+- **Deformaciones intencionales:** calce, silueta recta y hombros caídos se
+  aplican igual a la forma 3D y a la tela en reposo, para que no generen
+  arrugas.
+- **Caída:** el cuerpo cuelga como una prenda real, con los costados rectos
+  y verticales desde la axila hasta el ruedo, iguales en frente y espalda.
+  Debajo de la axila el ancho visible es fijo y cada fila lleva exactamente la
+  tela que necesita su perfil (volumen y pliegues): no se respeta al
+  milímetro el ancho del molde, se corta la tela para lograr la silueta. El
+  diseño se sigue estampando por fracción de cada fila, así que se puede
+  personalizar igual. La simulación deja caer la tela, pero una memoria del
+  ancho impide que los pliegues junten los costados hacia adentro.
 - **Percha:** de madera robusta, con lados planos, cantos redondeados y más
   gruesa hacia las puntas. Su punta redondeada llega al final del hombro sin
   asomar en la sisa, y la forma inicial de la tela ya la envuelve, así ningún
   punto de la percha atraviesa la tela.
-- **Mangas:** nunca quedan dentro del cuerpo, tampoco con mangas cortas o
-  sisas profundas. Además se les quita algo de tela en la axila y hacia el
+- **Mangas:** caen empinadas, cerca del cuerpo, y nunca quedan dentro de él,
+  tampoco con mangas cortas o sisas profundas. Su cara interna apoya contra
+  el costado, apenas por dentro de su borde, así no asoma como una aleta
+  debajo del ruedo. Además se les quita algo de tela en la axila y hacia el
   ruedo, para que cuelguen tensas.
 - **Contornos:** las esquinas del SVG se conservan (hombros, axilas, ruedo).
   Las filas se miden con un margen en los extremos, para tolerar esquinas a

@@ -92,11 +92,12 @@ export class Drape {
       // en rombos con facilidad y así la tela no se angosta cuando su propio
       // peso la estira.
       const shearOf = (a, b) => {
-        if (!pc.shearCompliance || !r2) return 0;
+        if (!(pc.shearCompliance || pc.shearComplianceAt) || !r2) return 0;
         const ax = Math.abs(r2[a * 2] - r2[b * 2]);
         const ay = Math.abs(r2[a * 2 + 1] - r2[b * 2 + 1]);
         const ang = Math.atan2(ay, ax);
-        return ang > 0.35 && ang < 1.22 ? pc.shearCompliance : 0;
+        if (ang <= 0.35 || ang >= 1.22) return 0;
+        return pc.shearComplianceAt ? pc.shearComplianceAt(a, b) : pc.shearCompliance;
       };
       const edges = new Map();
       for (let t = 0; t < idx.length; t += 3) {
@@ -163,6 +164,8 @@ export class Drape {
     // Memoria de forma por pieza: atrae suavemente cada partícula a su
     // posición inicial (da cuerpo a piezas que si no colapsarían).
     this.memory = new Float32Array(n);
+    // Memoria sólo en x (ancho): conserva la silueta sin impedir la caída.
+    this.memoryX = new Float32Array(n);
     for (const pc of this.pieces) if (pc.shapeMemory) this.memory.fill(pc.shapeMemory, pc.offset, pc.offset + pc.count);
     this.frame = 0;
     this.lI = new Int32Array(0);
@@ -509,6 +512,8 @@ export class Drape {
             pos[k + 1] += (this.orig[k + 1] - pos[k + 1]) * mem;
             pos[k + 2] += (this.orig[k + 2] - pos[k + 2]) * mem;
           }
+          const mx = this.memoryX[i];
+          if (mx) pos[k] += (this.orig[k] - pos[k]) * mx;
           const hz = halfZ[i];
           if (hz > 0 && pos[k + 2] < hz) pos[k + 2] = hz;
           else if (hz < 0 && pos[k + 2] > hz) pos[k + 2] = hz;

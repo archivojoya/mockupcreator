@@ -9,7 +9,7 @@ import { Drape } from './drape.js';
 const BODY_LENGTH = 0.72; // m, del punto de cuello al ruedo
 const ARM_OPEN = 0.03; // apertura (media) de la sisa
 const HANGER_R = 0.0055;
-const DROP_DEG = 66; // caída preferida de las mangas bajo la horizontal // radio de la barra de la percha
+const DROP_DEG = 72; // caída preferida de las mangas bajo la horizontal // radio de la barra de la percha
 
 // ---------- utilidades 2D ----------
 
@@ -312,6 +312,22 @@ export class GarmentModel {
     return ellipseHalfWidth(this.Wb(b), bodyDepth(b));
   }
 
+  // Cuánto entra el punto (x, z) en la sección elíptica del cuerpo a la
+  // altura b (en metros; ≤ 0 si está afuera). Con `out`, devuelve el punto
+  // empujado hasta la superficie.
+  bodyPenetration(x, z, b, margin, out) {
+    const A = this.halfWidth(b) + margin;
+    const B = bodyDepth(b) + margin;
+    const e = (x / A) ** 2 + (z / B) ** 2;
+    if (e >= 1) return 0;
+    const r = Math.sqrt(e) || 1e-6;
+    if (out) {
+      out.x = x / r;
+      out.z = z / r;
+    }
+    return (1 - r) * Math.min(A, B * 3);
+  }
+
   // Pliegues de caída: ondas verticales abajo, diagonales desde los hombros.
   fold(kind, X, b, Y) {
     const [p1, p2, p3] = this.seeds[kind];
@@ -497,14 +513,14 @@ export class GarmentModel {
           const P = curve(fr, iu / Nu, k / 6, A[iu], tmpP);
           const b = -P.y / BODY_LENGTH;
           if (b < this.bUA) continue;
-          worst = Math.max(worst, this.halfWidth(b) + 0.002 - P.x * side);
+          worst = Math.max(worst, this.bodyPenetration(P.x, P.z, b, 0.003));
         }
       }
       return worst;
     };
     // Ángulo de caída y largo que respetan los largos del molde.
     let best = null;
-    for (let a = 30; a <= 75; a += 1) {
+    for (let a = 30; a <= 80; a += 1) {
       for (let Ls = 0.03; Ls <= 0.4; Ls += 0.004) {
         const fr = hemFrame((a * Math.PI) / 180, Ls);
         const e1 = hemPoint(fr, 0.5).distanceTo(A[Nu / 2]) - topLen;
@@ -718,8 +734,8 @@ export class GarmentModel {
     // Las mangas cuelgan con algo más de cuerpo (costura de hombro y dobladillo).
     // Las mangas toman como largo de reposo su forma inicial lisa (no el
     // molde): así no se arrugan al asentarse y quedan como planchadas.
-    if (geos.sleeveL) pieces.push({ key: 'sleeveL', geo: geos.sleeveL, rest2D: null, side: 1, bendCompliance: 2e-8, shapeMemory: 0.004 });
-    if (geos.sleeveR) pieces.push({ key: 'sleeveR', geo: geos.sleeveR, rest2D: null, side: -1, bendCompliance: 2e-8, shapeMemory: 0.004 });
+    if (geos.sleeveL) pieces.push({ key: 'sleeveL', geo: geos.sleeveL, rest2D: null, side: 1, bendCompliance: 1e-7, shapeMemory: 0.0012 });
+    if (geos.sleeveR) pieces.push({ key: 'sleeveR', geo: geos.sleeveR, rest2D: null, side: -1, bendCompliance: 1e-7, shapeMemory: 0.0012 });
     const collar = { key: 'collar', geo: geos.collar, rest2D: null };
     pieces.push(collar);
     const hangerEnd = Math.max(...hanger.barPts.map((p) => Math.abs(p.x)));
@@ -794,16 +810,23 @@ export class GarmentModel {
         else if (pc.side) drape.halfZ[i] = Math.abs(z) > 0.003 ? z * 0.65 : 0;
       }
     }
-    // Las mangas no se meten dentro del cuerpo.
+    // Las mangas se apoyan sobre el cuerpo (su sección redondeada) en lugar
+    // de chocar contra una pared: pueden caer y acomodarse contra el costado.
+    // Las primeras filas (cosidas a la sisa) quedan fuera: si no, el empuje
+    // las separa de la costura y frunce la axila.
     const sleeveOf = pieces.map((pc) => pc.side || 0);
+    const pushed = { x: 0, z: 0 };
     drape.collide = (i, pos) => {
-      const side = sleeveOf[drape.owner[i]];
-      if (!side) return;
+      if (!sleeveOf[drape.owner[i]]) return;
+      const pc = drape.pieces[drape.owner[i]];
+      if ((i - pc.offset) % pc.geo.userData.row < 4) return;
       const k = i * 3;
       const b = -pos[k + 1] / BODY_LENGTH;
-      if (b < this.bUA + 0.01 || Math.abs(pos[k + 2]) > 0.035) return;
-      const lim = this.halfWidth(b) + 0.004;
-      if (pos[k] * side < lim) pos[k] = side * lim;
+      if (b < this.bUA + 0.01) return;
+      if (this.bodyPenetration(pos[k], pos[k + 2], b, 0.003, pushed) > 0) {
+        pos[k] = pushed.x;
+        pos[k + 2] = pushed.z;
+      }
     };
     drape.buildTethers();
     for (const sl of sleeves) sl.afterApply = sl.geo.userData.weld;

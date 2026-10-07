@@ -142,7 +142,7 @@ function rowCrossings(pts, y) {
 }
 
 // Camino sobre el polígono de i a j; se elige el sentido que (no) pasa por k.
-function pathBetween(pts, i, j, k, throughK) {
+export function pathBetween(pts, i, j, k, throughK) {
   const n = pts.length;
   const walk = (dir) => {
     const out = [];
@@ -160,7 +160,7 @@ function pathBetween(pts, i, j, k, throughK) {
   return a.hit === throughK ? a.out : b.out;
 }
 
-class Polyline {
+export class Polyline {
   constructor(pts) {
     this.pts = pts;
     this.cum = [0];
@@ -200,7 +200,7 @@ function turningAt(pts, k, span) {
 
 // ---------- pieza del cuerpo (frente / espalda) ----------
 
-class Panel {
+export class Panel {
   constructor(part, kind) {
     this.part = part;
     this.kind = kind;
@@ -712,33 +712,7 @@ export class GarmentModel {
 
   buildSleeve(part, side, atlas, loop) {
     const pts = part.poly;
-    const idx = pts.map((_, i) => i);
-    const by = (list, f) => list.reduce((best, i) => (f(i) < f(best) ? i : best), list[0]);
-    const { minY, maxY } = part.bbox;
-    const { iCL, iCR, iTop, path: capPath } = sleeveCap(part);
-    const lowSet = idx.filter((i) => pts[i].y >= maxY - (maxY - minY) * 0.03);
-    const iHL = by(lowSet, (i) => pts[i].x);
-    const iHR = by(lowSet, (i) => -pts[i].x);
-    const cap = new Polyline(capPath);
-    // Fracción de la copa donde está su punto más alto (va al hombro).
-    const capTop = cap.cum[capPath.indexOf(pts[iTop])] / cap.length;
-    const hem = new Polyline(pathBetween(pts, iHL, iHR, iTop, false));
-    const sideL = new Polyline(pathBetween(pts, iCL, iHL, iTop, false));
-    const sideR = new Polyline(pathBetween(pts, iCR, iHR, iTop, false));
-    const coons = (u, t) => {
-      const T = cap.at(u);
-      const B = hem.at(u);
-      const L = sideL.at(t);
-      const R = sideR.at(t);
-      const TL = cap.at(0);
-      const TR = cap.at(1);
-      const BL = hem.at(0);
-      const BR = hem.at(1);
-      const f = (k) =>
-        (1 - t) * T[k] + t * B[k] + (1 - u) * L[k] + u * R[k] -
-        ((1 - u) * (1 - t) * TL[k] + u * (1 - t) * TR[k] + (1 - u) * t * BL[k] + u * t * BR[k]);
-      return { x: f('x'), y: f('y') };
-    };
+    const { iTop, capTop, hem, sideL, sideR, coons } = sleeveFrame(part);
     const S = this.front.S;
     const topLen = Math.hypot(hem.at(0.5).x - pts[iTop].x, hem.at(0.5).y - pts[iTop].y) * S;
     const underLen = ((sideL.length + sideR.length) / 2) * S;
@@ -823,8 +797,7 @@ export class GarmentModel {
       const a0 = A[i];
       // Posición en la copa del molde: la axila delantera va a una esquina, el
       // hombro al punto más alto y la axila trasera a la otra esquina.
-      const f = u <= 0.5 ? (u / 0.5) * capTop : capTop + ((u - 0.5) / 0.5) * (1 - capTop);
-      const pu = side > 0 ? f : 1 - (u <= 0.5 ? (u / 0.5) * (1 - capTop) : (1 - capTop) + ((u - 0.5) / 0.5) * capTop);
+      const pu = capFraction(u, capTop, side);
       for (let j = 0; j <= Nt; j++) {
         const t = j / Nt;
         // La primera fila es exactamente el borde de la sisa del cuerpo.
@@ -996,7 +969,7 @@ export class GarmentModel {
     const hook = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hookPts), 60, 0.0028, 10, false);
     const tip = new THREE.SphereGeometry(0.0032, 12, 8).translate(hookPts.at(-1).x, hookPts.at(-1).y, hookPts.at(-1).z);
     const rodY = stemTop.y + r - 0.0028 - 0.006;
-    return { bar, hook, tip, rodY, rodZ: -r, barPts, barSizes: sizes };
+    return { bar, hook, tip, rodY, rodZ: -r, barPts, barSizes: sizes, hookPts };
   }
 
   // Prepara la simulación de caída: piezas, costuras, fijaciones y colisiones.
@@ -1304,7 +1277,7 @@ function smoothMax(a, b, k) {
 
 // Barra de la percha: sección de lados planos y cantos redondos (un tramo
 // recto de semialto h − t con semicírculos de radio t), con puntas redondas.
-function hangerBarGeometry(curve, sizeAt, segs = 120, arc = 12, capRings = 6) {
+export function hangerBarGeometry(curve, sizeAt, segs = 120, arc = 12, capRings = 6) {
   const Z = new THREE.Vector3(0, 0, 1);
   const rings = [];
   const ring = (u, scale, along) => {
@@ -1550,8 +1523,51 @@ function projectOnPolyline(line, x, y) {
   return best;
 }
 
+// Parametrización de la manga del molde: copa (de esquina a esquina pasando
+// por el punto más alto), ruedo y costados, y el parche de Coons que lleva
+// (u, t) ∈ [0, 1]² (u a lo largo de la copa, t de la copa al ruedo) a un
+// punto del molde.
+export function sleeveFrame(part) {
+  const pts = part.poly;
+  const idx = pts.map((_, i) => i);
+  const by = (list, f) => list.reduce((best, i) => (f(i) < f(best) ? i : best), list[0]);
+  const { minY, maxY } = part.bbox;
+  const { iCL, iCR, iTop, path: capPath } = sleeveCap(part);
+  const lowSet = idx.filter((i) => pts[i].y >= maxY - (maxY - minY) * 0.03);
+  const iHL = by(lowSet, (i) => pts[i].x);
+  const iHR = by(lowSet, (i) => -pts[i].x);
+  const cap = new Polyline(capPath);
+  // Fracción de la copa donde está su punto más alto (va al hombro).
+  const capTop = cap.cum[capPath.indexOf(pts[iTop])] / cap.length;
+  const hem = new Polyline(pathBetween(pts, iHL, iHR, iTop, false));
+  const sideL = new Polyline(pathBetween(pts, iCL, iHL, iTop, false));
+  const sideR = new Polyline(pathBetween(pts, iCR, iHR, iTop, false));
+  const coons = (u, t) => {
+    const T = cap.at(u);
+    const B = hem.at(u);
+    const L = sideL.at(t);
+    const R = sideR.at(t);
+    const TL = cap.at(0);
+    const TR = cap.at(1);
+    const BL = hem.at(0);
+    const BR = hem.at(1);
+    const f = (k) =>
+      (1 - t) * T[k] + t * B[k] + (1 - u) * L[k] + u * R[k] -
+      ((1 - u) * (1 - t) * TL[k] + u * (1 - t) * TR[k] + (1 - u) * t * BL[k] + u * t * BR[k]);
+    return { x: f('x'), y: f('y') };
+  };
+  return { iTop, capTop, cap, hem, sideL, sideR, coons };
+}
+
+// Posición en la copa del molde (0…1, de esquina a esquina) de un punto de
+// la sisa: u = 0 axila delantera, 0.5 hombro, 1 axila trasera.
+export function capFraction(u, capTop, side) {
+  const f = u <= 0.5 ? (u / 0.5) * capTop : capTop + ((u - 0.5) / 0.5) * (1 - capTop);
+  return side > 0 ? f : 1 - (u <= 0.5 ? (u / 0.5) * (1 - capTop) : (1 - capTop) + ((u - 0.5) / 0.5) * capTop);
+}
+
 // Copa de la manga en el molde: de esquina a esquina pasando por el punto más alto.
-function sleeveCap(part) {
+export function sleeveCap(part) {
   const pts = part.poly;
   const idx = pts.map((_, i) => i);
   const by = (list, f) => list.reduce((best, i) => (f(i) < f(best) ? i : best), list[0]);

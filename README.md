@@ -36,10 +36,10 @@ Cada pieza debe estar en un grupo (`<g>`) cuyo id contenga:
 | Espalda         | `espalda`, `back`                         |
 | Manga izquierda | `manga_izquierda`, `sleeve_left`          |
 | Manga derecha   | `manga_derecha`, `sleeve_right`           |
+| Cuello          | `cuello`, `collar`                        |
 
 Si las mangas se llaman sólo `manga` (por ejemplo `manga` y `manga-2`), se
 asignan por posición: la de más a la derecha en el molde es la izquierda.
-| Cuello          | `cuello`, `collar`                        |
 
 El contorno de la pieza se toma de la línea de corte sin relleno del grupo o, si
 no existe, del `clip-path` que recorta su contenido. Los elementos que quedan
@@ -48,76 +48,65 @@ Las piezas se orientan como en un molde estándar: frente y espalda con el cuell
 arriba (espalda vista desde atrás), mangas con la copa arriba y el ruedo abajo,
 cuello como una tira horizontal.
 
+## Cómo funciona
+
+La forma 3D no se calcula con cada molde: es una **plantilla**, una camiseta
+"ideal" que ya cuelga de la percha, simulada una sola vez con el simulador de
+tela de Blender (con su molde plano como forma en reposo, costuras, gravedad y
+la percha como sólido). Cada molde del cliente se **estampa** sobre ella:
+
+- **Frente y espalda:** cada punto de la plantilla conoce su lugar en el molde
+  canónico. Una deformación suave (thin plate spline) lleva ese molde al del
+  cliente haciendo coincidir los contornos tramo a tramo: escote con escote,
+  hombros, sisas, costados y ruedo. El diseño cae donde corresponde aunque las
+  proporciones del molde sean otras.
+- **Mangas:** cada punto conoce su posición a lo largo de la sisa y de la copa
+  al ruedo, y se ubica en la manga del cliente con la misma parametrización
+  (la cabeza de la copa va al hombro, sus esquinas a la axila).
+- **Cuello:** una tira acanalada sobre el contorno del escote, suavizado para
+  que sea redondo. Si el molde no trae cuello, toma el color dominante.
+- Si el molde no trae mangas, se pintan con el color del frente.
+
+Así la caída es siempre la de una prenda real (hombros apoyados, mangas que
+caen plegándose en la sisa, costados que se pliegan y se enciman) y no depende
+de cómo esté dibujado cada molde: el molde sólo aporta el diseño.
+
+### Regenerar la plantilla
+
+Sólo hace falta si se cambia el molde canónico, la percha o la tela:
+
+```bash
+pip install bpy                      # Blender como módulo de Python
+npm run template                     # o PYTHON=/ruta/python tools/template/build.sh
+```
+
+1. `tools/template/canonical.mjs` — molde canónico (hombros poco caídos,
+   cuello redondo, copa sin frunces).
+2. `tools/template/export-initial.mjs` — forma inicial, costuras, fijaciones
+   (borde del escote y hombros) y percha, con el generador de `src/garment.js`.
+3. `tools/template/drape_blender.py` — simula la caída en Blender: frente y
+   espalda chocan entre sí (no se atraviesan), las costuras se mantienen
+   cerradas y el aire amortigua el balanceo hasta que la prenda se asienta.
+4. `tools/template/finalize.mjs` — cierra cada costura en un punto común y
+   guarda `src/assets/tshirt-template.json` (posiciones en 16 bits).
+
 ## Estructura
 
 - `src/svgMold.js` — lectura del SVG, detección de piezas, contornos y paleta.
-- `src/garment.js` — geometría 3D generada desde los contornos (cuerpo, mangas,
-  cuello y percha) y preparación de la simulación (costuras, fijaciones).
-- `src/drape.js` — simulación de caída de la tela: las piezas usan los largos
-  reales del molde, se cosen entre sí y cuelgan de la percha con gravedad.
+- `src/template.js` — arma la camiseta desde la plantilla y estampa el molde.
+- `src/garment.js` — análisis de las piezas del molde (puntos notables,
+  parametrización de la manga), percha, y el generador de la forma inicial
+  que usa la herramienta de la plantilla.
+- `src/drape.js` — simulación simple usada por el generador de la forma inicial.
 - `src/bakeAO.js` — sombras de pliegues (oclusión ambiental) calculadas una vez
-  por vértice cuando la tela se asienta.
+  por vértice al cargar el molde.
 - `src/atlas.js` — textura con todas las piezas coloreadas, dobladillo con
   costura y mapa de relieve del tejido.
 - `src/main.js` — escena, iluminación de estudio suave y panel de control.
 
-## Cómo se cosen las piezas
-
-Para que funcione con cualquier molde, las costuras siguen reglas fijas, sin
-depender del dibujo concreto:
-
-- **Sisa ↔ copa de la manga:** se busca en el frente y la espalda el borde
-  entre el punto del hombro y la axila. La primera fila de la manga se arma
-  sobre esos mismos vértices, soldada a ellos, como el cuello sobre el escote.
-  El punto más alto de la copa va al hombro y sus esquinas a la axila. El
-  resto se reparte en proporción al largo. Hacia la axila la manga no puede
-  doblarse hacia adentro del cuerpo, y la esquina del cuerpo y el bajo de la
-  manga se doblan blandos: la axila cede bajo la manga en vez de sostenerla.
-- **Costados y hombros:** frente y espalda se unen donde sus bordes coinciden,
-  salvo en la sisa: si se cosiera, cerraría el fondo de la sisa. Cada punto
-  del borde de una pieza se cose sobre el borde de la otra (no al vértice más
-  cercano), así la costura es una línea continua aunque las mallas no
-  coincidan, y las dos piezas comparten la normal en el doblez.
-- **Bordes parejos:** junto al contorno, los nodos de la malla se alinean en
-  una fila paralela al borde (o sobre él), sin triángulos astilla ni dados
-  vuelta: las costuras no quedan dentadas.
-- **Cuello:** se construye sobre el contorno del escote. Si el molde no trae
-  pieza de cuello, se arma igual un cuello acanalado con el color dominante de
-  la camiseta, que se puede cambiar en el panel.
-- **Bajo del brazo:** la manga se cierra uniendo sus dos costados.
-
-## Qué garantiza el motor con cualquier molde
-
-- **Largo de tela:** cada fila del cuerpo en 3D mide lo mismo que su tela en
-  reposo. El volumen, la apertura de la sisa y los pliegues se reparten
-  midiendo el perfil real, así no sobra ni falta tela en ninguna zona.
-- **Deformaciones intencionales:** calce, silueta recta y hombros caídos se
-  aplican igual a la forma 3D y a la tela en reposo, para que no generen
-  arrugas.
-- **Caída:** el cuerpo cuelga como una prenda real, con los costados rectos
-  y verticales desde la axila hasta el ruedo, iguales en frente y espalda.
-  Debajo de la axila el ancho visible es fijo y cada fila lleva exactamente la
-  tela que necesita su perfil (volumen y pliegues): no se respeta al
-  milímetro el ancho del molde, se corta la tela para lograr la silueta. El
-  diseño se sigue estampando por fracción de cada fila, así que se puede
-  personalizar igual. La simulación deja caer la tela, pero una memoria del
-  ancho impide que los pliegues junten los costados hacia adentro.
-- **Percha:** de madera robusta, con lados planos, cantos redondeados y más
-  gruesa hacia las puntas. Su punta redondeada llega al final del hombro sin
-  asomar en la sisa, y la forma inicial de la tela ya la envuelve, así ningún
-  punto de la percha atraviesa la tela.
-- **Mangas:** caen empinadas, cerca del cuerpo, y nunca quedan dentro de él,
-  tampoco con mangas cortas o sisas profundas. Su cara interna apoya contra
-  el costado, apenas por dentro de su borde, así no asoma como una aleta
-  debajo del ruedo. Además se les quita algo de tela en la axila y hacia el
-  ruedo, para que cuelguen tensas.
-- **Contornos:** las esquinas del SVG se conservan (hombros, axilas, ruedo).
-  Las filas se miden con un margen en los extremos, para tolerar esquinas a
-  alturas apenas distintas.
-
 ## Rendimiento
 
-Al cargar un molde la tela se acomoda en un par de segundos y después se
-calculan las sombras de los pliegues. A partir de ahí la escena queda quieta:
-las sombras ya están calculadas y sólo se redibuja cuando se mueve la cámara o
-cambia un color, así que girar es fluido incluso en equipos modestos.
+Al cargar un molde sólo se estampa el diseño sobre la plantilla y se calculan
+las sombras de los pliegues: no hay simulación en la página. A partir de ahí la
+escena queda quieta y sólo se redibuja cuando se mueve la cámara o cambia un
+color, así que girar es fluido incluso en equipos modestos.

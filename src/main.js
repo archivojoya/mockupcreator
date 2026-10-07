@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { SvgMold, PART_DEFS } from './svgMold.js';
-import { GarmentModel } from './garment.js';
+import { buildFromTemplate } from './template.js';
 import { Atlas, makeFabricNormalMap, makeRibNormalMap, FABRIC_TILE_M } from './atlas.js';
 import { bakeAO, ensureAOAttributes } from './bakeAO.js';
 import './style.css';
@@ -145,7 +145,9 @@ function fabricMaterial(map, normalMap) {
       .replace('void main() {', 'uniform vec3 insideColor;\nuniform float aoStrength;\nvarying float vAoF;\nvarying float vAoB;\nvoid main() {')
       .replace(
         '#include <color_fragment>',
-        '#include <color_fragment>\n if (!gl_FrontFacing) diffuseColor.rgb = insideColor * 0.8;',
+        // Por dentro se ve el estampado del revés (como en una prenda sublimada),
+        // algo lavado hacia el color de la tela y más oscuro.
+        '#include <color_fragment>\n if (!gl_FrontFacing) diffuseColor.rgb = mix(insideColor, diffuseColor.rgb, 0.85) * 0.7;',
       )
       .replace(
         '#include <lights_fragment_end>',
@@ -209,11 +211,14 @@ function disposeGroup(g) {
 
 function buildGarment() {
   if (garmentGroup) disposeGroup(garmentGroup);
-  const model = new GarmentModel(mold);
   const P = mold.parts;
   const tex = atlas.texture;
-  atlas.metersPerUnit = model.front.S;
-  fabricNormal.repeat.set((mold.viewBox.w * model.front.S) / FABRIC_TILE_M, (mold.viewBox.h * model.front.S) / FABRIC_TILE_M);
+  // La forma viene de la plantilla (camiseta ya colgada); el molde se estampa.
+  const built = buildFromTemplate(mold, atlas);
+  const S = built.metersPerUnit;
+  atlas.metersPerUnit = S;
+  atlas.seamEdges = built.seamEdges;
+  fabricNormal.repeat.set((mold.viewBox.w * S) / FABRIC_TILE_M, (mold.viewBox.h * S) / FABRIC_TILE_M);
   materials = {
     front: fabricMaterial(tex, fabricNormal),
     back: fabricMaterial(tex, fabricNormal),
@@ -223,18 +228,9 @@ function buildGarment() {
   };
   rib.repeat.set(220, 1);
   materials.collar.normalScale.set(0.6, 0.6);
-  const parts = [];
-  const body = { front: model.buildBody(model.front, atlas), back: model.buildBody(model.back, atlas) };
-  parts.push(['front', body.front], ['back', body.back]);
-  // Las mangas se arman sobre el borde real de la sisa del cuerpo.
-  const sl = P.sleeveL || P.sleeveR;
-  const sr = P.sleeveR || P.sleeveL;
-  if (sl) parts.push(['sleeveL', model.buildSleeve(sl, +1, atlas, model.armholeLoop(+1, body))]);
-  if (sr) parts.push(['sleeveR', model.buildSleeve(sr, -1, atlas, model.armholeLoop(-1, body))]);
-  atlas.seamEdges = sl ? model.seamEdges(body) : null;
-  parts.push(['collar', model.buildCollar(atlas, P.collar)]);
+  const parts = Object.entries(built.geos);
   for (const [, geo] of parts) ensureAOAttributes(geo);
-  const hanger = model.buildHanger();
+  const hanger = built.hanger;
 
   // Cada camiseta gira sobre el eje vertical de su gancho.
   const makeShirt = (index) => {
@@ -278,29 +274,17 @@ function buildGarment() {
   garmentGroup.position.y = 0.02;
   scene.add(garmentGroup);
   refreshShadows();
-  settle(model, Object.fromEntries(parts), hanger);
+  bakeShadows(Object.fromEntries(parts), hanger);
 }
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 
-// Deja caer la tela sobre la percha y después precalcula la oclusión.
-async function settle(model, geos, hanger) {
+// Precalcula la oclusión de los pliegues (una vez por molde).
+async function bakeShadows(geos, hanger) {
   const token = ++buildToken;
   const cancelled = () => token !== buildToken;
   await nextFrame();
-  const drape = model.setupDrape(geos, hanger);
-  const FRAMES = 110;
-  while (drape.frame < FRAMES) {
-    setStatus(`Acomodando la tela… ${Math.round((drape.frame / FRAMES) * 100)}%`);
-    // Simula por tiempo (no por cuadros) para no frenar la interfaz.
-    const t = performance.now();
-    do drape.step(1);
-    while (drape.frame < FRAMES && performance.now() - t < 25);
-    drape.apply();
-    requestRender();
-    await nextFrame();
-    if (cancelled()) return;
-  }
+  if (cancelled()) return;
   refreshShadows();
   setStatus('Calculando sombras de los pliegues…');
   await nextFrame();

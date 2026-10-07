@@ -130,15 +130,16 @@ export class Drape {
 
   // Costura flexible: i y j no se separan más que al inicio, pero pueden girar
   // una respecto de la otra (como una bisagra de tela).
-  seam(i, j) {
+  // `cap` limita la separación máxima (cierra costuras que arrancan abiertas).
+  seam(i, j, cap = Infinity) {
     const o = this.orig;
     const d = Math.hypot(o[i * 3] - o[j * 3], o[i * 3 + 1] - o[j * 3 + 1], o[i * 3 + 2] - o[j * 3 + 2]);
-    this.seams.push([i, j, d + 0.0005]);
+    this.seams.push([i, j, Math.min(d, cap) + 0.0005]);
   }
 
   // Cose los bordes libres de dos piezas que se tocan (a menos de maxDist).
   // keepOffset: true = separación fija, false = mismo punto, 'flex' = bisagra.
-  sewBoundaries(pa, pbs, maxDist, filter = () => true, keepOffset = true) {
+  sewBoundaries(pa, pbs, maxDist, filter = () => true, keepOffset = true, cap = Infinity) {
     const o = this.orig;
     const bList = pbs.flatMap((pb) => [...pb.boundary].map((i) => pb.offset + i));
     for (const la of pa.boundary) {
@@ -157,7 +158,7 @@ export class Drape {
         }
       }
       if (best < 0) continue;
-      if (keepOffset === 'flex') this.seam(i, best);
+      if (keepOffset === 'flex') this.seam(i, best, cap);
       else this.stitch(i, best, keepOffset);
     }
   }

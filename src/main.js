@@ -94,7 +94,8 @@ scene.add(fill);
 const wallMat = new THREE.MeshStandardMaterial({ color: 0xf7f5f1, roughness: 1, metalness: 0 });
 const wall = new THREE.Mesh(new THREE.PlaneGeometry(8, 5), wallMat);
 wall.position.set(0, -0.5, -0.42);
-wall.receiveShadow = true;
+// La pared no recibe sombra de las camisetas.
+wall.receiveShadow = false;
 scene.add(wall);
 
 function resize() {

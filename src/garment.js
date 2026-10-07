@@ -9,7 +9,8 @@ import { Drape } from './drape.js';
 const BODY_LENGTH = 0.72; // m, del punto de cuello al ruedo
 const ARM_OPEN = 0.03; // apertura (media) de la sisa
 const HANGER_R = 0.0055;
-const HANGER_REACH = 0.93; // la percha llega hasta la punta del hombro
+const HANGER_REACH = 0.93;
+const SEAM_GAP = 0.0005; // separación máxima entre manga y sisa (m): costura cerrada
 const DROP_DEG = 72; // caída preferida de las mangas bajo la horizontal // radio de la barra de la percha
 
 // ---------- utilidades 2D ----------
@@ -774,7 +775,7 @@ export class GarmentModel {
       const { Nu, row } = sl.geo.userData;
       // Costura bajo el brazo (primera y última columna) y unión a la sisa.
       for (let j = 0; j < row; j++) drape.stitch(sl.offset + j, sl.offset + Nu * row + j);
-      drape.sewBoundaries(sl, [front, back], 0.03, (i) => (i - sl.offset) % row === 0, 'flex');
+      drape.sewBoundaries(sl, [front, back], 0.03, (i) => (i - sl.offset) % row === 0, 'flex', SEAM_GAP);
     }
     // Y al revés: el borde de la sisa del cuerpo se cose a la manga, para que
     // no quede abierto entre puntadas.
@@ -794,7 +795,7 @@ export class GarmentModel {
               best = j;
             }
           }
-          if (best >= 0) drape.seam(i, best);
+          if (best >= 0) drape.seam(i, best, SEAM_GAP);
         }
       }
     }

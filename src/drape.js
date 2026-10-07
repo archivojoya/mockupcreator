@@ -59,7 +59,11 @@ export class Drape {
       const d3 = (a, b) => Math.hypot(r3[a * 3] - r3[b * 3], r3[a * 3 + 1] - r3[b * 3 + 1], r3[a * 3 + 2] - r3[b * 3 + 2]);
       const d2 = r2 ? (a, b) => Math.hypot(r2[a * 2] - r2[b * 2], r2[a * 2 + 1] - r2[b * 2 + 1]) : d3;
       // La flexión puede tomar como reposo la forma 3D inicial (conserva curvatura).
-      const db = pc.bendRest3D ? d3 : d2;
+      const dbBase = pc.bendRest3D ? d3 : d2;
+      // Escala opcional del largo de reposo por arista (quita tela sobrante).
+      const sc = pc.restScale || (() => 1);
+      const dStretch = (a, b) => d2(a, b) * sc(a, b);
+      const db = (a, b) => dbBase(a, b) * sc(a, b);
       const edges = new Map();
       for (let t = 0; t < idx.length; t += 3) {
         const tri = [idx[t], idx[t + 1], idx[t + 2]];
@@ -82,7 +86,7 @@ export class Drape {
         if (d2(a, b) >= MIN_REST) {
           sI.push(o + a);
           sJ.push(o + b);
-          sR.push(d2(a, b));
+          sR.push(dStretch(a, b));
         }
         if (rec.length === 4 && db(rec[2], rec[3]) >= MIN_REST) {
           bI.push(o + rec[2]);
@@ -130,9 +134,9 @@ export class Drape {
 
   // Cose los bordes libres de dos piezas que se tocan (a menos de maxDist).
   // keepOffset: true = separación fija, false = mismo punto.
-  sewBoundaries(pa, pbs, maxDist, filter = () => true, keepOffset = true) {
+  sewBoundaries(pa, pbs, maxDist, filter = () => true, keepOffset = true, targetFilter = filter) {
     const o = this.orig;
-    const bList = pbs.flatMap((pb) => [...pb.boundary].map((i) => pb.offset + i));
+    const bList = pbs.flatMap((pb) => [...pb.boundary].map((i) => pb.offset + i)).filter(targetFilter);
     for (const la of pa.boundary) {
       const i = pa.offset + la;
       if (!filter(i)) continue;

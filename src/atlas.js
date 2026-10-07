@@ -87,6 +87,38 @@ export class Atlas {
     this.texture.needsUpdate = true;
   }
 
+  // Color más frecuente dentro de las piezas indicadas (muestreo en grilla).
+  dominantColor(keys) {
+    const { ctx, width, height } = this;
+    const img = ctx.getImageData(0, 0, width, height).data;
+    const counts = new Map();
+    const step = Math.max(2, Math.round(Math.min(width, height) / 160));
+    for (const key of keys) {
+      const part = this.mold.parts[key];
+      if (!part) continue;
+      const path = this.pathOf(part);
+      for (let y = 0; y < height; y += step) {
+        for (let x = 0; x < width; x += step) {
+          if (!ctx.isPointInPath(path, x, y)) continue;
+          const i = (y * width + x) * 4;
+          // Agrupa tonos parecidos (antialias, sombras del dobladillo).
+          const k = ((img[i] >> 3) << 10) | ((img[i + 1] >> 3) << 5) | (img[i + 2] >> 3);
+          const c = counts.get(k) || { n: 0, r: 0, g: 0, b: 0 };
+          c.n++;
+          c.r += img[i];
+          c.g += img[i + 1];
+          c.b += img[i + 2];
+          counts.set(k, c);
+        }
+      }
+    }
+    let best = null;
+    for (const c of counts.values()) if (!best || c.n > best.n) best = c;
+    if (!best) return '#ffffff';
+    const hex = (v) => Math.round(v / best.n).toString(16).padStart(2, '0');
+    return `#${hex(best.r)}${hex(best.g)}${hex(best.b)}`;
+  }
+
   // Dobladillo con doble costura de recubridora a ~2 cm del ruedo.
   drawHem(part) {
     const { ctx } = this;

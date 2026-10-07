@@ -170,7 +170,7 @@ const rodMat = new THREE.MeshStandardMaterial({ color: 0x6f7174, roughness: 0.7,
 // ---------- estado ----------
 
 const state = {
-  parts: Object.fromEntries(PART_DEFS.map((d) => [d.key, { color: '#ffffff', design: true }])),
+  parts: Object.fromEntries(PART_DEFS.map((d) => [d.key, { color: '#ffffff', design: true, auto: d.key === 'collar' }])),
   palette: {},
   logos: true,
   hanger: 'madera',
@@ -326,6 +326,7 @@ async function refreshTexture() {
   composing = (async () => {
     try {
       await atlas.compose(state);
+      syncCollarWithoutPiece();
       requestRender();
     } catch (err) {
       console.error(err);
@@ -338,6 +339,23 @@ async function refreshTexture() {
     pending = false;
     await refreshTexture();
   }
+}
+
+// Si el molde no trae pieza de cuello, el cuello acanalado toma por defecto el
+// color dominante de la camiseta (hasta que se elija uno a mano).
+function syncCollarWithoutPiece() {
+  if (!mold || mold.parts.collar || !materials.collar) return;
+  const ps = state.parts.collar;
+  if (ps.auto) {
+    ps.color = atlas.dominantColor(['front', 'back']);
+    const li = partsList.querySelector('[data-part="collar"]');
+    if (li) {
+      li.querySelector('input[type=color]').value = ps.color;
+      li.querySelector('.swatch span').style.background = ps.color;
+    }
+  }
+  materials.collar.color.set(ps.color);
+  materials.collar.userData.inside.value.set(ps.color);
 }
 
 function setStatus(msg, isError = false) {
@@ -383,7 +401,7 @@ function buildUI() {
     color.addEventListener('input', () => {
       ps.color = color.value;
       chip.style.background = color.value;
-      if (!mold.parts[def.key] && def.key === 'collar') materials.collar.color.set(color.value);
+      ps.auto = false;
       debounced(refreshTexture);
     });
     li.querySelector('input[type=checkbox]').addEventListener('change', (e) => {
@@ -411,7 +429,10 @@ function buildUI() {
 }
 
 document.getElementById('all-color').addEventListener('input', (e) => {
-  for (const key of Object.keys(state.parts)) state.parts[key].color = e.target.value;
+  for (const key of Object.keys(state.parts)) {
+    state.parts[key].color = e.target.value;
+    state.parts[key].auto = false;
+  }
   for (const li of partsList.children) {
     li.querySelector('input[type=color]').value = e.target.value;
     li.querySelector('.swatch span').style.background = e.target.value;

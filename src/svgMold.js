@@ -205,14 +205,17 @@ export class SvgMold {
     const clone = document.importNode(el, false);
     tmp.appendChild(clone);
     document.body.appendChild(tmp);
-    const pts = [];
+    let pts = [];
     try {
+      // Muestreo denso y simplificación: conserva las esquinas del contorno
+      // (hombros, axilas, ruedo) en lugar de redondearlas.
       const len = clone.getTotalLength();
-      const n = 400;
+      const n = Math.min(6000, Math.max(800, Math.ceil(len / 3)));
       for (let i = 0; i < n; i++) {
         const p = clone.getPointAtLength((len * i) / n);
         pts.push({ x: p.x, y: p.y });
       }
+      pts = simplifyClosed(pts, len / 4000);
     } finally {
       tmp.remove();
     }
@@ -229,7 +232,7 @@ export class SvgMold {
       if (st.display === 'none') return;
       const tag = el.localName;
       if (['defs', 'clipPath', 'mask', 'style'].includes(tag)) return;
-      if (SHAPES.has(tag) && tag !== 'line') {
+      if ((SHAPES.has(tag) && tag !== 'line') || tag === 'text') {
         const c = normalizeColor(fill);
         if (c) counts.set(c, (counts.get(c) || 0) + 1);
       }
@@ -262,7 +265,7 @@ export class SvgMold {
         if (st.fill !== undefined) fill = st.fill;
         const tag = el.localName;
         if (['defs', 'clipPath', 'mask', 'style'].includes(tag)) return;
-        if (SHAPES.has(tag)) {
+        if (SHAPES.has(tag) || tag === 'text') {
           const c = normalizeColor(fill);
           if (c && map.has(c)) el.setAttribute('style', `${el.getAttribute('style') || ''};fill:${map.get(c)}`);
         }
@@ -294,6 +297,46 @@ export function polyArea(pts) {
   let a = 0;
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += (pts[j].x - pts[i].x) * (pts[j].y + pts[i].y);
   return a / 2;
+}
+
+// Ramer-Douglas-Peucker sobre un contorno cerrado (tolerancia en unidades del SVG).
+function simplifyClosed(pts, tol) {
+  if (pts.length < 8) return pts;
+  // Parte el contorno en el punto más lejano al primero para que sea abierto.
+  let far = 0;
+  let fd = -1;
+  for (let i = 1; i < pts.length; i++) {
+    const d = (pts[i].x - pts[0].x) ** 2 + (pts[i].y - pts[0].y) ** 2;
+    if (d > fd) {
+      fd = d;
+      far = i;
+    }
+  }
+  const rdp = (a, b, out) => {
+    let idx = -1;
+    let md = tol;
+    const ax = pts[a].x;
+    const ay = pts[a].y;
+    const ex = pts[b % pts.length].x - ax;
+    const ey = pts[b % pts.length].y - ay;
+    const L = Math.hypot(ex, ey) || 1e-9;
+    for (let i = a + 1; i < b; i++) {
+      const d = Math.abs((pts[i].x - ax) * ey - (pts[i].y - ay) * ex) / L;
+      if (d > md) {
+        md = d;
+        idx = i;
+      }
+    }
+    if (idx < 0) return;
+    rdp(a, idx, out);
+    out.push(pts[idx]);
+    rdp(idx, b, out);
+  };
+  const out = [pts[0]];
+  rdp(0, far, out);
+  out.push(pts[far]);
+  rdp(far, pts.length, out);
+  return out;
 }
 
 function dedupe(pts) {

@@ -66,14 +66,31 @@ depender del dibujo concreto:
   sobre esos mismos vértices, soldada a ellos, como el cuello sobre el escote.
   El punto más alto de la copa va al hombro y sus esquinas a la axila. El
   resto se reparte en proporción al largo.
-- **Costados y hombros:** frente y espalda se unen donde sus bordes coinciden.
-- **Cuello:** se construye sobre el contorno del escote.
+- **Costados y hombros:** frente y espalda se unen donde sus bordes coinciden,
+  salvo en la sisa: si se cosiera, cerraría el fondo de la sisa.
+- **Cuello:** se construye sobre el contorno del escote. Si el molde no trae
+  pieza de cuello, se arma igual un cuello acanalado con el color dominante de
+  la camiseta, que se puede cambiar en el panel.
 - **Bajo del brazo:** la manga se cierra uniendo sus dos costados.
 - `src/bakeAO.js` — sombras de pliegues (oclusión ambiental) calculadas una vez
   por vértice cuando la tela se asienta.
 - `src/atlas.js` — textura con todas las piezas coloreadas, dobladillo con
   costura y mapa de relieve del tejido.
 - `src/main.js` — escena, iluminación de estudio suave y panel de control.
+
+## Qué garantiza el motor con cualquier molde
+
+- **Largo de tela:** cada fila del cuerpo en 3D mide lo mismo que en el molde
+  (con el calce aplicado). El volumen, la apertura de la sisa y los pliegues se
+  reparten midiendo el perfil real, así no sobra ni falta tela en ninguna zona.
+- **Deformaciones intencionales:** calce entallado y hombros caídos se aplican
+  igual a la forma 3D y a la tela en reposo, para que no generen arrugas.
+- **Mangas:** nunca quedan dentro del cuerpo, tampoco con mangas cortas o
+  sisas profundas. Además se les quita algo de tela en la axila y hacia el
+  ruedo, para que cuelguen tensas.
+- **Contornos:** las esquinas del SVG se conservan (hombros, axilas, ruedo).
+  Las filas se miden con un margen en los extremos, para tolerar esquinas a
+  alturas apenas distintas.
 
 ## Rendimiento
 

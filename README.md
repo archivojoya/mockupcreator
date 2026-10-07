@@ -70,9 +70,17 @@ depender del dibujo concreto:
   entre el punto del hombro y la axila. La primera fila de la manga se arma
   sobre esos mismos vértices, soldada a ellos, como el cuello sobre el escote.
   El punto más alto de la copa va al hombro y sus esquinas a la axila. El
-  resto se reparte en proporción al largo.
+  resto se reparte en proporción al largo. Hacia la axila la manga no puede
+  doblarse hacia adentro del cuerpo, y la esquina del cuerpo y el bajo de la
+  manga se doblan blandos: la axila cede bajo la manga en vez de sostenerla.
 - **Costados y hombros:** frente y espalda se unen donde sus bordes coinciden,
-  salvo en la sisa: si se cosiera, cerraría el fondo de la sisa.
+  salvo en la sisa: si se cosiera, cerraría el fondo de la sisa. Cada punto
+  del borde de una pieza se cose sobre el borde de la otra (no al vértice más
+  cercano), así la costura es una línea continua aunque las mallas no
+  coincidan, y las dos piezas comparten la normal en el doblez.
+- **Bordes parejos:** junto al contorno, los nodos de la malla se alinean en
+  una fila paralela al borde (o sobre él), sin triángulos astilla ni dados
+  vuelta: las costuras no quedan dentadas.
 - **Cuello:** se construye sobre el contorno del escote. Si el molde no trae
   pieza de cuello, se arma igual un cuello acanalado con el color dominante de
   la camiseta, que se puede cambiar en el panel.
@@ -91,6 +99,10 @@ depender del dibujo concreto:
   La tela no se estira por su peso (hilos verticales largos), cede al bies
   como el punto y nada la sostiene de más: las ataduras se miden sobre la
   tela, no en línea recta.
+- **Percha:** de madera robusta, con lados planos, cantos redondeados y más
+  gruesa hacia las puntas. Su punta redondeada llega al final del hombro sin
+  asomar en la sisa, y la forma inicial de la tela ya la envuelve, así ningún
+  punto de la percha atraviesa la tela.
 - **Mangas:** nunca quedan dentro del cuerpo, tampoco con mangas cortas o
   sisas profundas. Además se les quita algo de tela en la axila y hacia el
   ruedo, para que cuelguen tensas.

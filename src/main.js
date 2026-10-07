@@ -248,13 +248,10 @@ function buildGarment() {
       g.add(mesh);
       pickables.push(mesh);
     }
-    const hm = hangerMats[state.hanger];
-    for (const geo of [hanger.bar, ...hanger.caps]) {
-      const mesh = new THREE.Mesh(geo, hm);
-      mesh.castShadow = true;
-      mesh.userData.hanger = true;
-      g.add(mesh);
-    }
+    const bar = new THREE.Mesh(hanger.bar, hangerMats[state.hanger]);
+    bar.castShadow = true;
+    bar.userData.hanger = true;
+    g.add(bar);
     for (const geo of [hanger.hook, hanger.tip]) {
       const mesh = new THREE.Mesh(geo, hookMat);
       mesh.castShadow = true;
@@ -308,7 +305,7 @@ async function settle(model, geos, hanger) {
   setStatus('Calculando sombras de los pliegues…');
   await nextFrame();
   const fabric = ['front', 'back', 'sleeveL', 'sleeveR', 'collar'].map((k) => geos[k]).filter(Boolean);
-  const done = await bakeAO(fabric, [...fabric, hanger.bar, ...hanger.caps], cancelled);
+  const done = await bakeAO(fabric, [...fabric, hanger.bar], cancelled);
   if (!done || cancelled()) return;
   refreshShadows();
   setStatus('');

@@ -8,12 +8,19 @@ import { Drape } from './drape.js';
 
 const BODY_LENGTH = 0.72; // m, del punto de cuello al ruedo
 const ARM_OPEN = 0.013; // apertura (media) de la sisa: menor que la profundidad del cuerpo, así el borde sigue su curva
-const HANGER_R = 0.0055;
-const HANGER_REACH = 0.93;
+// Percha de madera robusta: lados planos y cantos redondeados (como una
+// percha de madera real), más gruesa hacia las puntas para apoyar bien los
+// hombros. La tela apoya sobre el canto de arriba, que es redondo.
+const HANGER_H = 0.013; // semialto de la barra (m)
+const HANGER_T = 0.0075; // semiespesor (frente-espalda) en el centro
+const HANGER_T_END = 0.0125; // semiespesor en las puntas
+const HANGER_MARGIN = 0.0045; // separación de la tela a la percha
+const HANGER_GAP = 0.0075; // de la costura de hombros al canto de arriba de la barra
+const HANGER_REACH = 0.985; // hasta dónde llega la punta redondeada sobre la línea de hombros
 const SLEEVE_HEM_EASE = 0.9; // contorno de la manga en el ruedo respecto de la forma inicial
 const SLEEVE_UNDER_EASE = 0.06;
 const SLEEVE_PIT_EASE = 0.18; // tela que se quita en la axila de la manga // acortamiento del lado de abajo de la manga
-const DROP_DEG = 72; // caída preferida de las mangas bajo la horizontal // radio de la barra de la percha
+const DROP_DEG = 72; // caída preferida de las mangas bajo la horizontal
 
 // ---------- utilidades 2D ----------
 
@@ -106,6 +113,10 @@ const FOLD_DEPTH = 0.01;
 
 // Cesión al corte al bies del cuerpo (compliance de las aristas diagonales).
 const BODY_SHEAR = 2e-3;
+
+// Flexión del cuerpo junto a la axila (compliance): blanda, para que la
+// esquina de la sisa ceda bajo la manga.
+const PIT_BEND = 1e-3;
 
 function pointInPoly(pts, x, y) {
   let inside = false;
@@ -304,6 +315,7 @@ export class GarmentModel {
     }
     this.seeds = { front: [0.7, 2.1, 4.0], back: [2.4, 0.3, 1.2] };
     this._profiles = new Map();
+    this.computeHangerReach();
   }
 
   Wb(b) {
@@ -325,16 +337,14 @@ export class GarmentModel {
     const W = this.Wfit(b);
     const sign = panel.kind === 'front' ? 1 : -1;
     let Y = -b * BODY_LENGTH;
-    // Junto a la costura de hombros frente y espalda se juntan (sin volumen).
+    // Distancia (m) a la costura de hombros.
     const dy = Math.max(0, (y - panel.ysh(x)) * panel.S);
-    const q = Math.min(dy / 0.03, 1);
-    const h = Math.sqrt(1 - (1 - q) ** 2);
     // Cada fila se reparte sobre su perfil real (volumen, apertura de sisa y
     // pliegues) midiendo su largo: la fila 3D mide lo mismo que en el molde.
-    const prof = this.rowProfile(panel.kind, b, h, W);
+    const prof = this.rowProfile(panel.kind, b, dy, W);
     const phi = prof.phiAt(s);
     let X = prof.A * Math.sin(phi) * sign;
-    const Z = this.profileZ(panel.kind, b, h, prof.A, phi, Y);
+    const Z = this.profileZ(panel.kind, b, dy, prof.A, phi, Y);
     // Ondulación leve del costado (igual en frente y espalda: la costura cierra).
     const rip = 0.005 * smooth(0.45, 1, b) * Math.sin(b * 23 + (X > 0 ? 0.8 : 2.1));
     X += Math.sign(X) * rip * Math.abs(2 * s - 1) ** 3;
@@ -343,8 +353,12 @@ export class GarmentModel {
     return out.set(X, Y, Z * sign);
   }
 
-  // Profundidad de la sección en el ángulo phi (−π/2 costado, 0 centro).
-  profileZ(kind, b, h, A, phi, Y) {
+  // Profundidad de la sección en el ángulo phi (−π/2 costado, 0 centro), a
+  // la distancia dy (m) de la costura de hombros.
+  profileZ(kind, b, dy, A, phi, Y) {
+    // Junto a la costura de hombros frente y espalda se juntan (sin volumen).
+    const q = Math.min(dy / 0.03, 1);
+    const h = Math.sqrt(1 - (1 - q) ** 2);
     const B = bodyDepth(b) * h;
     // En los hombros la tela apoya sobre la percha: perfil plano hasta los
     // bordes. Hacia abajo pasa a la media elipse.
@@ -356,30 +370,75 @@ export class GarmentModel {
     const e = ta > 0 && ta < 1 ? ARM_OPEN * Math.sin(Math.PI * ta) ** 0.75 * smooth(1, 0.55, ta) : 0;
     const X = A * Math.sin(phi) * (kind === 'front' ? 1 : -1);
     const fold = this.fold(kind, X, b, Y);
-    return B * g + e * h * (1 - g) + FOLD_DEPTH * fold * g * g * h;
+    const z = B * g + e * h * (1 - g) + FOLD_DEPTH * fold * g * g * h;
+    // La tela envuelve la barra de la percha (sin que ésta la empuje al caer).
+    // En la costura de hombros (dy = 0) la envolvente ya vale cero.
+    const zh = this.hangerEnvelope(dy, X);
+    return zh > 0 ? smoothMax(z, zh, 0.003) : z;
+  }
+
+  // Profundidad (m) que ocupa la percha, con su margen, a la distancia dy
+  // de la costura de hombros y en la posición X a lo largo de la barra.
+  // Debajo de la barra la tela cae vertical y vuelve de a poco a su perfil.
+  hangerEnvelope(dy, X) {
+    const xEnd = this._hangerXEnd;
+    if (!xEnd) return 0;
+    const t = hangerHalfThickness(Math.abs(X) / xEnd);
+    const tt = t + HANGER_MARGIN;
+    const core = Math.max(0, HANGER_H - t); // tramo recto del costado
+    const yy = HANGER_H + HANGER_GAP - dy - core; // altura sobre el centro del canto
+    if (yy >= tt) return 0;
+    let z = yy > 0 ? Math.sqrt(tt * tt - yy * yy) : tt * (1 - smooth(0, 0.04, -yy - core));
+    // Punta redondeada de la barra.
+    const along = (Math.abs(X) - xEnd) / tt;
+    if (along > 0) z *= Math.sqrt(Math.max(0, 1 - along * along));
+    return z;
+  }
+
+  // Fin de la barra sobre la línea de hombros (fracción) y su semiancho X,
+  // calculados una vez, sin envolvente. La punta redondeada sobresale un
+  // semiespesor más allá: así llega al final del hombro sin asomar en la sisa.
+  computeHangerReach() {
+    this._hangerXEnd = 0;
+    const f = this.front;
+    const drop = (HANGER_H + HANGER_GAP) / f.S;
+    const at = (line, u) => {
+      const p = line.at(u);
+      return this.bodyPos(f, p.x, p.y + drop);
+    };
+    const lines = [f.shoulderLineL, f.shoulderLineR];
+    const len = Math.min(...lines.map((line) => {
+      let L = 0;
+      for (let i = 1; i <= 20; i++) L += at(line, i / 20).distanceTo(at(line, (i - 1) / 20));
+      return L;
+    }));
+    this._hangerEnd = clamp(HANGER_REACH - (HANGER_T_END + HANGER_MARGIN) / len, 0.6, HANGER_REACH);
+    const xs = lines.map((line) => Math.abs(at(line, this._hangerEnd).x));
+    this._profiles.clear();
+    this._hangerXEnd = Math.max(...xs);
   }
 
   // Tabla de largo de arco de una fila: semiancho A tal que el perfil mida
   // 2·W, y función inversa fracción de ancho → ángulo.
-  rowProfile(kind, b, h, W) {
+  rowProfile(kind, b, dy, W) {
     const bq = Math.round(b * 4000);
-    const hq = Math.round(h * 64);
-    const key = `${kind}|${bq}|${hq}`;
+    const dq = Math.round(Math.min(dy, 0.08) * 2000);
+    const key = `${kind}|${bq}|${dq}`;
     let p = this._profiles.get(key);
     if (p) return p;
     const bb = bq / 4000;
-    const hh = hq / 64;
+    const dd = dq / 2000;
     const Y = -bb * BODY_LENGTH;
     const N = 48;
     const cum = new Float64Array(N + 1);
-    let A = ellipseHalfWidth(W, bodyDepth(bb) * hh);
+    let A = ellipseHalfWidth(W, bodyDepth(bb));
     const arc = () => {
       let px = -A;
-      let pz = this.profileZ(kind, bb, hh, A, -Math.PI / 2, Y);
+      let pz = this.profileZ(kind, bb, dd, A, -Math.PI / 2, Y);
       for (let i = 1; i <= N; i++) {
         const phi = -Math.PI / 2 + (Math.PI * i) / N;
         const x = A * Math.sin(phi);
-        const z = this.profileZ(kind, bb, hh, A, phi, Y);
+        const z = this.profileZ(kind, bb, dd, A, phi, Y);
         cum[i] = cum[i - 1] + Math.hypot(x - px, z - pz);
         px = x;
         pz = z;
@@ -474,7 +533,9 @@ export class GarmentModel {
     // Los puntos del contorno que caen muy cerca de un nodo de la grilla se
     // funden con él: sin triángulos astilla, el borde queda parejo.
     const snapR = cell * 0.3;
-    const vertex = (x, y) => {
+    const align = edgeAligner(pts, cell, panel.minX, panel.minY);
+    const vertex = (x0, y0) => {
+      const [x, y] = align(x0, y0);
       const hx = Math.floor(x / snapR);
       const hy = Math.floor(y / snapR);
       for (let ox = -1; ox <= 1; ox++) {
@@ -531,7 +592,9 @@ export class GarmentModel {
           const b = vertex(...tris[t + 1]);
           const c2 = vertex(...tris[t + 2]);
           if (a === b || b === c2 || a === c2) continue;
-          if (Math.abs(triArea([px[a], py[a]], [px[b], py[b]], [px[c2], py[c2]])) < cell * cell * 1e-3) continue;
+          // Sin astillas ni triángulos que se dan vuelta al fundir vértices.
+          const area = triArea([px[a], py[a]], [px[b], py[b]], [px[c2], py[c2]]);
+          if (Math.abs(area) < cell * cell * 1e-3 || area * triArea(tris[t], tris[t + 1], tris[t + 2]) < 0) continue;
           index.push(a, b, c2);
         }
       }
@@ -854,7 +917,7 @@ export class GarmentModel {
     const f = this.front;
     const pts = [];
     const S = f.S;
-    const drop = (HANGER_R + 0.006) / S;
+    const drop = (HANGER_H + HANGER_GAP) / S;
     const sampleLine = (line, from, to, n) => {
       for (let i = 0; i <= n; i++) {
         const p = line.at(lerp(from, to, i / n));
@@ -863,11 +926,17 @@ export class GarmentModel {
         pts.push(v);
       }
     };
-    sampleLine(f.shoulderLineL, HANGER_REACH, 0, 14);
+    sampleLine(f.shoulderLineL, this._hangerEnd, 0, 14);
     const yN = pts.at(-1).y;
     pts.push(new THREE.Vector3(0, yN + 0.012, 0));
-    sampleLine(f.shoulderLineR, 0, HANGER_REACH, 14);
-    const bar = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 120, HANGER_R, 16, false);
+    sampleLine(f.shoulderLineR, 0, this._hangerEnd, 14);
+    // Semialto y semiespesor de la sección a lo largo de la barra. La tela
+    // choca contra la misma curva suave que se dibuja (muestreada fina).
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    const sizeAt = (u) => ({ h: HANGER_H, t: hangerHalfThickness(Math.abs(curve.getPointAt(u).x) / this._hangerXEnd) });
+    const bar = hangerBarGeometry(curve, sizeAt);
+    const barPts = curve.getSpacedPoints(64);
+    const sizes = barPts.map((_, i) => sizeAt(i / 64));
     const hookBase = new THREE.Vector3(0, yN + 0.012, 0);
     const r = 0.022;
     const stemTop = hookBase.clone().add(new THREE.Vector3(0, 0.045, 0));
@@ -878,9 +947,8 @@ export class GarmentModel {
     }
     const hook = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hookPts), 60, 0.0028, 10, false);
     const tip = new THREE.SphereGeometry(0.0032, 12, 8).translate(hookPts.at(-1).x, hookPts.at(-1).y, hookPts.at(-1).z);
-    const caps = [pts[0], pts.at(-1)].map((p) => new THREE.SphereGeometry(HANGER_R, 16, 10).translate(p.x, p.y, p.z));
     const rodY = stemTop.y + r - 0.0028 - 0.006;
-    return { bar, hook, tip, caps, rodY, rodZ: -r, barPts: pts };
+    return { bar, hook, tip, rodY, rodZ: -r, barPts, barSizes: sizes };
   }
 
   // Prepara la simulación de caída: piezas, costuras, fijaciones y colisiones.
@@ -909,16 +977,43 @@ export class GarmentModel {
     };
     // El cuerpo conserva su curvatura al asentarse, pero cede al bies como el
     // punto de verdad: así no se angosta al estirarse por su peso.
+    // Junto a la axila el cuerpo se dobla con facilidad: la esquina de la
+    // sisa cede bajo la manga en lugar de sostenerla.
+    const softPit = (geo, panel) => {
+      const { px, py } = geo.userData;
+      const pits = [panel.uaL, panel.uaR];
+      return (a, b) => {
+        const x = (px[a] + px[b]) / 2;
+        const y = (py[a] + py[b]) / 2;
+        const d = Math.min(...pits.map((q) => Math.hypot(q.x - x, q.y - y))) * panel.S;
+        return lerp(PIT_BEND, 1e-5, smooth(0.03, 0.08, d));
+      };
+    };
+    // Sobre la percha la tela recorre la barra: ahí conserva el largo de la
+    // forma inicial (que la envuelve) en vez de tirar contra ella.
+    const overHanger = (geo, panel) => {
+      const { px, py } = geo.userData;
+      const near = (i) => (py[i] - panel.ysh(px[i])) * panel.S < HANGER_H + HANGER_GAP + 0.012;
+      return (a, b) => near(a) && near(b);
+    };
     const bodyOpts = { bendRest3D: true, shearCompliance: BODY_SHEAR };
     const pieces = [
-      { ...mk('front', geos.front, this.front.S), ...bodyOpts },
-      { ...mk('back', geos.back, this.back.S), ...bodyOpts },
+      { ...mk('front', geos.front, this.front.S), ...bodyOpts, bendComplianceAt: softPit(geos.front, this.front), keepInitialLength: overHanger(geos.front, this.front) },
+      { ...mk('back', geos.back, this.back.S), ...bodyOpts, bendComplianceAt: softPit(geos.back, this.back), keepInitialLength: overHanger(geos.back, this.back) },
     ];
     // Las mangas cuelgan con algo más de cuerpo (costura de hombro y dobladillo).
     // Las mangas toman como largo de reposo su forma inicial lisa (no el
     // molde): así no se arrugan al asentarse y quedan como planchadas.
+    // Bajo el brazo, junto a la sisa, la manga también se dobla blanda.
+    const sleeveBend = ({ row, loop }) => (a, b) => {
+      const u = (loop.cols[Math.floor(a / row)].hu + loop.cols[Math.floor(b / row)].hu) / 2;
+      const t = ((a % row) + (b % row)) / 2 / (row - 1);
+      const under = (1 - smooth(0.06, 0.18, Math.min(u, 1 - u))) * (1 - smooth(0.15, 0.35, t));
+      return lerp(1e-7, 1e-5, under);
+    };
     const sleevePiece = (key, side) => ({
-      key, geo: geos[key], rest2D: null, side, bendCompliance: 1e-7, shapeMemory: 0.0012,
+      key, geo: geos[key], rest2D: null, side, shapeMemory: 0.0012,
+      bendComplianceAt: sleeveBend(geos[key].userData),
       restScale: sleeveRestScale(geos[key].userData),
     });
     if (geos.sleeveL) pieces.push(sleevePiece('sleeveL', 1));
@@ -936,7 +1031,8 @@ export class GarmentModel {
     const drape = new Drape({
       pieces,
       hanger: hanger.barPts,
-      hangerRadius: HANGER_R + 0.0045,
+      hangerSizes: hanger.barSizes,
+      hangerMargin: HANGER_MARGIN,
       isPinned: (orig, pc, i) => {
         if (pc.key === 'collar') return true;
         if (pc.key !== 'front' && pc.key !== 'back') return false;
@@ -964,8 +1060,8 @@ export class GarmentModel {
       }
     }
     const sideOrShoulder = (i) => Math.abs(z0(i)) < 0.003 && !armhole.has(i);
-    drape.sewBoundaries(front, [back], 0.008, sideOrShoulder, false);
-    drape.sewBoundaries(back, [front], 0.008, sideOrShoulder, false);
+    drape.sewEdges(front, back, 0.008, sideOrShoulder);
+    drape.sewEdges(back, front, 0.008, sideOrShoulder);
     for (const sl of sleeves) {
       const { Nu, row } = sl.geo.userData;
       // Costura bajo el brazo (primera y última columna) y unión a la sisa.
@@ -983,6 +1079,52 @@ export class GarmentModel {
         drape.normalPairs.push([sleeveIdx, bodyIdx]);
       });
     }
+    // Guarda de la sisa: en la mitad de abajo (hacia la axila) las primeras
+    // filas de la manga no pueden doblarse hacia adentro del cuerpo. Si lo
+    // atravesaran, la costura se vería dentada (el cruce de las dos telas);
+    // así la manga queda afuera y la esquina del cuerpo cede debajo de ella.
+    const guards = [];
+    for (const sl of sleeves) {
+      const { loop, row } = sl.geo.userData;
+      const n = loop.cols.length;
+      const glob = (c) => (c.key === 'front' ? front : back).offset + c.v;
+      loop.cols.forEach((c, k) => {
+        if (Math.min(c.hu, 1 - c.hu) > 0.25) return;
+        const pc = c.key === 'front' ? front : back;
+        const panel = c.key === 'front' ? this.front : this.back;
+        const { px, py, cell } = pc.geo.userData;
+        // Vecinos sobre la sisa de la misma pieza (tangente de la costura).
+        const ka = k > 0 && loop.cols[k - 1].key === c.key ? k - 1 : k;
+        const kb = k < n - 1 && loop.cols[k + 1].key === c.key ? k + 1 : k;
+        if (ka === kb) return;
+        const va = loop.cols[ka].v;
+        const vb = loop.cols[kb].v;
+        let nx = -(py[vb] - py[va]);
+        let ny = px[vb] - px[va];
+        const nl = Math.hypot(nx, ny) || 1;
+        nx /= nl;
+        ny /= nl;
+        if (!pointInPoly(panel.pts, px[c.v] + nx * cell, py[c.v] + ny * cell)) {
+          nx = -nx;
+          ny = -ny;
+        }
+        const tx = px[c.v] + nx * cell;
+        const ty = py[c.v] + ny * cell;
+        let inner = -1;
+        let bd = Infinity;
+        for (let i = 0; i < px.length; i++) {
+          const d = (px[i] - tx) ** 2 + (py[i] - ty) ** 2;
+          if (d < bd && i !== c.v) {
+            bd = d;
+            inner = i;
+          }
+        }
+        for (let j = 1; j <= 6; j++) {
+          guards.push(sl.offset + k * row + j, glob(c), pc.offset + inner, glob(loop.cols[ka]), glob(loop.cols[kb]));
+        }
+      });
+    }
+    drape.seamGuards = Int32Array.from(guards);
     // El cuello se cose por su borde inferior al escote.
     const crow = collar.geo.userData.row;
     drape.sewBoundaries(collar, [front, back], 0.015, (i) => (i - collar.offset) % crow <= 1);
@@ -1023,10 +1165,12 @@ export class GarmentModel {
     // Cerca de la sisa la manga conserva su forma lisa (no se pliega sobre la
     // costura); hacia el ruedo cae libre.
     for (const sl of sleeves) {
-      const { row } = sl.geo.userData;
+      const { row, loop } = sl.geo.userData;
       for (let k = 0; k < sl.count; k++) {
         const t = (k % row) / (row - 1);
-        drape.memory[sl.offset + k] += 0.012 * (1 - smooth(0, 0.45, t));
+        // Salvo bajo el brazo: ahí la manga tiene que poder ceder.
+        const u = loop.cols[Math.floor(k / row)].hu;
+        drape.memory[sl.offset + k] += 0.012 * (1 - smooth(0, 0.45, t)) * smooth(0.06, 0.2, Math.min(u, 1 - u));
       }
     }
     // El cuerpo cuelga sin estirarse (hilos verticales largos) y nada lo
@@ -1078,8 +1222,133 @@ export class GarmentModel {
   }
 }
 
+// Semiespesor de la barra según la fracción del largo hacia la punta.
+function hangerHalfThickness(f) {
+  return lerp(HANGER_T, HANGER_T_END, smooth(0.4, 1, f));
+}
+
+// Máximo suave (sin quiebre donde las dos curvas se cruzan).
+function smoothMax(a, b, k) {
+  const h = clamp(0.5 + (0.5 * (b - a)) / k, 0, 1);
+  return lerp(a, b, h) + k * h * (1 - h);
+}
+
+// Barra de la percha: sección de lados planos y cantos redondos (un tramo
+// recto de semialto h − t con semicírculos de radio t), con puntas redondas.
+function hangerBarGeometry(curve, sizeAt, segs = 120, arc = 12, capRings = 6) {
+  const Z = new THREE.Vector3(0, 0, 1);
+  const rings = [];
+  const ring = (u, scale, along) => {
+    const C = curve.getPointAt(u);
+    const T = curve.getTangentAt(u);
+    const N = new THREE.Vector3().crossVectors(Z, T).normalize();
+    const { h, t } = sizeAt(u);
+    const core = Math.max(0, h - t);
+    C.addScaledVector(T, along * t);
+    const out = [];
+    // Canto de arriba (de atrás hacia adelante) y canto de abajo (de vuelta).
+    for (const [off, a0] of [[core, -Math.PI / 2], [-core, Math.PI / 2]]) {
+      for (let j = 0; j <= arc; j++) {
+        const a = a0 + (Math.PI * j) / arc;
+        out.push(C.clone().addScaledVector(N, (off + t * Math.cos(a)) * scale).addScaledVector(Z, t * Math.sin(a) * scale));
+      }
+    }
+    return out;
+  };
+  // Punta inicial (de la cúspide hacia la barra), barra y punta final.
+  for (let k = capRings; k >= 1; k--) {
+    const f = (k / capRings) * (Math.PI / 2);
+    rings.push(ring(0, Math.cos(f), -Math.sin(f)));
+  }
+  for (let i = 0; i <= segs; i++) rings.push(ring(i / segs, 1, 0));
+  for (let k = 1; k <= capRings; k++) {
+    const f = (k / capRings) * (Math.PI / 2);
+    rings.push(ring(1, Math.cos(f), Math.sin(f)));
+  }
+  const radial = rings[0].length;
+  const positions = [];
+  for (const r of rings) for (const p of r) positions.push(p.x, p.y, p.z);
+  const index = [];
+  for (let i = 0; i + 1 < rings.length; i++) {
+    for (let k = 0; k < radial; k++) {
+      const a = i * radial + k;
+      const b = i * radial + ((k + 1) % radial);
+      const c = (i + 1) * radial + k;
+      const d = (i + 1) * radial + ((k + 1) % radial);
+      index.push(a, b, c, b, d, c);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(index);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 function avg(a) {
   return a.reduce((s, v) => s + v, 0) / a.length;
+}
+
+// Junto al contorno, los nodos de la grilla quedan a distancias irregulares
+// del borde y la costura se ve dentada. Cada nodo cercano se lleva sobre el
+// borde (si está casi encima) o a una fila paralela a distancia fija, salvo
+// en las esquinas del molde.
+function edgeAligner(pts, cell, minX, minY) {
+  const n = pts.length;
+  const corners = [];
+  for (let i = 0; i < n; i++) if (turningAtClosed(pts, i, cell) > 0.45) corners.push(pts[i]);
+  const cache = new Map();
+  return (x, y) => {
+    const c = (x - minX) / cell;
+    const r = (y - minY) / cell;
+    if (Math.abs(c - Math.round(c)) > 1e-6 || Math.abs(r - Math.round(r)) > 1e-6) return [x, y];
+    const key = `${Math.round(c)},${Math.round(r)}`;
+    let out = cache.get(key);
+    if (out) return out;
+    out = [x, y];
+    let best = Infinity;
+    let qx = 0;
+    let qy = 0;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const a = pts[j];
+      const b = pts[i];
+      const ex = b.x - a.x;
+      const ey = b.y - a.y;
+      const t = clamp(((x - a.x) * ex + (y - a.y) * ey) / (ex * ex + ey * ey || 1e-12), 0, 1);
+      const d = Math.hypot(x - a.x - ex * t, y - a.y - ey * t);
+      if (d < best) {
+        best = d;
+        qx = a.x + ex * t;
+        qy = a.y + ey * t;
+      }
+    }
+    const nearCorner = corners.some((p) => Math.hypot(p.x - x, p.y - y) < cell * 1.2);
+    if (!nearCorner && best < cell && best > 1e-9) {
+      // Casi encima: sobre el borde mismo (la costura queda recta).
+      const k = best < cell * 0.3 ? 0 : (cell * 0.65) / best;
+      out = [qx + (x - qx) * k, qy + (y - qy) * k];
+    }
+    cache.set(key, out);
+    return out;
+  };
+}
+
+// Ángulo de giro del polígono cerrado en el vértice k, medido con vecinos a
+// cierta distancia.
+function turningAtClosed(pts, k, span) {
+  const n = pts.length;
+  const p = pts[k];
+  let a = k;
+  for (let s = 0; s < n && Math.hypot(pts[a].x - p.x, pts[a].y - p.y) < span; s++) a = (a - 1 + n) % n;
+  let b = k;
+  for (let s = 0; s < n && Math.hypot(pts[b].x - p.x, pts[b].y - p.y) < span; s++) b = (b + 1) % n;
+  const v1x = p.x - pts[a].x;
+  const v1y = p.y - pts[a].y;
+  const v2x = pts[b].x - p.x;
+  const v2y = pts[b].y - p.y;
+  const l = Math.hypot(v1x, v1y) * Math.hypot(v2x, v2y);
+  if (!l) return 0;
+  return Math.acos(clamp((v1x * v2x + v1y * v2y) / l, -1, 1));
 }
 
 function clipToRect(poly, x0, y0, x1, y1) {

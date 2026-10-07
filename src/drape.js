@@ -18,7 +18,8 @@ export class Drape {
    * @param {{key:string, geo:THREE.BufferGeometry, rest2D:Float32Array}[]} opts.pieces
    * @param {(pos:Float32Array, orig:Float32Array, piece:object, local:number)=>boolean} opts.isPinned
    * @param {THREE.Vector3[]} opts.hanger  puntos de la barra de la percha
-   * @param {number} opts.hangerRadius
+   * @param {{h:number, t:number}[]} opts.hangerSizes  semialto y semiespesor de la barra en cada punto
+   * @param {number} opts.hangerMargin  separación de la tela a la barra
    * @param {(i:number, p:Float32Array)=>void} [opts.collide]  colisión extra por partícula
    */
   constructor(opts) {
@@ -39,6 +40,25 @@ export class Drape {
       this.pos.set(pc.geo.attributes.position.array, pc.offset * 3);
       for (let i = 0; i < pc.count; i++) this.owner[pc.offset + i] = k;
     });
+    // Percha: tramos de la barra con su sección, y franja de alturas donde
+    // puede haber contacto (incluye la caída de los hombros).
+    this.hanger = opts.hanger;
+    this.hangerSizes = opts.hangerSizes;
+    this.hangerMargin = opts.hangerMargin;
+    this.hangerReach = 0;
+    this.hangerTopY = -Infinity;
+    this.hangerLowY = Infinity;
+    this.hanger.forEach((p, k) => {
+      this.hangerTopY = Math.max(this.hangerTopY, p.y);
+      this.hangerLowY = Math.min(this.hangerLowY, p.y);
+      this.hangerReach = Math.max(this.hangerReach, this.hangerSizes[k].h, this.hangerSizes[k].t);
+    });
+    this.hangerTopY += this.hangerReach + this.hangerMargin;
+    this.hangerLowY -= this.hangerReach + this.hangerMargin;
+    // La forma inicial arranca afuera de la percha (también lo que queda
+    // fijo): si no, la barra asomaría entre la tela.
+    for (let i = 0; i < n; i++) this.pushOutOfHanger(i * 3);
+    for (const pc of this.pieces) pc.geo.attributes.position.array.set(this.pos.subarray(pc.offset * 3, (pc.offset + pc.count) * 3));
     this.orig.set(this.pos);
     this.prev.set(this.pos);
 
@@ -63,7 +83,10 @@ export class Drape {
       const dbBase = pc.bendRest3D ? d3 : d2;
       // Escala opcional del largo de reposo por arista (quita tela sobrante).
       const sc = pc.restScale || (() => 1);
-      const dStretch = (a, b) => d2(a, b) * sc(a, b);
+      // Donde la tela envuelve algo (la percha), el reposo no es menor que la
+      // forma inicial: si no, la tela tiraría contra lo que envuelve.
+      const keep = pc.keepInitialLength || (() => false);
+      const dStretch = (a, b) => (keep(a, b) ? Math.max(d2(a, b) * sc(a, b), d3(a, b)) : d2(a, b) * sc(a, b));
       const db = (a, b) => dbBase(a, b) * sc(a, b);
       // Las aristas en diagonal del molde (al bies) ceden: el punto se deforma
       // en rombos con facilidad y así la tela no se angosta cuando su propio
@@ -89,6 +112,7 @@ export class Drape {
         }
       }
       pc.boundary = new Set();
+      pc.boundaryEdges = [];
       // Las aristas casi nulas (astillas del recorte del molde) vuelven
       // inestable la simulación: se omiten.
       const MIN_REST = 0.0015;
@@ -104,10 +128,11 @@ export class Drape {
           bI.push(o + rec[2]);
           bJ.push(o + rec[3]);
           bR.push(db(rec[2], rec[3]));
-          bA.push(pc.bendCompliance ?? BEND_COMPLIANCE);
+          bA.push(pc.bendComplianceAt?.(rec[2], rec[3]) ?? pc.bendCompliance ?? BEND_COMPLIANCE);
         } else if (rec.length === 3) {
           pc.boundary.add(a);
           pc.boundary.add(b);
+          pc.boundaryEdges.push([a, b]);
         }
       }
     }
@@ -125,9 +150,14 @@ export class Drape {
       for (let i = 0; i < pc.count; i++) if (opts.isPinned(this.orig, pc, i)) this.w[pc.offset + i] = 0;
     }
     this.stitches = [];
+    // Costuras sobre el borde de la otra pieza: [i, j0, j1, t] une la
+    // partícula i al punto (1 − t)·j0 + t·j1 del borde.
+    this.edgeStitches = [];
     this.normalPairs = []; // partículas soldadas que comparten normal
-    this.hanger = opts.hanger;
-    this.hangerRadius = opts.hangerRadius;
+    // Guardas de costura: [partícula, punto de la costura, vecino hacia el
+    // interior de la otra pieza, puntos anterior y siguiente de la costura].
+    this.seamGuards = new Int32Array(0);
+    this.seamMargin = 0.002;
     this.collide = opts.collide;
     this.halfZ = new Float32Array(n); // >0: z >= v ; <0: z <= v ; 0: libre
     // Memoria de forma por pieza: atrae suavemente cada partícula a su
@@ -181,6 +211,39 @@ export class Drape {
     }
   }
 
+  // Cose el borde de pa al de pb punto a punto: cada partícula del borde de
+  // pa queda sobre el punto más cercano del borde de pb (entre dos de sus
+  // partículas), sin que las partículas de las dos piezas tengan que
+  // coincidir. Así la costura es una línea continua, sin dientes.
+  sewEdges(pa, pb, maxDist, filter = () => true) {
+    const o = this.orig;
+    const edges = pb.boundaryEdges
+      .map(([a, b]) => [pb.offset + a, pb.offset + b])
+      .filter(([a, b]) => filter(a) && filter(b));
+    for (const la of pa.boundary) {
+      const i = pa.offset + la;
+      if (!filter(i)) continue;
+      let best = null;
+      let bd = maxDist * maxDist;
+      for (const [a, b] of edges) {
+        const ex = o[b * 3] - o[a * 3];
+        const ey = o[b * 3 + 1] - o[a * 3 + 1];
+        const ez = o[b * 3 + 2] - o[a * 3 + 2];
+        const L2 = ex * ex + ey * ey + ez * ez || 1e-12;
+        const t = Math.max(0, Math.min(1, ((o[i * 3] - o[a * 3]) * ex + (o[i * 3 + 1] - o[a * 3 + 1]) * ey + (o[i * 3 + 2] - o[a * 3 + 2]) * ez) / L2));
+        const dx = o[i * 3] - o[a * 3] - ex * t;
+        const dy = o[i * 3 + 1] - o[a * 3 + 1] - ey * t;
+        const dz = o[i * 3 + 2] - o[a * 3 + 2] - ez * t;
+        const d = dx * dx + dy * dy + dz * dz;
+        if (d < bd) {
+          bd = d;
+          best = [i, a, b, t];
+        }
+      }
+      if (best) this.edgeStitches.push(best);
+    }
+  }
+
   // Ataduras de largo máximo a la fijación más cercana (evitan que la tela se
   // estire por su peso). La distancia se mide sobre la tela (camino más corto
   // por la malla y las costuras), no en línea recta: así un costado puede
@@ -193,6 +256,9 @@ export class Drape {
     const links = [];
     for (let c = 0; c < sI.length; c++) links.push([sI[c], sJ[c], sR[c]]);
     for (const [i, j, ox, oy, oz] of this.stitches) links.push([i, j, Math.hypot(ox, oy, oz)]);
+    const o = this.orig;
+    const od = (i, j) => Math.hypot(o[i * 3] - o[j * 3], o[i * 3 + 1] - o[j * 3 + 1], o[i * 3 + 2] - o[j * 3 + 2]);
+    for (const [i, a, b] of this.edgeStitches) links.push([i, a, od(i, a)], [i, b, od(i, b)]);
     for (const [i, j] of links) {
       deg[i + 1]++;
       deg[j + 1]++;
@@ -286,18 +352,6 @@ export class Drape {
     const invDt2 = 1 / (dt * dt);
     // La forma inicial no respeta exactamente los largos del molde: los primeros
     // cuadros relajan sin acumular velocidad para que no "explote".
-    const hp = this.hanger;
-    const hr = this.hangerRadius;
-    const hr2 = hr * hr;
-    // Franja de alturas donde hay percha (incluye la caída de los hombros).
-    let topY = -Infinity;
-    let lowY = Infinity;
-    for (const p of hp) {
-      topY = Math.max(topY, p.y);
-      lowY = Math.min(lowY, p.y);
-    }
-    topY += hr;
-    lowY -= hr;
     for (let f = 0; f < frames; f++) {
       const damp = this.frame < 25 ? 0 : 0.985;
       for (let s = 0; s < SUBSTEPS; s++) {
@@ -402,6 +456,31 @@ export class Drape {
           pos[b + 1] += (cy * wb) / ws;
           pos[b + 2] += (cz * wb) / ws;
         }
+        for (const [i, ja, jb, t] of this.edgeStitches) {
+          const wi = w[i];
+          const wa = w[ja] * (1 - t) * (1 - t);
+          const wb = w[jb] * t * t;
+          const ws = wi + wa + wb;
+          if (!ws) continue;
+          const p = i * 3;
+          const a = ja * 3;
+          const b = jb * 3;
+          const cx = (pos[p] - pos[a] * (1 - t) - pos[b] * t) / ws;
+          const cy = (pos[p + 1] - pos[a + 1] * (1 - t) - pos[b + 1] * t) / ws;
+          const cz = (pos[p + 2] - pos[a + 2] * (1 - t) - pos[b + 2] * t) / ws;
+          pos[p] -= cx * wi;
+          pos[p + 1] -= cy * wi;
+          pos[p + 2] -= cz * wi;
+          const fa = w[ja] * (1 - t);
+          const fb = w[jb] * t;
+          pos[a] += cx * fa;
+          pos[a + 1] += cy * fa;
+          pos[a + 2] += cz * fa;
+          pos[b] += cx * fb;
+          pos[b + 1] += cy * fb;
+          pos[b + 2] += cz * fb;
+        }
+        this.guardSeams();
         // Ataduras.
         if (this.tI) {
           const { tI, tP, tR } = this;
@@ -423,27 +502,7 @@ export class Drape {
         for (let i = 0; i < n; i++) {
           if (w[i] === 0) continue;
           const k = i * 3;
-          if (pos[k + 1] > lowY && pos[k + 1] < topY) {
-            for (let h = 0; h + 1 < hp.length; h++) {
-              const p0 = hp[h];
-              const p1 = hp[h + 1];
-              const ex = p1.x - p0.x;
-              const ey = p1.y - p0.y;
-              const ez = p1.z - p0.z;
-              const t = Math.max(0, Math.min(1, ((pos[k] - p0.x) * ex + (pos[k + 1] - p0.y) * ey + (pos[k + 2] - p0.z) * ez) / (ex * ex + ey * ey + ez * ez)));
-              const dx = pos[k] - (p0.x + ex * t);
-              const dy = pos[k + 1] - (p0.y + ey * t);
-              const dz = pos[k + 2] - (p0.z + ez * t);
-              const d2 = dx * dx + dy * dy + dz * dz;
-              if (d2 < hr2 && d2 > 1e-12) {
-                const d = Math.sqrt(d2);
-                const m = (hr - d) / d;
-                pos[k] += dx * m;
-                pos[k + 1] += dy * m;
-                pos[k + 2] += dz * m;
-              }
-            }
-          }
+          this.pushOutOfHanger(k);
           const mem = this.memory[i];
           if (mem) {
             pos[k] += (this.orig[k] - pos[k]) * mem;
@@ -460,6 +519,101 @@ export class Drape {
     }
   }
 
+  // Una pieza cosida a otra no puede doblarse hacia adentro de ella: cuando
+  // una partícula cae sobre la otra pieza (del lado de su tela), se la deja
+  // del lado de afuera de su superficie. La corrección se reparte: la pieza
+  // que se dobla sale y la otra cede hacia adentro.
+  guardSeams() {
+    const { pos, w, seamGuards: g, seamMargin: m } = this;
+    for (let q = 0; q < g.length; q += 5) {
+      const p = g[q] * 3;
+      const s = g[q + 1] * 3;
+      const inn = g[q + 2] * 3;
+      const a = g[q + 3] * 3;
+      const b = g[q + 4] * 3;
+      // Dirección hacia el interior de la pieza y normal de su superficie.
+      let ix = pos[inn] - pos[s];
+      let iy = pos[inn + 1] - pos[s + 1];
+      let iz = pos[inn + 2] - pos[s + 2];
+      const tx = pos[b] - pos[a];
+      const ty = pos[b + 1] - pos[a + 1];
+      const tz = pos[b + 2] - pos[a + 2];
+      let nx = ty * iz - tz * iy;
+      let ny = tz * ix - tx * iz;
+      let nz = tx * iy - ty * ix;
+      const nl = Math.hypot(nx, ny, nz);
+      const il = Math.hypot(ix, iy, iz);
+      if (nl < 1e-9 || il < 1e-9) continue;
+      // Hacia afuera: lejos del eje vertical de la prenda.
+      const out = nx * pos[s] + nz * pos[s + 2] < 0 ? -1 / nl : 1 / nl;
+      nx *= out;
+      ny *= out;
+      nz *= out;
+      ix /= il;
+      iy /= il;
+      iz /= il;
+      const dx = pos[p] - pos[s];
+      const dy = pos[p + 1] - pos[s + 1];
+      const dz = pos[p + 2] - pos[s + 2];
+      if (dx * ix + dy * iy + dz * iz <= 0) continue;
+      const h = dx * nx + dy * ny + dz * nz;
+      if (h >= m) continue;
+      const wp = w[g[q]];
+      const wi = w[g[q + 2]];
+      const ws = wp + wi;
+      if (!ws) continue;
+      const c = (m - h) / ws;
+      pos[p] += nx * c * wp;
+      pos[p + 1] += ny * c * wp;
+      pos[p + 2] += nz * c * wp;
+      pos[inn] -= nx * c * wi;
+      pos[inn + 1] -= ny * c * wi;
+      pos[inn + 2] -= nz * c * wi;
+    }
+  }
+
+  // Saca de la percha a la partícula de índice k (posición k, k+1, k+2): la
+  // barra es un tubo de lados planos y cantos redondos, más el margen.
+  pushOutOfHanger(k) {
+    const { pos, hanger: hp, hangerSizes: hs, hangerMargin: hm, hangerReach: reach } = this;
+    if (pos[k + 1] <= this.hangerLowY || pos[k + 1] >= this.hangerTopY) return;
+    for (let h = 0; h + 1 < hp.length; h++) {
+      const p0 = hp[h];
+      const p1 = hp[h + 1];
+      const ex = p1.x - p0.x;
+      // Lejos del tramo (a lo largo de x): sin contacto posible.
+      if (Math.abs(pos[k] - (p0.x + p1.x) / 2) > Math.abs(ex) / 2 + reach + hm) continue;
+      const ey = p1.y - p0.y;
+      const ez = p1.z - p0.z;
+      const L = Math.sqrt(ex * ex + ey * ey + ez * ez);
+      // Coordenadas locales: a lo largo del tramo (s), según la normal de la
+      // barra en su plano (a) y según z.
+      const rx = pos[k] - p0.x;
+      const ry = pos[k + 1] - p0.y;
+      const rz = pos[k + 2] - p0.z;
+      const s = (rx * ex + ry * ey + rz * ez) / L;
+      const sc = Math.max(0, Math.min(L, s));
+      const t = sc / L;
+      const nx = -ey / L;
+      const ny = ex / L;
+      const a = rx * nx + ry * ny;
+      // Sección: tramo recto de semialto h − t, redondeado con radio t.
+      const th = hs[h].t + (hs[h + 1].t - hs[h].t) * t;
+      const core = Math.max(0, hs[h].h + (hs[h + 1].h - hs[h].h) * t - th);
+      const r = th + hm;
+      const ds = s - sc;
+      const da = a - Math.max(-core, Math.min(core, a));
+      const d2 = ds * ds + da * da + rz * rz;
+      if (d2 < r * r && d2 > 1e-12) {
+        // Afuera en la dirección más corta (normal a la superficie).
+        const m = r / Math.sqrt(d2) - 1;
+        pos[k] += ((ds * ex) / L + da * nx) * m;
+        pos[k + 1] += ((ds * ey) / L + da * ny) * m;
+        pos[k + 2] += ((ds * ez) / L) * m + rz * m;
+      }
+    }
+  }
+
   // Copia el estado a las geometrías y recalcula normales.
   apply() {
     for (const pc of this.pieces) {
@@ -469,6 +623,41 @@ export class Drape {
       pc.geo.computeVertexNormals();
       pc.afterApply?.(pc.geo);
       pc.geo.computeBoundingSphere();
+    }
+    // Costuras sobre el borde: frente y espalda (ambas con la normal hacia
+    // afuera) promedian sus normales, así el doblez se ve redondo y cerrado.
+    if (this.edgeStitches.length) {
+      const acc = new Map();
+      const nrmOf = (g) => {
+        const pc = this.pieces[this.owner[g]];
+        return [pc.geo.attributes.normal, g - pc.offset];
+      };
+      const add = (g, x, y, z) => {
+        let v = acc.get(g);
+        if (!v) {
+          const [na, ia] = nrmOf(g);
+          v = [na.getX(ia), na.getY(ia), na.getZ(ia)];
+          acc.set(g, v);
+        }
+        v[0] += x;
+        v[1] += y;
+        v[2] += z;
+      };
+      for (const [i, a, b, t] of this.edgeStitches) {
+        const [ni, ii] = nrmOf(i);
+        const [nA, iA] = nrmOf(a);
+        const [nB, iB] = nrmOf(b);
+        add(i, nA.getX(iA) * (1 - t) + nB.getX(iB) * t, nA.getY(iA) * (1 - t) + nB.getY(iB) * t, nA.getZ(iA) * (1 - t) + nB.getZ(iB) * t);
+        add(a, ni.getX(ii) * (1 - t), ni.getY(ii) * (1 - t), ni.getZ(ii) * (1 - t));
+        add(b, ni.getX(ii) * t, ni.getY(ii) * t, ni.getZ(ii) * t);
+      }
+      for (const [g, [x, y, z]] of acc) {
+        const l = Math.hypot(x, y, z);
+        if (l < 1e-6) continue;
+        const [na, ia] = nrmOf(g);
+        na.setXYZ(ia, x / l, y / l, z / l);
+        na.needsUpdate = true;
+      }
     }
     // Normales compartidas en las uniones soldadas (sombreado continuo).
     const nrm = (g) => {

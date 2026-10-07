@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { Drape } from './drape.js';
 
 const BODY_LENGTH = 0.72; // m, del punto de cuello al ruedo
-const ARM_OPEN = 0.03; // apertura (media) de la sisa
+const ARM_OPEN = 0.013; // apertura (media) de la sisa: menor que la profundidad del cuerpo, así el borde sigue su curva
 const HANGER_R = 0.0055;
 const HANGER_REACH = 0.93;
 const SLEEVE_HEM_EASE = 0.9; // contorno de la manga en el ruedo respecto de la forma inicial
@@ -667,7 +667,9 @@ export class GarmentModel {
         for (let k = 1; k <= 6; k++) {
           const P = curve(fr, HU[iu], k / 6, A[iu], tmpP);
           const b = -P.y / BODY_LENGTH;
-          if (b < this.bSh + 0.02) continue;
+          // Por encima de la axila sólo cuenta la mitad de la manga hacia el
+          // ruedo: la copa vive junto a la sisa y no debe empujarse.
+          if (b < this.bSh + 0.02 || (b < this.bUA && k < 3)) continue;
           worst = Math.max(worst, this.bodyPenetration(P.x, P.z, b, 0.003));
         }
       }
@@ -683,7 +685,7 @@ export class GarmentModel {
         const err = e1 * e1 + e2 * e2 + 6e-5 * (a - DROP_DEG) ** 2;
         if (best && err > best.err) continue;
         const pen = insideBody(fr);
-        const total = err + 40 * pen * pen;
+        const total = err + 12 * pen * pen;
         if (!best || total < best.err) best = { err: total, fr };
       }
     }
@@ -993,10 +995,14 @@ export class GarmentModel {
     drape.collide = (i, pos) => {
       if (!sleeveOf[drape.owner[i]]) return;
       const pc = drape.pieces[drape.owner[i]];
-      if ((i - pc.offset) % pc.geo.userData.row < 4) return;
+      const { row } = pc.geo.userData;
+      const j = (i - pc.offset) % row;
+      if (j < 4) return;
       const k = i * 3;
       const b = -pos[k + 1] / BODY_LENGTH;
-      if (b < this.bSh + 0.02) return;
+      // Por encima de la axila sólo se aparta del pecho la parte del ruedo; la
+      // copa queda libre para caer junto a la sisa.
+      if (b < this.bSh + 0.02 || (b < this.bUA && j < row * 0.45)) return;
       if (this.bodyPenetration(pos[k], pos[k + 2], b, 0.003, pushed) > 0) {
         pos[k] = pushed.x;
         pos[k + 2] = pushed.z;

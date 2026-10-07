@@ -106,6 +106,25 @@ export class SvgMold {
       if (!outline) continue;
       this.parts[def.key] = { key: def.key, label: def.label, el: found, ...outline };
     }
+    // Mangas sin lado en el nombre ("manga", "manga-2"): se asignan por
+    // posición en el molde (la de más a la derecha es la izquierda, como en la
+    // vista de frente).
+    if (!this.parts.sleeveL || !this.parts.sleeveR) {
+      const used = Object.values(this.parts).map((p) => p.el);
+      const generic = groups
+        .filter((el) => /(manga|sleeve)/i.test(`${el.getAttribute('id') || ''} ${el.getAttribute('data-name') || ''}`))
+        .filter((el) => !used.some((u) => u === el || u.contains(el) || el.contains(u)))
+        .filter((el, i, arr) => !arr.some((o, j) => j !== i && o.contains(el)))
+        .map((el) => ({ el, outline: this._outlineOf(el) }))
+        .filter((g) => g.outline)
+        .sort((a, b) => (b.outline.bbox.minX + b.outline.bbox.maxX) - (a.outline.bbox.minX + a.outline.bbox.maxX));
+      for (const key of ['sleeveL', 'sleeveR']) {
+        if (this.parts[key] || !generic.length) continue;
+        const g = key === 'sleeveL' ? generic.shift() : generic.pop();
+        const def = PART_DEFS.find((d) => d.key === key);
+        this.parts[key] = { key, label: def.label, el: g.el, ...g.outline };
+      }
+    }
     // Elementos sueltos (logos, textos) fuera de las piezas.
     const partEls = Object.values(this.parts).map((p) => p.el);
     this.looseEls = [];

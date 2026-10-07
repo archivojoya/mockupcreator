@@ -384,12 +384,23 @@ export class GarmentModel {
     const tmp = new THREE.Vector3();
     const eps = cell * 0.25;
     const orient = panel.kind === 'front' ? 1 : -1;
+    // Los puntos del contorno que caen muy cerca de un nodo de la grilla se
+    // funden con él: sin triángulos astilla, el borde queda parejo.
+    const snapR = cell * 0.3;
     const vertex = (x, y) => {
-      const key = `${Math.round(x * 100)},${Math.round(y * 100)}`;
-      let id = keyMap.get(key);
-      if (id !== undefined) return id;
-      id = positions.length / 3;
-      keyMap.set(key, id);
+      const hx = Math.floor(x / snapR);
+      const hy = Math.floor(y / snapR);
+      for (let ox = -1; ox <= 1; ox++) {
+        for (let oy = -1; oy <= 1; oy++) {
+          const list = keyMap.get(`${hx + ox},${hy + oy}`);
+          if (!list) continue;
+          for (const id of list) if (Math.hypot(px[id] - x, py[id] - y) < snapR) return id;
+        }
+      }
+      const id = positions.length / 3;
+      const hk = `${hx},${hy}`;
+      if (!keyMap.has(hk)) keyMap.set(hk, []);
+      keyMap.get(hk).push(id);
       px.push(x);
       py.push(y);
       this.bodyPos(panel, x, y, v);
@@ -432,6 +443,8 @@ export class GarmentModel {
           const a = vertex(...tris[t]);
           const b = vertex(...tris[t + 1]);
           const c2 = vertex(...tris[t + 2]);
+          if (a === b || b === c2 || a === c2) continue;
+          if (Math.abs(triArea([px[a], py[a]], [px[b], py[b]], [px[c2], py[c2]])) < cell * cell * 1e-3) continue;
           index.push(a, b, c2);
         }
       }
@@ -619,7 +632,7 @@ export class GarmentModel {
 
   buildCollar(atlas, collarPart) {
     const loop = this.neckLoop();
-    const height = 0.0135;
+    const height = 0.011;
     const thick = 0.0035;
     // Perfil: cara exterior subiendo, borde redondeado y cara interior bajando.
     const prof = [];
@@ -798,27 +811,35 @@ export class GarmentModel {
       const { Nu, row } = sl.geo.userData;
       // Costura bajo el brazo (primera y última columna) y unión a la sisa.
       for (let j = 0; j < row; j++) drape.stitch(sl.offset + j, sl.offset + Nu * row + j);
-      drape.sewBoundaries(sl, [front, back], 0.03, (i) => (i - sl.offset) % row === 0, 'flex', SEAM_GAP);
     }
-    // Y al revés: el borde de la sisa del cuerpo se cose a la manga, para que
-    // no quede abierto entre puntadas.
+    // Costura de la sisa: cada punto del borde del cuerpo se cose al punto más
+    // cercano de la curva (no del vértice) de la primera fila de la manga. Así
+    // el borde sigue la curva lisa de la manga, como el escote sigue al cuello.
     if (sleeves.length) {
-      const ring = (pc) => [...pc.boundary].filter((l) => l % pc.geo.userData.row === 0).map((l) => pc.offset + l);
-      const ringPts = sleeves.flatMap(ring);
+      const o = drape.orig;
+      const segs = [];
+      for (const sl of sleeves) {
+        const { Nu, row } = sl.geo.userData;
+        for (let c = 0; c < Nu; c++) segs.push([sl.offset + c * row, sl.offset + (c + 1) * row]);
+      }
       for (const body of [front, back]) {
         for (const l of body.boundary) {
           const i = body.offset + l;
-          if (drape.w[i] === 0) continue;
-          let best = -1;
-          let bd = 0.012 ** 2;
-          for (const j of ringPts) {
-            const d = (drape.orig[i * 3] - drape.orig[j * 3]) ** 2 + (drape.orig[i * 3 + 1] - drape.orig[j * 3 + 1]) ** 2 + (drape.orig[i * 3 + 2] - drape.orig[j * 3 + 2]) ** 2;
+          let best = null;
+          let bd = 0.015 ** 2;
+          for (const [a, b] of segs) {
+            const ex = o[b * 3] - o[a * 3];
+            const ey = o[b * 3 + 1] - o[a * 3 + 1];
+            const ez = o[b * 3 + 2] - o[a * 3 + 2];
+            const L2 = ex * ex + ey * ey + ez * ez || 1e-12;
+            const t = clamp(((o[i * 3] - o[a * 3]) * ex + (o[i * 3 + 1] - o[a * 3 + 1]) * ey + (o[i * 3 + 2] - o[a * 3 + 2]) * ez) / L2, 0, 1);
+            const d = (o[i * 3] - o[a * 3] - ex * t) ** 2 + (o[i * 3 + 1] - o[a * 3 + 1] - ey * t) ** 2 + (o[i * 3 + 2] - o[a * 3 + 2] - ez * t) ** 2;
             if (d < bd) {
               bd = d;
-              best = j;
+              best = [a, b, t];
             }
           }
-          if (best >= 0) drape.seam(i, best, SEAM_GAP);
+          if (best) drape.seamToSegment(i, ...best, SEAM_GAP);
         }
       }
     }

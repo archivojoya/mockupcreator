@@ -109,6 +109,7 @@ export class Drape {
     }
     this.stitches = [];
     this.seams = [];
+    this.segSeams = [];
     this.hanger = opts.hanger;
     this.hangerRadius = opts.hangerRadius;
     this.collide = opts.collide;
@@ -135,6 +136,12 @@ export class Drape {
     const o = this.orig;
     const d = Math.hypot(o[i * 3] - o[j * 3], o[i * 3 + 1] - o[j * 3 + 1], o[i * 3 + 2] - o[j * 3 + 2]);
     this.seams.push([i, j, Math.min(d, cap) + 0.0005]);
+  }
+
+  // Costura a un punto intermedio del segmento a-b (fracción t): el borde
+  // cosido se desliza sobre la curva en vez de engancharse a sus vértices.
+  seamToSegment(i, a, b, t, maxLen) {
+    this.segSeams.push([i, a, b, t, maxLen]);
   }
 
   // Cose los bordes libres de dos piezas que se tocan (a menos de maxDist).
@@ -315,6 +322,32 @@ export class Drape {
           pos[b] += dx * corr * wb;
           pos[b + 1] += dy * corr * wb;
           pos[b + 2] += dz * corr * wb;
+        }
+        // Costuras a segmento.
+        for (const [i, a, b, t, maxLen] of this.segSeams) {
+          const wi = w[i];
+          const wa = w[a] * (1 - t);
+          const wb = w[b] * t;
+          const ws = wi + wa * (1 - t) + wb * t;
+          if (!ws) continue;
+          const ki = i * 3;
+          const ka = a * 3;
+          const kb = b * 3;
+          const dx = pos[ki] - (pos[ka] * (1 - t) + pos[kb] * t);
+          const dy = pos[ki + 1] - (pos[ka + 1] * (1 - t) + pos[kb + 1] * t);
+          const dz = pos[ki + 2] - (pos[ka + 2] * (1 - t) + pos[kb + 2] * t);
+          const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (d <= maxLen) continue;
+          const corr = (d - maxLen) / (d * ws);
+          pos[ki] -= dx * corr * wi;
+          pos[ki + 1] -= dy * corr * wi;
+          pos[ki + 2] -= dz * corr * wi;
+          pos[ka] += dx * corr * wa;
+          pos[ka + 1] += dy * corr * wa;
+          pos[ka + 2] += dz * corr * wa;
+          pos[kb] += dx * corr * wb;
+          pos[kb + 1] += dy * corr * wb;
+          pos[kb + 2] += dz * corr * wb;
         }
         // Ataduras.
         if (this.tI) {

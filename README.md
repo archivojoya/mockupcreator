@@ -36,6 +36,9 @@ Cada pieza debe estar en un grupo (`<g>`) cuyo id contenga:
 | Espalda         | `espalda`, `back`                         |
 | Manga izquierda | `manga_izquierda`, `sleeve_left`          |
 | Manga derecha   | `manga_derecha`, `sleeve_right`           |
+
+Si las mangas se llaman sólo `manga` (por ejemplo `manga` y `manga-2`), se
+asignan por posición: la de más a la derecha en el molde es la izquierda.
 | Cuello          | `cuello`, `collar`                        |
 
 El contorno de la pieza se toma de la línea de corte sin relleno del grupo o, si

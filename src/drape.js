@@ -46,6 +46,7 @@ export class Drape {
     const sI = [];
     const sJ = [];
     const sR = [];
+    const sA = [];
     const bI = [];
     const bJ = [];
     const bR = [];
@@ -64,6 +65,16 @@ export class Drape {
       const sc = pc.restScale || (() => 1);
       const dStretch = (a, b) => d2(a, b) * sc(a, b);
       const db = (a, b) => dbBase(a, b) * sc(a, b);
+      // Las aristas en diagonal del molde (al bies) ceden: el punto se deforma
+      // en rombos con facilidad y así la tela no se angosta cuando su propio
+      // peso la estira.
+      const shearOf = (a, b) => {
+        if (!pc.shearCompliance || !r2) return 0;
+        const ax = Math.abs(r2[a * 2] - r2[b * 2]);
+        const ay = Math.abs(r2[a * 2 + 1] - r2[b * 2 + 1]);
+        const ang = Math.atan2(ay, ax);
+        return ang > 0.35 && ang < 1.22 ? pc.shearCompliance : 0;
+      };
       const edges = new Map();
       for (let t = 0; t < idx.length; t += 3) {
         const tri = [idx[t], idx[t + 1], idx[t + 2]];
@@ -87,6 +98,7 @@ export class Drape {
           sI.push(o + a);
           sJ.push(o + b);
           sR.push(dStretch(a, b));
+          sA.push(shearOf(a, b));
         }
         if (rec.length === 4 && db(rec[2], rec[3]) >= MIN_REST) {
           bI.push(o + rec[2]);
@@ -102,6 +114,7 @@ export class Drape {
     this.sI = Int32Array.from(sI);
     this.sJ = Int32Array.from(sJ);
     this.sR = Float32Array.from(sR);
+    this.sA = Float32Array.from(sA);
     this.bI = Int32Array.from(bI);
     this.bJ = Int32Array.from(bJ);
     this.bR = Float32Array.from(bR);
@@ -122,6 +135,18 @@ export class Drape {
     this.memory = new Float32Array(n);
     for (const pc of this.pieces) if (pc.shapeMemory) this.memory.fill(pc.shapeMemory, pc.offset, pc.offset + pc.count);
     this.frame = 0;
+    this.lI = new Int32Array(0);
+    this.lJ = new Int32Array(0);
+    this.lR = new Float32Array(0);
+  }
+
+  // Hilos largos: largo máximo entre dos partículas de una misma columna de
+  // la trama (sólo impiden estirar, no plegar). Corrigen de una vez el
+  // estiramiento que la tela acumula por su peso a lo largo de muchas filas.
+  setThreads(list) {
+    this.lI = Int32Array.from(list.map((t) => t[0]));
+    this.lJ = Int32Array.from(list.map((t) => t[1]));
+    this.lR = Float32Array.from(list.map((t) => t[2]));
   }
 
   // Une la partícula i (global) a j: en el mismo punto o manteniendo su
@@ -157,31 +182,97 @@ export class Drape {
   }
 
   // Ataduras de largo máximo a la fijación más cercana (evitan que la tela se
-  // estire por su peso).
-  buildTethers() {
-    const o = this.orig;
-    const pins = [];
-    for (let i = 0; i < this.n; i++) if (this.w[i] === 0) pins.push(i);
+  // estire por su peso). La distancia se mide sobre la tela (camino más corto
+  // por la malla y las costuras), no en línea recta: así un costado puede
+  // bajar y girar libremente alrededor de la punta de la percha, pero nunca
+  // alejarse más de lo que mide la tela.
+  buildTethers(slack = 1.02) {
+    const n = this.n;
+    const { sI, sJ, sR } = this;
+    const deg = new Int32Array(n + 1);
+    const links = [];
+    for (let c = 0; c < sI.length; c++) links.push([sI[c], sJ[c], sR[c]]);
+    for (const [i, j, ox, oy, oz] of this.stitches) links.push([i, j, Math.hypot(ox, oy, oz)]);
+    for (const [i, j] of links) {
+      deg[i + 1]++;
+      deg[j + 1]++;
+    }
+    for (let i = 0; i < n; i++) deg[i + 1] += deg[i];
+    const adj = new Int32Array(deg[n]);
+    const len = new Float32Array(deg[n]);
+    const fill = deg.slice(0, n);
+    for (const [i, j, l] of links) {
+      adj[fill[i]] = j;
+      len[fill[i]++] = l;
+      adj[fill[j]] = i;
+      len[fill[j]++] = l;
+    }
+    const dist = new Float64Array(n).fill(Infinity);
+    const src = new Int32Array(n).fill(-1);
+    // Montículo binario de (distancia, partícula).
+    const hd = [];
+    const hi = [];
+    const push = (d, i) => {
+      let k = hd.length;
+      hd.push(d);
+      hi.push(i);
+      while (k > 0) {
+        const p = (k - 1) >> 1;
+        if (hd[p] <= hd[k]) break;
+        [hd[p], hd[k]] = [hd[k], hd[p]];
+        [hi[p], hi[k]] = [hi[k], hi[p]];
+        k = p;
+      }
+    };
+    const pop = () => {
+      const top = [hd[0], hi[0]];
+      const ld = hd.pop();
+      const li = hi.pop();
+      if (hd.length) {
+        hd[0] = ld;
+        hi[0] = li;
+        let k = 0;
+        for (;;) {
+          const l = 2 * k + 1;
+          const r = l + 1;
+          let m = k;
+          if (l < hd.length && hd[l] < hd[m]) m = l;
+          if (r < hd.length && hd[r] < hd[m]) m = r;
+          if (m === k) break;
+          [hd[m], hd[k]] = [hd[k], hd[m]];
+          [hi[m], hi[k]] = [hi[k], hi[m]];
+          k = m;
+        }
+      }
+      return top;
+    };
+    for (let i = 0; i < n; i++) {
+      if (this.w[i] !== 0) continue;
+      dist[i] = 0;
+      src[i] = i;
+      push(0, i);
+    }
+    while (hd.length) {
+      const [d, i] = pop();
+      if (d > dist[i]) continue;
+      for (let e = deg[i]; e < deg[i + 1]; e++) {
+        const j = adj[e];
+        const nd = d + len[e];
+        if (nd < dist[j]) {
+          dist[j] = nd;
+          src[j] = src[i];
+          push(nd, j);
+        }
+      }
+    }
     const tI = [];
     const tP = [];
     const tR = [];
-    for (let i = 0; i < this.n; i++) {
-      if (this.w[i] === 0 || !pins.length) continue;
-      let best = pins[0];
-      let bd = Infinity;
-      for (const p of pins) {
-        const dx = o[i * 3] - o[p * 3];
-        const dy = o[i * 3 + 1] - o[p * 3 + 1];
-        const dz = o[i * 3 + 2] - o[p * 3 + 2];
-        const d = dx * dx + dy * dy + dz * dz;
-        if (d < bd) {
-          bd = d;
-          best = p;
-        }
-      }
+    for (let i = 0; i < n; i++) {
+      if (this.w[i] === 0 || src[i] < 0) continue;
       tI.push(i);
-      tP.push(best);
-      tR.push(Math.sqrt(bd) * 1.03);
+      tP.push(src[i]);
+      tR.push(dist[i] * slack);
     }
     this.tI = Int32Array.from(tI);
     this.tP = Int32Array.from(tP);
@@ -189,7 +280,7 @@ export class Drape {
   }
 
   step(frames) {
-    const { pos, prev, w, sI, sJ, sR, bI, bJ, bR, bA, halfZ, n } = this;
+    const { pos, prev, w, sI, sJ, sR, sA, lI, lJ, lR, bI, bJ, bR, bA, halfZ, n } = this;
     const dt = FRAME_DT / SUBSTEPS;
     const g = GRAVITY * dt * dt;
     const invDt2 = 1 / (dt * dt);
@@ -230,7 +321,7 @@ export class Drape {
           pos[k + 1] += vy + g;
           pos[k + 2] += vz;
         }
-        // Estiramiento (rígido).
+        // Estiramiento (rígido, salvo al bies).
         for (let c = 0; c < sI.length; c++) {
           const a = sI[c] * 3;
           const b = sJ[c] * 3;
@@ -242,13 +333,36 @@ export class Drape {
           const dy = pos[a + 1] - pos[b + 1];
           const dz = pos[a + 2] - pos[b + 2];
           const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-9;
-          const corr = (d - sR[c]) / (d * ws);
+          const corr = (d - sR[c]) / (d * (ws + sA[c] * invDt2));
           pos[a] -= dx * corr * wa;
           pos[a + 1] -= dy * corr * wa;
           pos[a + 2] -= dz * corr * wa;
           pos[b] += dx * corr * wb;
           pos[b + 1] += dy * corr * wb;
           pos[b + 2] += dz * corr * wb;
+        }
+        // Hilos largos: sólo actúan si la columna quedó más larga que la tela.
+        for (let c = 0; c < lI.length; c++) {
+          const ia = lI[c];
+          const ib = lJ[c];
+          const a = ia * 3;
+          const b = ib * 3;
+          const dx = pos[b] - pos[a];
+          const dy = pos[b + 1] - pos[a + 1];
+          const dz = pos[b + 2] - pos[a + 2];
+          const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (d <= lR[c]) continue;
+          const wa = w[ia];
+          const wb = w[ib];
+          const ws = wa + wb;
+          if (!ws) continue;
+          const k = (d - lR[c]) / (d * ws);
+          pos[a] += dx * k * wa;
+          pos[a + 1] += dy * k * wa;
+          pos[a + 2] += dz * k * wa;
+          pos[b] -= dx * k * wb;
+          pos[b + 1] -= dy * k * wb;
+          pos[b + 2] -= dz * k * wb;
         }
         // Flexión (blanda): sólo resiste si la tela se pliega sobre sí misma.
         for (let c = 0; c < bI.length; c++) {

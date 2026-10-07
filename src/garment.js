@@ -84,18 +84,28 @@ function ellipseHalfWidth(W, B) {
 }
 
 // Calce: fracción del ancho del molde que se muestra (entallado deportivo,
-// algo más ceñido en la cintura).
+// algo más ceñido en la cintura). Compensa que el cuerpo colgado es casi
+// plano y por eso se ve más ancho que con volumen.
 function fitAt(b) {
-  return 0.9 - 0.035 * Math.exp(-(((b - 0.62) / 0.2) ** 2));
+  return 0.88 - 0.02 * Math.exp(-(((b - 0.62) / 0.2) ** 2));
 }
 
 // Caída extra de los hombros hacia la punta (m), para evitar el hombro cuadrado.
 const SHOULDER_DROP = 0.014;
 
-// Profundidad (semieje frente-espalda) del cuerpo según la altura.
+// Profundidad (semieje frente-espalda) del cuerpo según la altura. Colgada,
+// la camiseta sólo se abre arriba (percha y hombros); de ahí para abajo
+// frente y espalda caen verticales y se acercan hacia el ruedo. Con más
+// volumen abajo parecería apoyada sobre un cuerpo invisible.
 function bodyDepth(b) {
-  return 0.012 + 0.036 * smooth(0.02, 0.3, b) - 0.008 * smooth(0.55, 1, b);
+  return 0.012 + 0.018 * smooth(0.02, 0.3, b) - 0.014 * smooth(0.4, 1, b);
 }
+
+// Profundidad (m) de los pliegues verticales de caída.
+const FOLD_DEPTH = 0.01;
+
+// Cesión al corte al bies del cuerpo (compliance de las aristas diagonales).
+const BODY_SHEAR = 2e-3;
 
 function pointInPoly(pts, x, y) {
   let inside = false;
@@ -346,7 +356,7 @@ export class GarmentModel {
     const e = ta > 0 && ta < 1 ? ARM_OPEN * Math.sin(Math.PI * ta) ** 0.75 * smooth(1, 0.55, ta) : 0;
     const X = A * Math.sin(phi) * (kind === 'front' ? 1 : -1);
     const fold = this.fold(kind, X, b, Y);
-    return B * g + e * h * (1 - g) + 0.022 * fold * g * g * h;
+    return B * g + e * h * (1 - g) + FOLD_DEPTH * fold * g * g * h;
   }
 
   // Tabla de largo de arco de una fila: semiancho A tal que el perfil mida
@@ -897,10 +907,12 @@ export class GarmentModel {
       }
       return { key, geo, rest2D };
     };
-    // El cuerpo conserva su curvatura (volumen) al asentarse.
+    // El cuerpo conserva su curvatura al asentarse, pero cede al bies como el
+    // punto de verdad: así no se angosta al estirarse por su peso.
+    const bodyOpts = { bendRest3D: true, shearCompliance: BODY_SHEAR };
     const pieces = [
-      { ...mk('front', geos.front, this.front.S), bendRest3D: true },
-      { ...mk('back', geos.back, this.back.S), bendRest3D: true },
+      { ...mk('front', geos.front, this.front.S), ...bodyOpts },
+      { ...mk('back', geos.back, this.back.S), ...bodyOpts },
     ];
     // Las mangas cuelgan con algo más de cuerpo (costura de hombro y dobladillo).
     // Las mangas toman como largo de reposo su forma inicial lisa (no el
@@ -1017,9 +1029,52 @@ export class GarmentModel {
         drape.memory[sl.offset + k] += 0.012 * (1 - smooth(0, 0.45, t));
       }
     }
-    drape.buildTethers();
+    // El cuerpo cuelga sin estirarse (hilos verticales largos) y nada lo
+    // sostiene de más: las ataduras sólo impiden que la tela se alargue más
+    // de lo que mide.
+    drape.setThreads(this.bodyThreads(pieces.slice(0, 2)));
+    drape.buildTethers(1.04);
     for (const sl of sleeves) sl.afterApply = sl.geo.userData.weld;
     return drape;
+  }
+
+  // Hilos verticales largos del cuerpo: cada nodo de la grilla se ata a los
+  // nodos de su misma columna que están 3, 9 y 27 filas más arriba, con el
+  // largo de la tela entre ellos (el del molde o el de la forma inicial, el
+  // mayor). Sólo impiden estirar, no plegar.
+  bodyThreads(bodyPieces, slack = 1.01) {
+    const out = [];
+    for (const pc of bodyPieces) {
+      const { px, py, cell, panel } = pc.geo.userData;
+      const r2 = pc.rest2D;
+      const p3 = pc.geo.attributes.position.array;
+      const node = new Map();
+      const key = (c, r) => c * 100000 + r;
+      for (let i = 0; i < px.length; i++) {
+        const c = Math.round((px[i] - panel.minX) / cell);
+        const r = Math.round((py[i] - panel.minY) / cell);
+        if (Math.hypot(px[i] - (panel.minX + c * cell), py[i] - (panel.minY + r * cell)) > cell * 0.35) continue;
+        node.set(key(c, r), i);
+      }
+      const dist = (a, b) => Math.max(
+        Math.hypot(r2[a * 2] - r2[b * 2], r2[a * 2 + 1] - r2[b * 2 + 1]),
+        Math.hypot(p3[a * 3] - p3[b * 3], p3[a * 3 + 1] - p3[b * 3 + 1], p3[a * 3 + 2] - p3[b * 3 + 2]),
+      );
+      for (const [k0, i] of node) {
+        const c = Math.floor(k0 / 100000);
+        const r = k0 % 100000;
+        let len = 0;
+        let top = i;
+        for (let q = 1; q <= 27; q++) {
+          const j = node.get(key(c, r - q));
+          if (j === undefined) break;
+          len += dist(top, j);
+          top = j;
+          if (q === 3 || q === 9 || q === 27) out.push([pc.offset + top, pc.offset + i, len * slack]);
+        }
+      }
+    }
+    return out;
   }
 }
 

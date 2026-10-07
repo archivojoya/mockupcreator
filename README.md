@@ -55,6 +55,11 @@ cuello como una tira horizontal.
   cuello y percha) y preparación de la simulación (costuras, fijaciones).
 - `src/drape.js` — simulación de caída de la tela: las piezas usan los largos
   reales del molde, se cosen entre sí y cuelgan de la percha con gravedad.
+- `src/bakeAO.js` — sombras de pliegues (oclusión ambiental) calculadas una vez
+  por vértice cuando la tela se asienta.
+- `src/atlas.js` — textura con todas las piezas coloreadas, dobladillo con
+  costura y mapa de relieve del tejido.
+- `src/main.js` — escena, iluminación de estudio suave y panel de control.
 
 ## Cómo se cosen las piezas
 
@@ -72,11 +77,6 @@ depender del dibujo concreto:
   pieza de cuello, se arma igual un cuello acanalado con el color dominante de
   la camiseta, que se puede cambiar en el panel.
 - **Bajo del brazo:** la manga se cierra uniendo sus dos costados.
-- `src/bakeAO.js` — sombras de pliegues (oclusión ambiental) calculadas una vez
-  por vértice cuando la tela se asienta.
-- `src/atlas.js` — textura con todas las piezas coloreadas, dobladillo con
-  costura y mapa de relieve del tejido.
-- `src/main.js` — escena, iluminación de estudio suave y panel de control.
 
 ## Qué garantiza el motor con cualquier molde
 
@@ -85,6 +85,12 @@ depender del dibujo concreto:
   reparten midiendo el perfil real, así no sobra ni falta tela en ninguna zona.
 - **Deformaciones intencionales:** calce entallado y hombros caídos se aplican
   igual a la forma 3D y a la tela en reposo, para que no generen arrugas.
+- **Caída:** el cuerpo cuelga como una prenda real: sólo se abre arriba
+  (percha y hombros) y de ahí frente y espalda bajan verticales, acercándose
+  hacia el ruedo, sin volumen que parezca sostenido por un cuerpo invisible.
+  La tela no se estira por su peso (hilos verticales largos), cede al bies
+  como el punto y nada la sostiene de más: las ataduras se miden sobre la
+  tela, no en línea recta.
 - **Mangas:** nunca quedan dentro del cuerpo, tampoco con mangas cortas o
   sisas profundas. Además se les quita algo de tela en la axila y hacia el
   ruedo, para que cuelguen tensas.

@@ -81,6 +81,15 @@ function ellipseHalfWidth(W, B) {
   return A;
 }
 
+// Calce: fracción del ancho del molde que se muestra (entallado deportivo,
+// algo más ceñido en la cintura).
+function fitAt(b) {
+  return 0.9 - 0.035 * Math.exp(-(((b - 0.62) / 0.2) ** 2));
+}
+
+// Caída extra de los hombros hacia la punta (m), para evitar el hombro cuadrado.
+const SHOULDER_DROP = 0.014;
+
 // Profundidad (semieje frente-espalda) del cuerpo según la altura.
 function bodyDepth(b) {
   return 0.012 + 0.036 * smooth(0.02, 0.3, b) - 0.008 * smooth(0.55, 1, b);
@@ -278,14 +287,19 @@ export class GarmentModel {
     return lerp(this.W[r], this.W[r + 1], f - r);
   }
 
+  // Semiancho plano con el calce aplicado.
+  Wfit(b) {
+    return this.Wb(b) * fitAt(b);
+  }
+
   // Posición 3D de un punto (x, y) del molde de una pieza del cuerpo.
   bodyPos(panel, x, y, out = new THREE.Vector3()) {
     const b = panel.b(y);
     const [xl, xr] = panel.ext(y);
     const s = (x - xl) / (xr - xl || 1);
-    const W = this.Wb(b);
+    const W = this.Wfit(b);
     const sign = panel.kind === 'front' ? 1 : -1;
-    const Y = -b * BODY_LENGTH;
+    let Y = -b * BODY_LENGTH;
     // Junto a la costura de hombros frente y espalda se juntan (sin volumen).
     const dy = Math.max(0, (y - panel.ysh(x)) * panel.S);
     const q = Math.min(dy / 0.03, 1);
@@ -306,12 +320,14 @@ export class GarmentModel {
     const rip = 0.005 * smooth(0.45, 1, b) * Math.sin(b * 23 + (X > 0 ? 0.8 : 2.1));
     X += Math.sign(X) * rip * Math.abs(2 * s - 1) ** 3;
     const Z = (B * g + e * h * (1 - g) + 0.022 * fold * g * g * h);
+    // Hombros caídos: desde el cuello hacia la punta la tela baja un poco más.
+    Y -= SHOULDER_DROP * smooth(0.07, 0.22, Math.abs(X)) * (1 - smooth(this.bSh, this.bUA + 0.08, b));
     return out.set(X, Y, Z * sign);
   }
 
   // Semiancho visible del cuerpo (con volumen) a la altura b.
   halfWidth(b) {
-    return ellipseHalfWidth(this.Wb(b), bodyDepth(b));
+    return ellipseHalfWidth(this.Wfit(b), bodyDepth(b));
   }
 
   // Cuánto entra el punto (x, z) en la sección elíptica del cuerpo a la
@@ -471,7 +487,7 @@ export class GarmentModel {
     const S = this.front.S;
     const topLen = Math.hypot(hem.at(0.5).x - pts[iTop].x, hem.at(0.5).y - pts[iTop].y) * S;
     const underLen = ((sideL.length + sideR.length) / 2) * S;
-    const rY = (hem.length * S) / 4.2;
+    const rY = ((hem.length * S) / 4.2) * 0.93;
     const rZ = 0.012;
 
     const Nu = 72;
@@ -496,7 +512,7 @@ export class GarmentModel {
     const curve = (fr, u, t, a0, out) => {
       const h1 = hemPoint(fr, u);
       const top = (1 - Math.cos(2 * Math.PI * u)) / 2;
-      T0.set(side, -1.1 + 0.6 * top, 0).normalize();
+      T0.set(side, -1.25 + 0.45 * top, 0).normalize();
       const m = a0.distanceTo(h1) * 0.9;
       const t2 = t * t;
       const t3 = t2 * t;
@@ -576,7 +592,7 @@ export class GarmentModel {
     const mid = Ac.clone().lerp(fr.Hc, 0.5);
     orientOutward(geo, (n, p) => n.dot(p.clone().sub(mid)), index);
     weldSeamNormals(geo, Nu, row);
-    geo.userData = { px: Float32Array.from(px), py: Float32Array.from(py), Nu, row, side, weld: (g) => weldSeamNormals(g, Nu, row) };
+    geo.userData = { px: Float32Array.from(px), py: Float32Array.from(py), Nu, row, side, weld: (g) => tuckRing(g, Nu, row) };
     return geo;
   }
 
@@ -719,11 +735,18 @@ export class GarmentModel {
 
   // Prepara la simulación de caída: piezas, costuras, fijaciones y colisiones.
   setupDrape(geos, hanger) {
+    // Largos de reposo del molde; en el ancho se aplica el calce.
     const mk = (key, geo, S) => {
-      const { px, py } = geo.userData;
+      const { px, py, panel } = geo.userData;
       const rest2D = new Float32Array(px.length * 2);
       for (let i = 0; i < px.length; i++) {
-        rest2D[i * 2] = px[i] * S;
+        let x = px[i];
+        if (panel) {
+          const [xl, xr] = panel.ext(py[i]);
+          const cx = (xl + xr) / 2;
+          x = cx + (x - cx) * fitAt(panel.b(py[i]));
+        }
+        rest2D[i * 2] = x * S;
         rest2D[i * 2 + 1] = py[i] * S;
       }
       return { key, geo, rest2D };
@@ -832,6 +855,15 @@ export class GarmentModel {
         pos[k + 2] = pushed.z;
       }
     };
+    // Cerca de la sisa la manga conserva su forma lisa (no se pliega sobre la
+    // costura); hacia el ruedo cae libre.
+    for (const sl of sleeves) {
+      const { row } = sl.geo.userData;
+      for (let k = 0; k < sl.count; k++) {
+        const t = (k % row) / (row - 1);
+        drape.memory[sl.offset + k] += 0.012 * (1 - smooth(0, 0.45, t));
+      }
+    }
     drape.buildTethers();
     for (const sl of sleeves) sl.afterApply = sl.geo.userData.weld;
     return drape;
@@ -905,6 +937,25 @@ function finishGeometry(positions, normals, uvs, index) {
   }
   geo.setIndex(index);
   return geo;
+}
+
+// Mete la primera fila de la manga unos milímetros por debajo del borde de la
+// sisa: la costura queda continua, sin rendijas de luz entre puntadas.
+function tuckRing(geo, Nu, row) {
+  const p = geo.attributes.position;
+  for (let i = 0; i <= Nu; i++) {
+    const a = i * row;
+    const b = a + 1;
+    const dx = p.getX(a) - p.getX(b);
+    const dy = p.getY(a) - p.getY(b);
+    const dz = p.getZ(a) - p.getZ(b);
+    const l = Math.hypot(dx, dy, dz) || 1;
+    const t = 0.0045 / l;
+    p.setXYZ(a, p.getX(a) + dx * t, p.getY(a) + dy * t, p.getZ(a) + dz * t);
+  }
+  p.needsUpdate = true;
+  geo.computeVertexNormals();
+  weldSeamNormals(geo, Nu, row);
 }
 
 function weldSeamNormals(geo, Nu, row) {

@@ -44,12 +44,30 @@ camera.position.set(0, -0.3, 2.7);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, -0.3, 0);
 controls.enableDamping = true;
-controls.minDistance = 0.6;
+controls.minDistance = 0.35;
 controls.maxDistance = 4;
-// La pared queda quieta: se giran las camisetas, la cámara sólo acerca.
+// La pared queda quieta: se giran las camisetas. La cámara acerca hacia el
+// puntero y se desplaza arrastrando el fondo (o con el botón derecho / dos dedos).
 controls.enableRotate = false;
-controls.enablePan = false;
-controls.addEventListener('change', requestRender);
+controls.enablePan = true;
+controls.screenSpacePanning = true;
+controls.zoomToCursor = true;
+controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+// Sin perder la escena de vista: el desplazamiento queda dentro del perchero.
+const PAN_LIMIT = { minX: -0.9, maxX: 0.9, minY: -0.85, maxY: 0.2 };
+controls.addEventListener('change', () => {
+  const t = controls.target;
+  const cx = THREE.MathUtils.clamp(t.x, PAN_LIMIT.minX, PAN_LIMIT.maxX);
+  const cy = THREE.MathUtils.clamp(t.y, PAN_LIMIT.minY, PAN_LIMIT.maxY);
+  if (cx !== t.x || cy !== t.y) {
+    camera.position.x += cx - t.x;
+    camera.position.y += cy - t.y;
+    t.x = cx;
+    t.y = cy;
+  }
+  requestRender();
+});
 controls.update();
 
 // Luz principal suave con sombra y relleno frío.
@@ -528,6 +546,18 @@ function setHover(target, e) {
 }
 
 const canvas = renderer.domElement;
+// Antes que los controles de cámara: si el puntero baja sobre una camiseta,
+// el arrastre la gira; si baja sobre el fondo, desplaza la vista.
+viewport.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (e.target !== canvas || !e.isPrimary) return;
+    controls.enabled = !(e.button === 0 && pick(e));
+  },
+  { capture: true },
+);
+window.addEventListener('pointerup', () => (controls.enabled = true));
+window.addEventListener('pointercancel', () => (controls.enabled = true));
 canvas.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return;
   const hit = pick(e);
@@ -557,7 +587,7 @@ canvas.addEventListener('pointermove', (e) => {
   const hit = pick(e);
   highlight(hit ? hit.part : null);
   setHover(hit ? hit.shirt : null, e);
-  canvas.style.cursor = hit ? 'grab' : '';
+  canvas.style.cursor = hit ? 'grab' : 'move';
 });
 canvas.addEventListener('pointerleave', () => {
   if (drag) return;

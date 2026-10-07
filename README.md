@@ -19,8 +19,9 @@ archivo a la ventana) se carga cualquier otro molde.
   un interruptor para mostrar u ocultar el diseño del SVG encima.
 - **Colores del diseño**: reemplaza globalmente cualquier color del estampado.
 - Cada camiseta gira sola: arrastrala (con inercia) o pasá el mouse por encima
-  para girarla un poco; la pared y la cámara quedan quietas. La rueda acerca y
-  aleja, y las flechas del teclado giran las dos.
+  para girarla un poco; la pared queda quieta. La rueda acerca hacia donde
+  apunta el mouse, arrastrar el fondo (o el botón derecho) desplaza la vista y
+  las flechas del teclado giran las dos.
 - Clic sobre la camiseta → abre el color de esa parte. Pasar el mouse por la
   lista de partes la resalta en 3D.
 - **Descargar PNG** guarda el render actual en alta resolución.

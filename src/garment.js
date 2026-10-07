@@ -9,6 +9,7 @@ import { Drape } from './drape.js';
 const BODY_LENGTH = 0.72; // m, del punto de cuello al ruedo
 const ARM_OPEN = 0.03; // apertura (media) de la sisa
 const HANGER_R = 0.0055;
+const HANGER_REACH = 0.93; // la percha llega hasta la punta del hombro
 const DROP_DEG = 72; // caída preferida de las mangas bajo la horizontal // radio de la barra de la percha
 
 // ---------- utilidades 2D ----------
@@ -695,10 +696,10 @@ export class GarmentModel {
         pts.push(v);
       }
     };
-    sampleLine(f.shoulderLineL, 0.72, 0, 10);
+    sampleLine(f.shoulderLineL, HANGER_REACH, 0, 14);
     const yN = pts.at(-1).y;
     pts.push(new THREE.Vector3(0, yN + 0.012, 0));
-    sampleLine(f.shoulderLineR, 0, 0.72, 10);
+    sampleLine(f.shoulderLineR, 0, HANGER_REACH, 14);
     const bar = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 120, HANGER_R, 16, false);
     const hookBase = new THREE.Vector3(0, yN + 0.012, 0);
     const r = 0.022;
@@ -749,16 +750,18 @@ export class GarmentModel {
     const drape = new Drape({
       pieces,
       hanger: hanger.barPts,
-      hangerRadius: HANGER_R + 0.0025,
+      hangerRadius: HANGER_R + 0.0045,
       isPinned: (orig, pc, i) => {
         if (pc.key === 'collar') return true;
         if (pc.key !== 'front' && pc.key !== 'back') return false;
         const panel = pc.key === 'front' ? this.front : this.back;
         const { px, py } = pc.geo.userData;
         if (neckDist(panel, px[i], py[i]) < 0.014) return true;
+        // Sólo la franja de la costura de hombros queda fija; la tela de abajo
+        // queda libre para apoyarse sobre la percha sin que ésta la atraviese.
         const dy = (py[i] - panel.ysh(px[i])) * panel.S;
         const X = orig[(pc.offset + i) * 3];
-        return dy < 0.012 && Math.abs(X) < hangerEnd + 0.004;
+        return dy < 0.005 && Math.abs(X) < hangerEnd;
       },
     });
     const [front, back] = pieces;
@@ -771,7 +774,7 @@ export class GarmentModel {
       const { Nu, row } = sl.geo.userData;
       // Costura bajo el brazo (primera y última columna) y unión a la sisa.
       for (let j = 0; j < row; j++) drape.stitch(sl.offset + j, sl.offset + Nu * row + j);
-      drape.sewBoundaries(sl, [front, back], 0.03, (i) => (i - sl.offset) % row === 0);
+      drape.sewBoundaries(sl, [front, back], 0.03, (i) => (i - sl.offset) % row === 0, 'flex');
     }
     // Y al revés: el borde de la sisa del cuerpo se cose a la manga, para que
     // no quede abierto entre puntadas.
@@ -791,7 +794,7 @@ export class GarmentModel {
               best = j;
             }
           }
-          if (best >= 0) drape.stitch(i, best);
+          if (best >= 0) drape.seam(i, best);
         }
       }
     }

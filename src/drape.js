@@ -108,6 +108,7 @@ export class Drape {
       for (let i = 0; i < pc.count; i++) if (opts.isPinned(this.orig, pc, i)) this.w[pc.offset + i] = 0;
     }
     this.stitches = [];
+    this.seams = [];
     this.hanger = opts.hanger;
     this.hangerRadius = opts.hangerRadius;
     this.collide = opts.collide;
@@ -127,7 +128,16 @@ export class Drape {
     else this.stitches.push([i, j, o[i * 3] - o[j * 3], o[i * 3 + 1] - o[j * 3 + 1], o[i * 3 + 2] - o[j * 3 + 2]]);
   }
 
+  // Costura flexible: i y j no se separan más que al inicio, pero pueden girar
+  // una respecto de la otra (como una bisagra de tela).
+  seam(i, j) {
+    const o = this.orig;
+    const d = Math.hypot(o[i * 3] - o[j * 3], o[i * 3 + 1] - o[j * 3 + 1], o[i * 3 + 2] - o[j * 3 + 2]);
+    this.seams.push([i, j, d + 0.0005]);
+  }
+
   // Cose los bordes libres de dos piezas que se tocan (a menos de maxDist).
+  // keepOffset: true = separación fija, false = mismo punto, 'flex' = bisagra.
   sewBoundaries(pa, pbs, maxDist, filter = () => true, keepOffset = true) {
     const o = this.orig;
     const bList = pbs.flatMap((pb) => [...pb.boundary].map((i) => pb.offset + i));
@@ -146,7 +156,9 @@ export class Drape {
           best = j;
         }
       }
-      if (best >= 0) this.stitch(i, best, keepOffset);
+      if (best < 0) continue;
+      if (keepOffset === 'flex') this.seam(i, best);
+      else this.stitch(i, best, keepOffset);
     }
   }
 
@@ -192,8 +204,15 @@ export class Drape {
     const hp = this.hanger;
     const hr = this.hangerRadius;
     const hr2 = hr * hr;
+    // Franja de alturas donde hay percha (incluye la caída de los hombros).
     let topY = -Infinity;
-    for (const p of hp) topY = Math.max(topY, p.y);
+    let lowY = Infinity;
+    for (const p of hp) {
+      topY = Math.max(topY, p.y);
+      lowY = Math.min(lowY, p.y);
+    }
+    topY += hr;
+    lowY -= hr;
     for (let f = 0; f < frames; f++) {
       const damp = this.frame < 25 ? 0 : 0.985;
       for (let s = 0; s < SUBSTEPS; s++) {
@@ -275,6 +294,27 @@ export class Drape {
           pos[b + 1] += (cy * wb) / ws;
           pos[b + 2] += (cz * wb) / ws;
         }
+        // Costuras flexibles.
+        for (const [i, j, maxLen] of this.seams) {
+          const wa = w[i];
+          const wb = w[j];
+          const ws = wa + wb;
+          if (!ws) continue;
+          const a = i * 3;
+          const b = j * 3;
+          const dx = pos[a] - pos[b];
+          const dy = pos[a + 1] - pos[b + 1];
+          const dz = pos[a + 2] - pos[b + 2];
+          const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (d <= maxLen) continue;
+          const corr = (d - maxLen) / (d * ws);
+          pos[a] -= dx * corr * wa;
+          pos[a + 1] -= dy * corr * wa;
+          pos[a + 2] -= dz * corr * wa;
+          pos[b] += dx * corr * wb;
+          pos[b + 1] += dy * corr * wb;
+          pos[b + 2] += dz * corr * wb;
+        }
         // Ataduras.
         if (this.tI) {
           const { tI, tP, tR } = this;
@@ -296,7 +336,7 @@ export class Drape {
         for (let i = 0; i < n; i++) {
           if (w[i] === 0) continue;
           const k = i * 3;
-          if (pos[k + 1] > topY - 0.05) {
+          if (pos[k + 1] > lowY && pos[k + 1] < topY) {
             for (let h = 0; h + 1 < hp.length; h++) {
               const p0 = hp[h];
               const p1 = hp[h + 1];

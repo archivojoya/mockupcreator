@@ -55,6 +55,20 @@ cuello como una tira horizontal.
   cuello y percha) y preparación de la simulación (costuras, fijaciones).
 - `src/drape.js` — simulación de caída de la tela: las piezas usan los largos
   reales del molde, se cosen entre sí y cuelgan de la percha con gravedad.
+
+## Cómo se cosen las piezas
+
+Para que funcione con cualquier molde, las costuras siguen reglas fijas, sin
+depender del dibujo concreto:
+
+- **Sisa ↔ copa de la manga:** se busca en el frente y la espalda el borde
+  entre el punto del hombro y la axila. La primera fila de la manga se arma
+  sobre esos mismos vértices, soldada a ellos, como el cuello sobre el escote.
+  El punto más alto de la copa va al hombro y sus esquinas a la axila. El
+  resto se reparte en proporción al largo.
+- **Costados y hombros:** frente y espalda se unen donde sus bordes coinciden.
+- **Cuello:** se construye sobre el contorno del escote.
+- **Bajo del brazo:** la manga se cierra uniendo sus dos costados.
 - `src/bakeAO.js` — sombras de pliegues (oclusión ambiental) calculadas una vez
   por vértice cuando la tela se asienta.
 - `src/atlas.js` — textura con todas las piezas coloreadas, dobladillo con

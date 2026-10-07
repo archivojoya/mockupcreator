@@ -10,7 +10,6 @@ const BODY_LENGTH = 0.72; // m, del punto de cuello al ruedo
 const ARM_OPEN = 0.03; // apertura (media) de la sisa
 const HANGER_R = 0.0055;
 const HANGER_REACH = 0.93;
-const SEAM_GAP = 0.0005; // separación máxima entre manga y sisa (m): costura cerrada
 const DROP_DEG = 72; // caída preferida de las mangas bajo la horizontal // radio de la barra de la percha
 
 // ---------- utilidades 2D ----------
@@ -213,6 +212,7 @@ class Panel {
     this.neckR = pts[iNR];
     this.uaL = pts[iUL];
     this.uaR = pts[iUR];
+    this.iHem = iHem;
     this.shL = shoulderOf(iNL, iUL);
     this.shR = shoulderOf(iNR, iUR);
     this.H = maxY - this.neckY;
@@ -450,36 +450,80 @@ export class GarmentModel {
       }
     }
     const geo = finishGeometry(positions, normals, uvs, index);
-    geo.userData = { panel, px: Float32Array.from(px), py: Float32Array.from(py) };
+    geo.userData = { panel, cell, px: Float32Array.from(px), py: Float32Array.from(py) };
     return geo;
   }
 
-  // Bucle de la sisa en 3D. u: 0 axila → 0.5 hombro (por delante) → 1 axila (por detrás)
-  armholePoint(side, u, out = new THREE.Vector3()) {
-    const front = u <= 0.5;
-    const panel = front ? this.front : this.back;
-    const t = front ? u / 0.5 : (1 - u) / 0.5;
-    const b = lerp(this.bUA, this.bSh, t);
-    const y = panel.neckY + b * panel.H;
-    const [xl, xr] = panel.ext(y);
-    // +X es el costado izquierdo del usuario: en el frente es el borde derecho
-    // del molde y en la espalda (vista desde atrás) el izquierdo.
-    const useRight = (side > 0) === front;
-    return this.bodyPos(panel, useRight ? xr : xl, y, out);
+  // Vértices del borde de la sisa de una pieza del cuerpo, del hombro a la
+  // axila, en orden (índices locales de su malla).
+  armholeChain(panel, geo, useRight) {
+    const pts = panel.pts;
+    const iSh = pts.indexOf(useRight ? panel.shR : panel.shL);
+    const iUA = pts.indexOf(useRight ? panel.uaR : panel.uaL);
+    const path = pathBetween(pts, iSh, iUA, panel.iHem, false);
+    const line = new Polyline(path);
+    const { px, py, cell } = geo.userData;
+    const found = [];
+    for (const v of boundaryVertices(geo)) {
+      const { d, s: at } = projectOnPolyline(line, px[v], py[v]);
+      const atEnd = at <= 1e-6 || at >= line.length - 1e-6;
+      if (d < (atEnd ? cell * 0.05 : cell * 0.35)) found.push({ v, at });
+    }
+    found.sort((a, b) => a.at - b.at);
+    return { verts: found.map((f) => f.v), path };
   }
 
-  buildSleeve(part, side, atlas) {
+  // Contorno de la sisa en 3D para una manga: axila (frente) → hombro → axila
+  // (espalda). Cada columna es un vértice real del cuerpo: la manga se cose
+  // vértice a vértice, como el cuello al escote.
+  armholeLoop(side, geos) {
+    const front = this.armholeChain(this.front, geos.front, side > 0);
+    const back = this.armholeChain(this.back, geos.back, side < 0);
+    const posOf = (key, v) => new THREE.Vector3().fromBufferAttribute(geos[key].attributes.position, v);
+    const cols = [];
+    for (const v of [...front.verts].reverse()) cols.push({ key: 'front', v, p: posOf('front', v) });
+    const top = cols.length - 1;
+    for (const v of back.verts) {
+      const p = posOf('back', v);
+      if (cols.length === top + 1 && p.distanceTo(cols[top].p) < 0.005) continue; // mismo punto del hombro
+      cols.push({ key: 'back', v, p });
+    }
+    // Parámetro de la sisa: 0 axila delantera, 0.5 hombro, 1 axila trasera.
+    const arc = [0];
+    for (let i = 1; i < cols.length; i++) arc.push(arc[i - 1] + cols[i].p.distanceTo(cols[i - 1].p));
+    for (let i = 0; i < cols.length; i++) {
+      cols[i].hu = i <= top ? 0.5 * (arc[i] / (arc[top] || 1)) : 0.5 + 0.5 * ((arc[i] - arc[top]) / (arc.at(-1) - arc[top] || 1));
+    }
+    return { cols, top, frontPath: front.path, backPath: back.path };
+  }
+
+  // Líneas de costura de la sisa en el molde (para sombrearlas en la textura).
+  seamEdges(geos) {
+    const edges = { front: [], back: [], sleeveL: [], sleeveR: [] };
+    for (const side of [1, -1]) {
+      const loop = this.armholeLoop(side, geos);
+      edges.front.push(loop.frontPath);
+      edges.back.push(loop.backPath);
+    }
+    for (const key of ['sleeveL', 'sleeveR']) {
+      const part = this.mold.parts[key];
+      if (part) edges[key].push(sleeveCap(part).path);
+    }
+    return edges;
+  }
+
+  buildSleeve(part, side, atlas, loop) {
     const pts = part.poly;
     const idx = pts.map((_, i) => i);
     const by = (list, f) => list.reduce((best, i) => (f(i) < f(best) ? i : best), list[0]);
     const { minY, maxY } = part.bbox;
-    const iCL = by(idx, (i) => pts[i].x);
-    const iCR = by(idx, (i) => -pts[i].x);
-    const iTop = by(idx, (i) => pts[i].y);
+    const { iCL, iCR, iTop, path: capPath } = sleeveCap(part);
     const lowSet = idx.filter((i) => pts[i].y >= maxY - (maxY - minY) * 0.03);
     const iHL = by(lowSet, (i) => pts[i].x);
     const iHR = by(lowSet, (i) => -pts[i].x);
-    const cap = new Polyline(pathBetween(pts, iCL, iCR, iTop, true));
+    const cap = new Polyline(capPath);
+    // Fracción de la copa donde está su punto más alto (va al hombro).
+    const capTop = cap.cum[capPath.indexOf(pts[iTop])] / cap.length;
     const hem = new Polyline(pathBetween(pts, iHL, iHR, iTop, false));
     const sideL = new Polyline(pathBetween(pts, iCL, iHL, iTop, false));
     const sideR = new Polyline(pathBetween(pts, iCR, iHR, iTop, false));
@@ -503,10 +547,10 @@ export class GarmentModel {
     const rY = ((hem.length * S) / 4.2) * 0.93;
     const rZ = 0.012;
 
-    const Nu = 72;
+    const Nu = loop.cols.length - 1;
     const Nt = 28;
-    const A = [];
-    for (let i = 0; i <= Nu; i++) A.push(this.armholePoint(side, i / Nu));
+    const A = loop.cols.map((c) => c.p);
+    const HU = loop.cols.map((c) => c.hu);
     const Ac = A.reduce((s, p) => s.add(p), new THREE.Vector3()).multiplyScalar(1 / A.length);
     Ac.z = 0;
 
@@ -541,7 +585,7 @@ export class GarmentModel {
       let worst = 0;
       for (const iu of [0, Math.round(Nu * 0.1), Math.round(Nu * 0.2), Nu - Math.round(Nu * 0.2), Nu - Math.round(Nu * 0.1)]) {
         for (let k = 1; k <= 6; k++) {
-          const P = curve(fr, iu / Nu, k / 6, A[iu], tmpP);
+          const P = curve(fr, HU[iu], k / 6, A[iu], tmpP);
           const b = -P.y / BODY_LENGTH;
           if (b < this.bUA) continue;
           worst = Math.max(worst, this.bodyPenetration(P.x, P.z, b, 0.003));
@@ -554,7 +598,7 @@ export class GarmentModel {
     for (let a = 30; a <= 80; a += 1) {
       for (let Ls = 0.03; Ls <= 0.4; Ls += 0.004) {
         const fr = hemFrame((a * Math.PI) / 180, Ls);
-        const e1 = hemPoint(fr, 0.5).distanceTo(A[Nu / 2]) - topLen;
+        const e1 = hemPoint(fr, 0.5).distanceTo(A[loop.top]) - topLen;
         const e2 = hemPoint(fr, 0).distanceTo(A[0]) - underLen;
         const err = e1 * e1 + e2 * e2 + 6e-5 * (a - DROP_DEG) ** 2;
         if (best && err > best.err) continue;
@@ -572,16 +616,17 @@ export class GarmentModel {
     const py = [];
     const P = new THREE.Vector3();
     for (let i = 0; i <= Nu; i++) {
-      const u = i / Nu;
+      const u = HU[i];
       const a0 = A[i];
-      const pu = side > 0 ? u : 1 - u;
+      // Posición en la copa del molde: la axila delantera va a una esquina, el
+      // hombro al punto más alto y la axila trasera a la otra esquina.
+      const f = u <= 0.5 ? (u / 0.5) * capTop : capTop + ((u - 0.5) / 0.5) * (1 - capTop);
+      const pu = side > 0 ? f : 1 - (u <= 0.5 ? (u / 0.5) * (1 - capTop) : (1 - capTop) + ((u - 0.5) / 0.5) * capTop);
       for (let j = 0; j <= Nt; j++) {
         const t = j / Nt;
-        curve(fr, u, t, a0, P);
-        if (j === 0) {
-          P.addScaledVector(T0, -0.004);
-          P.z *= 0.75;
-        }
+        // La primera fila es exactamente el borde de la sisa del cuerpo.
+        if (j === 0) P.copy(a0);
+        else curve(fr, u, t, a0, P);
         positions.push(P.x, P.y, P.z);
         const q = coons(pu, t);
         px.push(q.x);
@@ -605,7 +650,7 @@ export class GarmentModel {
     const mid = Ac.clone().lerp(fr.Hc, 0.5);
     orientOutward(geo, (n, p) => n.dot(p.clone().sub(mid)), index);
     weldSeamNormals(geo, Nu, row);
-    geo.userData = { px: Float32Array.from(px), py: Float32Array.from(py), Nu, row, side, weld: (g) => tuckRing(g, Nu, row) };
+    geo.userData = { px: Float32Array.from(px), py: Float32Array.from(py), Nu, row, side, loop, weld: (g) => weldSeamNormals(g, Nu, row) };
     return geo;
   }
 
@@ -812,36 +857,17 @@ export class GarmentModel {
       // Costura bajo el brazo (primera y última columna) y unión a la sisa.
       for (let j = 0; j < row; j++) drape.stitch(sl.offset + j, sl.offset + Nu * row + j);
     }
-    // Costura de la sisa: cada punto del borde del cuerpo se cose al punto más
-    // cercano de la curva (no del vértice) de la primera fila de la manga. Así
-    // el borde sigue la curva lisa de la manga, como el escote sigue al cuello.
-    if (sleeves.length) {
-      const o = drape.orig;
-      const segs = [];
-      for (const sl of sleeves) {
-        const { Nu, row } = sl.geo.userData;
-        for (let c = 0; c < Nu; c++) segs.push([sl.offset + c * row, sl.offset + (c + 1) * row]);
-      }
-      for (const body of [front, back]) {
-        for (const l of body.boundary) {
-          const i = body.offset + l;
-          let best = null;
-          let bd = 0.015 ** 2;
-          for (const [a, b] of segs) {
-            const ex = o[b * 3] - o[a * 3];
-            const ey = o[b * 3 + 1] - o[a * 3 + 1];
-            const ez = o[b * 3 + 2] - o[a * 3 + 2];
-            const L2 = ex * ex + ey * ey + ez * ez || 1e-12;
-            const t = clamp(((o[i * 3] - o[a * 3]) * ex + (o[i * 3 + 1] - o[a * 3 + 1]) * ey + (o[i * 3 + 2] - o[a * 3 + 2]) * ez) / L2, 0, 1);
-            const d = (o[i * 3] - o[a * 3] - ex * t) ** 2 + (o[i * 3 + 1] - o[a * 3 + 1] - ey * t) ** 2 + (o[i * 3 + 2] - o[a * 3 + 2] - ez * t) ** 2;
-            if (d < bd) {
-              bd = d;
-              best = [a, b, t];
-            }
-          }
-          if (best) drape.seamToSegment(i, ...best, SEAM_GAP);
-        }
-      }
+    // Costura de la sisa: la primera fila de la manga ocupa los mismos puntos
+    // que el borde de la sisa del cuerpo y queda soldada a ellos (sin rendijas
+    // ni solapes), con normales compartidas para que la unión sea continua.
+    for (const sl of sleeves) {
+      const { loop, row } = sl.geo.userData;
+      loop.cols.forEach((c, k) => {
+        const bodyIdx = (c.key === 'front' ? front : back).offset + c.v;
+        const sleeveIdx = sl.offset + k * row;
+        drape.stitch(sleeveIdx, bodyIdx, false);
+        drape.normalPairs.push([sleeveIdx, bodyIdx]);
+      });
     }
     // El cuello se cose por su borde inferior al escote.
     const crow = collar.geo.userData.row;
@@ -960,23 +986,53 @@ function finishGeometry(positions, normals, uvs, index) {
   return geo;
 }
 
-// Mete la primera fila de la manga unos milímetros por debajo del borde de la
-// sisa: la costura queda continua, sin rendijas de luz entre puntadas.
-function tuckRing(geo, Nu, row) {
-  const p = geo.attributes.position;
-  for (let i = 0; i <= Nu; i++) {
-    const a = i * row;
-    const b = a + 1;
-    const dx = p.getX(a) - p.getX(b);
-    const dy = p.getY(a) - p.getY(b);
-    const dz = p.getZ(a) - p.getZ(b);
-    const l = Math.hypot(dx, dy, dz) || 1;
-    const t = 0.0045 / l;
-    p.setXYZ(a, p.getX(a) + dx * t, p.getY(a) + dy * t, p.getZ(a) + dz * t);
+// Vértices del borde libre de una malla (aristas con un solo triángulo).
+function boundaryVertices(geo) {
+  const idx = geo.index.array;
+  const count = new Map();
+  const n = geo.attributes.position.count;
+  for (let t = 0; t < idx.length; t += 3) {
+    for (let e = 0; e < 3; e++) {
+      const a = idx[t + e];
+      const b = idx[t + ((e + 1) % 3)];
+      const k = a < b ? a * n + b : b * n + a;
+      count.set(k, (count.get(k) || 0) + 1);
+    }
   }
-  p.needsUpdate = true;
-  geo.computeVertexNormals();
-  weldSeamNormals(geo, Nu, row);
+  const out = new Set();
+  for (const [k, c] of count) {
+    if (c !== 1) continue;
+    out.add(Math.floor(k / n));
+    out.add(k % n);
+  }
+  return out;
+}
+
+// Distancia de (x, y) a una polilínea y posición (largo de arco) del punto
+// más cercano.
+function projectOnPolyline(line, x, y) {
+  let best = { d: Infinity, s: 0 };
+  const p = line.pts;
+  for (let i = 0; i + 1 < p.length; i++) {
+    const ex = p[i + 1].x - p[i].x;
+    const ey = p[i + 1].y - p[i].y;
+    const L2 = ex * ex + ey * ey || 1e-12;
+    const t = clamp(((x - p[i].x) * ex + (y - p[i].y) * ey) / L2, 0, 1);
+    const d = Math.hypot(x - p[i].x - ex * t, y - p[i].y - ey * t);
+    if (d < best.d) best = { d, s: line.cum[i] + t * (line.cum[i + 1] - line.cum[i]) };
+  }
+  return best;
+}
+
+// Copa de la manga en el molde: de esquina a esquina pasando por el punto más alto.
+function sleeveCap(part) {
+  const pts = part.poly;
+  const idx = pts.map((_, i) => i);
+  const by = (list, f) => list.reduce((best, i) => (f(i) < f(best) ? i : best), list[0]);
+  const iCL = by(idx, (i) => pts[i].x);
+  const iCR = by(idx, (i) => -pts[i].x);
+  const iTop = by(idx, (i) => pts[i].y);
+  return { iCL, iCR, iTop, path: pathBetween(pts, iCL, iCR, iTop, true) };
 }
 
 function weldSeamNormals(geo, Nu, row) {

@@ -108,8 +108,7 @@ export class Drape {
       for (let i = 0; i < pc.count; i++) if (opts.isPinned(this.orig, pc, i)) this.w[pc.offset + i] = 0;
     }
     this.stitches = [];
-    this.seams = [];
-    this.segSeams = [];
+    this.normalPairs = []; // partículas soldadas que comparten normal
     this.hanger = opts.hanger;
     this.hangerRadius = opts.hangerRadius;
     this.collide = opts.collide;
@@ -129,24 +128,9 @@ export class Drape {
     else this.stitches.push([i, j, o[i * 3] - o[j * 3], o[i * 3 + 1] - o[j * 3 + 1], o[i * 3 + 2] - o[j * 3 + 2]]);
   }
 
-  // Costura flexible: i y j no se separan más que al inicio, pero pueden girar
-  // una respecto de la otra (como una bisagra de tela).
-  // `cap` limita la separación máxima (cierra costuras que arrancan abiertas).
-  seam(i, j, cap = Infinity) {
-    const o = this.orig;
-    const d = Math.hypot(o[i * 3] - o[j * 3], o[i * 3 + 1] - o[j * 3 + 1], o[i * 3 + 2] - o[j * 3 + 2]);
-    this.seams.push([i, j, Math.min(d, cap) + 0.0005]);
-  }
-
-  // Costura a un punto intermedio del segmento a-b (fracción t): el borde
-  // cosido se desliza sobre la curva en vez de engancharse a sus vértices.
-  seamToSegment(i, a, b, t, maxLen) {
-    this.segSeams.push([i, a, b, t, maxLen]);
-  }
-
   // Cose los bordes libres de dos piezas que se tocan (a menos de maxDist).
-  // keepOffset: true = separación fija, false = mismo punto, 'flex' = bisagra.
-  sewBoundaries(pa, pbs, maxDist, filter = () => true, keepOffset = true, cap = Infinity) {
+  // keepOffset: true = separación fija, false = mismo punto.
+  sewBoundaries(pa, pbs, maxDist, filter = () => true, keepOffset = true) {
     const o = this.orig;
     const bList = pbs.flatMap((pb) => [...pb.boundary].map((i) => pb.offset + i));
     for (const la of pa.boundary) {
@@ -164,9 +148,7 @@ export class Drape {
           best = j;
         }
       }
-      if (best < 0) continue;
-      if (keepOffset === 'flex') this.seam(i, best, cap);
-      else this.stitch(i, best, keepOffset);
+      if (best >= 0) this.stitch(i, best, keepOffset);
     }
   }
 
@@ -302,53 +284,6 @@ export class Drape {
           pos[b + 1] += (cy * wb) / ws;
           pos[b + 2] += (cz * wb) / ws;
         }
-        // Costuras flexibles.
-        for (const [i, j, maxLen] of this.seams) {
-          const wa = w[i];
-          const wb = w[j];
-          const ws = wa + wb;
-          if (!ws) continue;
-          const a = i * 3;
-          const b = j * 3;
-          const dx = pos[a] - pos[b];
-          const dy = pos[a + 1] - pos[b + 1];
-          const dz = pos[a + 2] - pos[b + 2];
-          const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          if (d <= maxLen) continue;
-          const corr = (d - maxLen) / (d * ws);
-          pos[a] -= dx * corr * wa;
-          pos[a + 1] -= dy * corr * wa;
-          pos[a + 2] -= dz * corr * wa;
-          pos[b] += dx * corr * wb;
-          pos[b + 1] += dy * corr * wb;
-          pos[b + 2] += dz * corr * wb;
-        }
-        // Costuras a segmento.
-        for (const [i, a, b, t, maxLen] of this.segSeams) {
-          const wi = w[i];
-          const wa = w[a] * (1 - t);
-          const wb = w[b] * t;
-          const ws = wi + wa * (1 - t) + wb * t;
-          if (!ws) continue;
-          const ki = i * 3;
-          const ka = a * 3;
-          const kb = b * 3;
-          const dx = pos[ki] - (pos[ka] * (1 - t) + pos[kb] * t);
-          const dy = pos[ki + 1] - (pos[ka + 1] * (1 - t) + pos[kb + 1] * t);
-          const dz = pos[ki + 2] - (pos[ka + 2] * (1 - t) + pos[kb + 2] * t);
-          const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          if (d <= maxLen) continue;
-          const corr = (d - maxLen) / (d * ws);
-          pos[ki] -= dx * corr * wi;
-          pos[ki + 1] -= dy * corr * wi;
-          pos[ki + 2] -= dz * corr * wi;
-          pos[ka] += dx * corr * wa;
-          pos[ka + 1] += dy * corr * wa;
-          pos[ka + 2] += dz * corr * wa;
-          pos[kb] += dx * corr * wb;
-          pos[kb + 1] += dy * corr * wb;
-          pos[kb + 2] += dz * corr * wb;
-        }
         // Ataduras.
         if (this.tI) {
           const { tI, tP, tR } = this;
@@ -416,6 +351,30 @@ export class Drape {
       pc.geo.computeVertexNormals();
       pc.afterApply?.(pc.geo);
       pc.geo.computeBoundingSphere();
+    }
+    // Normales compartidas en las uniones soldadas (sombreado continuo).
+    const nrm = (g) => {
+      const pc = this.pieces[this.owner[g]];
+      return [pc.geo.attributes.normal, g - pc.offset];
+    };
+    for (const [a, b] of this.normalPairs) {
+      const [na, ia] = nrm(a);
+      const [nb, ib] = nrm(b);
+      // La manga y el cuerpo pueden tener la cara exterior hacia lados
+      // opuestos de su normal: se alinean antes de promediar.
+      const dot = na.getX(ia) * nb.getX(ib) + na.getY(ia) * nb.getY(ib) + na.getZ(ia) * nb.getZ(ib);
+      const sgn = dot < 0 ? -1 : 1;
+      let x = na.getX(ia) + sgn * nb.getX(ib);
+      let y = na.getY(ia) + sgn * nb.getY(ib);
+      let z = na.getZ(ia) + sgn * nb.getZ(ib);
+      const l = Math.hypot(x, y, z) || 1;
+      x /= l;
+      y /= l;
+      z /= l;
+      na.setXYZ(ia, x, y, z);
+      nb.setXYZ(ib, sgn * x, sgn * y, sgn * z);
+      na.needsUpdate = true;
+      nb.needsUpdate = true;
     }
   }
 

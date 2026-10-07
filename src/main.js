@@ -224,12 +224,14 @@ function buildGarment() {
   rib.repeat.set(220, 1);
   materials.collar.normalScale.set(0.6, 0.6);
   const parts = [];
-  parts.push(['front', model.buildBody(model.front, atlas)]);
-  parts.push(['back', model.buildBody(model.back, atlas)]);
+  const body = { front: model.buildBody(model.front, atlas), back: model.buildBody(model.back, atlas) };
+  parts.push(['front', body.front], ['back', body.back]);
+  // Las mangas se arman sobre el borde real de la sisa del cuerpo.
   const sl = P.sleeveL || P.sleeveR;
   const sr = P.sleeveR || P.sleeveL;
-  if (sl) parts.push(['sleeveL', model.buildSleeve(sl, +1, atlas)]);
-  if (sr) parts.push(['sleeveR', model.buildSleeve(sr, -1, atlas)]);
+  if (sl) parts.push(['sleeveL', model.buildSleeve(sl, +1, atlas, model.armholeLoop(+1, body))]);
+  if (sr) parts.push(['sleeveR', model.buildSleeve(sr, -1, atlas, model.armholeLoop(-1, body))]);
+  atlas.seamEdges = sl ? model.seamEdges(body) : null;
   parts.push(['collar', model.buildCollar(atlas, P.collar)]);
   for (const [, geo] of parts) ensureAOAttributes(geo);
   const hanger = model.buildHanger();

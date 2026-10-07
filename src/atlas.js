@@ -73,6 +73,7 @@ export class Atlas {
       ctx.fillRect(0, 0, width, height);
       if (ps.design) ctx.drawImage(this.layers.parts, 0, 0, width, height);
       if (this.metersPerUnit && part.key !== 'collar') this.drawHem(part);
+      if (this.metersPerUnit && this.seamEdges?.[part.key]) this.drawSeams(this.seamEdges[part.key], part.key.startsWith('sleeve'));
       ctx.restore();
     }
     if (this.layers.loose && state.logos) {
@@ -112,6 +113,31 @@ export class Atlas {
       ctx.stroke();
     }
     ctx.setLineDash([]);
+  }
+
+  // Sombra de costura a lo largo de la sisa: un pliegue fino donde la tela
+  // entra en la costura (más marcado del lado de la manga).
+  drawSeams(edges, strong) {
+    const { ctx } = this;
+    const k = this.scale / this.metersPerUnit; // px por metro
+    const passes = strong
+      ? [[0.006, 0.05], [0.0028, 0.1], [0.0011, 0.22]]
+      : [[0.005, 0.04], [0.0018, 0.1]];
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    for (const poly of edges) {
+      const path = new Path2D();
+      poly.forEach((p, i) => {
+        const [x, y] = this.toPx(p);
+        if (i) path.lineTo(x, y);
+        else path.moveTo(x, y);
+      });
+      for (const [w, a] of passes) {
+        ctx.lineWidth = Math.max(1, w * k);
+        ctx.strokeStyle = `rgba(0,0,0,${a})`;
+        ctx.stroke(path);
+      }
+    }
   }
 
   // Elimina los píxeles semitransparentes del borde (mezclados con el fondo)

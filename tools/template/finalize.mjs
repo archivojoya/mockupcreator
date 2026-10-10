@@ -25,13 +25,90 @@ for (const g of groups.values()) {
   for (const k of g) for (let c = 0; c < 3; c++) pos[k * 3 + c] = m[c];
 }
 
+// Partículas sueltas (sin triángulo): no se ven, pero en la simulación caen
+// libres; se llevan junto a la partícula usada más cercana en el molde para
+// que no deformen las cajas envolventes.
+for (const p of init.pieces) {
+  const used = new Set(p.index);
+  const n = p.position.length / 3;
+  const ids = [...used];
+  for (let k = 0; k < n; k++) {
+    if (used.has(k)) continue;
+    let best = ids[0];
+    let bd = Infinity;
+    for (const j of ids) {
+      const d = (p.rest[j * 2] - p.rest[k * 2]) ** 2 + (p.rest[j * 2 + 1] - p.rest[k * 2 + 1]) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = j;
+      }
+    }
+    for (let c = 0; c < 3; c++) pos[(p.offset + k) * 3 + c] = pos[(p.offset + best) * 3 + c];
+  }
+}
+
+// Camiseta sostenida: el contacto con el maniquí deja un rizado fino en la
+// tela. Un suavizado de Taubin (alterna suavizar y "desinflar", así no
+// encoge) lo borra y conserva la forma; los bordes libres (ruedo, puños,
+// escote) se suavizan sólo a lo largo del borde.
+if (fin.body) taubin(Number(process.env.SMOOTH || 30));
+function taubin(iters) {
+  const nb = new Map();
+  const count = new Map();
+  for (const p of init.pieces) {
+    for (let t = 0; t < p.index.length; t += 3) {
+      for (let e = 0; e < 3; e++) {
+        const a = find(p.offset + p.index[t + e]);
+        const b = find(p.offset + p.index[t + ((e + 1) % 3)]);
+        if (a === b) continue;
+        const key = a < b ? `${a},${b}` : `${b},${a}`;
+        count.set(key, (count.get(key) || 0) + 1);
+        for (const [u, v] of [[a, b], [b, a]]) {
+          if (!nb.has(u)) nb.set(u, new Set());
+          nb.get(u).add(v);
+        }
+      }
+    }
+  }
+  const edgeNb = new Map();
+  for (const [key, c] of count) {
+    if (c !== 1) continue;
+    const [a, b] = key.split(',').map(Number);
+    for (const [u, v] of [[a, b], [b, a]]) {
+      if (!edgeNb.has(u)) edgeNb.set(u, new Set());
+      edgeNb.get(u).add(v);
+    }
+  }
+  const nodes = [...nb.keys()];
+  const near = new Map(nodes.map((u) => [u, [...(edgeNb.get(u) || nb.get(u))]]));
+  const next = new Float64Array(pos.length);
+  for (let it = 0; it < iters * 2; it++) {
+    const f = it % 2 ? -0.53 : 0.5;
+    for (const u of nodes) {
+      const list = near.get(u);
+      for (let c = 0; c < 3; c++) {
+        let m = 0;
+        for (const v of list) m += pos[v * 3 + c];
+        next[u * 3 + c] = pos[u * 3 + c] + f * (m / list.length - pos[u * 3 + c]);
+      }
+    }
+    for (const u of nodes) for (let c = 0; c < 3; c++) pos[u * 3 + c] = next[u * 3 + c];
+  }
+  for (const g of groups.values()) {
+    const r = find([...g][0]);
+    for (const k of g) for (let c = 0; c < 3; c++) pos[k * 3 + c] = pos[r * 3 + c];
+  }
+}
+
 // Limpieza de cruces que deja la simulación:
 // 1) ninguna partícula dentro de la percha (con un margen);
 // 2) donde el frente mira de frente a la cámara, la espalda queda detrás de él
 //    (si no, asoman puntitos de la espalda a través del frente).
 const sewn = new Set();
 for (const g of groups.values()) for (const k of g) sewn.add(k);
-{
+// Camiseta sostenida (maniquí): no hay percha.
+const onHanger = !fin.body;
+if (onHanger) {
   const hp = init.hanger.barPts;
   const hs = init.hanger.barSizes;
   const m = 0.0025;
@@ -140,7 +217,7 @@ const q16 = (arr, step) => Int16Array.from(arr, (v) => Math.round(v / step));
 const asset = { version: 2, posStep: POS_Q, moldStep: MOLD_Q, pieces: {}, seams: [], neck: [], hanger: {}, canonical: {} };
 const r5 = (v) => Math.round(v * 1e5) / 1e5;
 const { barPts, barSizes, rodY, rodZ, hookPts } = init.hanger;
-asset.hanger = { barPts: barPts.map((p) => p.map(r5)), barSizes: barSizes.map((p) => p.map(r5)), rodY: r5(rodY), rodZ: r5(rodZ), hookPts: hookPts.map((p) => p.map(r5)) };
+asset.hanger = !onHanger ? null : { barPts: barPts.map((p) => p.map(r5)), barSizes: barSizes.map((p) => p.map(r5)), rodY: r5(rodY), rodZ: r5(rodZ), hookPts: hookPts.map((p) => p.map(r5)) };
 for (const p of init.pieces) {
   const n = p.position.length / 3;
   const piece = { position: b64(q16(pos.subarray(p.offset * 3, (p.offset + n) * 3), POS_Q)), index: b64(Uint16Array.from(p.index)) };

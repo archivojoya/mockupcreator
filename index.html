@@ -19,6 +19,12 @@
             <input id="file" type="file" accept=".svg,image/svg+xml" hidden />
             Cargar molde SVG
           </label>
+          <label class="row">Ejemplos
+            <select id="examples">
+              <option value="molde-futbol.svg">Camiseta de fútbol</option>
+              <option value="molde-ejemplo.svg">Molde con estampado</option>
+            </select>
+          </label>
         </header>
 
         <section>
@@ -46,6 +52,13 @@
 
         <section>
           <h2>Escena</h2>
+          <label class="row">Presentación
+            <select id="presentation">
+              <option value="ambas">Sostenida y colgada</option>
+              <option value="sostenida">Sostenida (frente y espalda)</option>
+              <option value="colgada">Colgada (frente y espalda)</option>
+            </select>
+          </label>
           <label class="row"><input id="logos" type="checkbox" checked /> Mostrar logos y textos</label>
           <label class="row"><input id="ao" type="checkbox" checked /> Sombras de pliegues (oclusión)</label>
           <label class="row">Percha

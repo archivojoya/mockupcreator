@@ -3,11 +3,23 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { SvgMold, PART_DEFS } from './svgMold.js';
 import { buildFromTemplate } from './template.js';
+import hangingTemplate from './assets/tshirt-template.json';
+import heldTemplate from './assets/tshirt-maniqui.json';
 import { Atlas, makeFabricNormalMap, makeRibNormalMap, FABRIC_TILE_M } from './atlas.js';
 import { bakeAO, ensureAOAttributes } from './bakeAO.js';
 import './style.css';
 
 const SPACING = 0.43;
+// Dos formas de mostrar la camiseta, cada una con su plantilla simulada:
+// sostenida por un maniquí invisible o colgada de una percha.
+const TEMPLATES = { sostenida: heldTemplate, colgada: hangingTemplate };
+const PRESENTATIONS = {
+  ambas: [{ style: 'sostenida', base: 0 }, { style: 'colgada', base: 0 }],
+  sostenida: [{ style: 'sostenida', base: 0 }, { style: 'sostenida', base: Math.PI }],
+  colgada: [{ style: 'colgada', base: 0 }, { style: 'colgada', base: Math.PI }],
+};
+const WALL_Z = -0.42;
+const HELD_CENTER_Y = -0.37;
 const viewport = document.getElementById('viewport');
 const statusEl = document.getElementById('status');
 
@@ -93,7 +105,7 @@ scene.add(fill);
 
 const wallMat = new THREE.MeshStandardMaterial({ color: 0xf7f5f1, roughness: 1, metalness: 0 });
 const wall = new THREE.Mesh(new THREE.PlaneGeometry(8, 5), wallMat);
-wall.position.set(0, -0.5, -0.42);
+wall.position.set(0, -0.5, WALL_Z);
 // La pared no recibe sombra de las camisetas.
 wall.receiveShadow = false;
 scene.add(wall);
@@ -178,6 +190,7 @@ const state = {
   hanger: 'madera',
   ao: true,
   background: '#f7f5f1',
+  presentation: 'ambas',
 };
 
 let mold = null;
@@ -186,6 +199,7 @@ let garmentGroup = null;
 let materials = {};
 let pickables = [];
 let shirts = [];
+let built = {}; // forma (sostenida / colgada) -> geometrías del molde actual
 let buildToken = 0;
 
 async function loadMold(text, name) {
@@ -204,20 +218,43 @@ async function loadMold(text, name) {
   setStatus('');
 }
 
-function disposeGroup(g) {
-  g.traverse((o) => o.geometry?.dispose());
-  g.removeFromParent();
+function disposeBuilt() {
+  for (const b of Object.values(built)) {
+    for (const geo of Object.values(b.geos)) geo.dispose();
+    if (b.hanger) for (const geo of [b.hanger.bar, b.hanger.hook, b.hanger.tip]) geo.dispose();
+  }
+  built = {};
+}
+
+// La forma viene de la plantilla (ya simulada); el molde se estampa encima.
+function shape(style) {
+  if (!built[style]) {
+    const b = buildFromTemplate(mold, atlas, TEMPLATES[style]);
+    for (const geo of Object.values(b.geos)) ensureAOAttributes(geo);
+    if (!b.hanger) {
+      // Sostenida: gira sobre el eje vertical del torso.
+      const box = new THREE.Box3();
+      for (const k of ['front', 'back']) {
+        b.geos[k].computeBoundingBox();
+        box.union(b.geos[k].boundingBox);
+      }
+      b.axisZ = (box.min.z + box.max.z) / 2;
+      // A la altura de las colgadas (centro del cuerpo a la par).
+      b.offsetY = HELD_CENTER_Y - (box.min.y + box.max.y) / 2;
+    }
+    built[style] = b;
+  }
+  return built[style];
 }
 
 function buildGarment() {
-  if (garmentGroup) disposeGroup(garmentGroup);
+  disposeBuilt();
   const P = mold.parts;
   const tex = atlas.texture;
-  // La forma viene de la plantilla (camiseta ya colgada); el molde se estampa.
-  const built = buildFromTemplate(mold, atlas);
-  const S = built.metersPerUnit;
+  const first = shape(PRESENTATIONS[state.presentation][0].style);
+  const S = first.metersPerUnit;
   atlas.metersPerUnit = S;
-  atlas.seamEdges = built.seamEdges;
+  atlas.seamEdges = first.seamEdges;
   fabricNormal.repeat.set((mold.viewBox.w * S) / FABRIC_TILE_M, (mold.viewBox.h * S) / FABRIC_TILE_M);
   materials = {
     front: fabricMaterial(tex, fabricNormal),
@@ -228,14 +265,20 @@ function buildGarment() {
   };
   rib.repeat.set(220, 1);
   materials.collar.normalScale.set(0.6, 0.6);
-  const parts = Object.entries(built.geos);
-  for (const [, geo] of parts) ensureAOAttributes(geo);
-  const hanger = built.hanger;
+  layoutShirts();
+}
 
-  // Cada camiseta gira sobre el eje vertical de su gancho.
-  const makeShirt = (index) => {
+// Arma las dos camisetas según la presentación elegida.
+function layoutShirts() {
+  // Las geometrías de las camisetas quedan guardadas; el barral se rehace.
+  garmentGroup?.traverse((o) => o.userData.own && o.geometry.dispose());
+  garmentGroup?.removeFromParent();
+  pickables = [];
+  garmentGroup = new THREE.Group();
+  const list = PRESENTATIONS[state.presentation];
+  const makeShirt = (index, b) => {
     const g = new THREE.Group();
-    for (const [key, geo] of parts) {
+    for (const [key, geo] of Object.entries(b.geos)) {
       const mesh = new THREE.Mesh(geo, materials[key]);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -244,54 +287,85 @@ function buildGarment() {
       g.add(mesh);
       pickables.push(mesh);
     }
-    const bar = new THREE.Mesh(hanger.bar, hangerMats[state.hanger]);
-    bar.castShadow = true;
-    bar.userData.hanger = true;
-    g.add(bar);
-    for (const geo of [hanger.hook, hanger.tip]) {
-      const mesh = new THREE.Mesh(geo, hookMat);
-      mesh.castShadow = true;
-      g.add(mesh);
+    if (b.hanger) {
+      const bar = new THREE.Mesh(b.hanger.bar, hangerMats[state.hanger]);
+      bar.castShadow = true;
+      bar.userData.hanger = true;
+      g.add(bar);
+      for (const geo of [b.hanger.hook, b.hanger.tip]) {
+        const mesh = new THREE.Mesh(geo, hookMat);
+        mesh.castShadow = true;
+        g.add(mesh);
+      }
     }
-    g.position.z = -hanger.rodZ;
+    // Cada camiseta gira sobre su eje vertical: el del gancho o el del torso.
+    const axisZ = b.hanger ? b.hanger.rodZ : b.axisZ;
+    g.position.z = -axisZ;
+    g.position.y = b.offsetY || 0;
     const pivot = new THREE.Group();
     pivot.add(g);
+    pivot.position.z = axisZ;
     return pivot;
   };
-  pickables = [];
-  garmentGroup = new THREE.Group();
-  shirts = [-SPACING, SPACING].map((x, i) => {
-    const pivot = makeShirt(i);
-    pivot.position.set(x, 0, hanger.rodZ);
+  shirts = list.map(({ style, base }, i) => {
+    const pivot = makeShirt(i, shape(style));
+    pivot.position.x = (i ? 1 : -1) * SPACING;
     garmentGroup.add(pivot);
-    // La segunda se muestra de espaldas.
-    return { pivot, base: i ? Math.PI : 0, angle: 0, vel: 0, hover: 0, hoverTarget: 0 };
+    return { pivot, base, angle: 0, vel: 0, hover: 0, hoverTarget: 0 };
   });
-  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 2.4, 20).rotateZ(Math.PI / 2), rodMat);
-  rod.position.set(0, hanger.rodY, hanger.rodZ);
-  rod.castShadow = true;
-  garmentGroup.add(rod);
+  // Barral para las colgadas: de pared a pared, o uno corto amurado si hay
+  // una sola.
+  const hanging = list.map((e, i) => (built[e.style].hanger ? i : -1)).filter((i) => i >= 0);
+  document.getElementById('hanger').disabled = !hanging.length;
+  if (hanging.length) {
+    const h = built.colgada.hanger;
+    const short = hanging.length === 1;
+    const len = short ? 0.66 : 2.4;
+    const cx = short ? shirts[hanging[0]].pivot.position.x : 0;
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, len, 20).rotateZ(Math.PI / 2), rodMat);
+    rod.position.set(cx, h.rodY, h.rodZ);
+    rod.castShadow = true;
+    rod.userData.own = true;
+    garmentGroup.add(rod);
+    if (short) {
+      for (const sx of [-1, 1]) {
+        const depth = h.rodZ - WALL_Z;
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, depth, 16).rotateX(Math.PI / 2), rodMat);
+        arm.position.set(cx + (sx * len) / 2, h.rodY, WALL_Z + depth / 2);
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 16, 12), rodMat);
+        cap.position.set(cx + (sx * len) / 2, h.rodY, h.rodZ);
+        const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.006, 24).rotateX(Math.PI / 2), rodMat);
+        plate.position.set(cx + (sx * len) / 2, h.rodY, WALL_Z + 0.003);
+        for (const m of [arm, cap, plate]) m.userData.own = true;
+        garmentGroup.add(arm, cap, plate);
+      }
+    }
+  }
   garmentGroup.position.y = 0.02;
   scene.add(garmentGroup);
   refreshShadows();
-  bakeShadows(Object.fromEntries(parts), hanger);
+  bakeShadows();
 }
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 
-// Precalcula la oclusión de los pliegues (una vez por molde).
-async function bakeShadows(geos, hanger) {
+// Precalcula la oclusión de los pliegues (una vez por molde y por forma).
+async function bakeShadows() {
   const token = ++buildToken;
   const cancelled = () => token !== buildToken;
   await nextFrame();
   if (cancelled()) return;
   refreshShadows();
-  setStatus('Calculando sombras de los pliegues…');
-  await nextFrame();
-  const fabric = ['front', 'back', 'sleeveL', 'sleeveR', 'collar'].map((k) => geos[k]).filter(Boolean);
-  const done = await bakeAO(fabric, [...fabric, hanger.bar], cancelled);
-  if (!done || cancelled()) return;
-  refreshShadows();
+  for (const b of Object.values(built)) {
+    if (b.baked) continue;
+    setStatus('Calculando sombras de los pliegues…');
+    await nextFrame();
+    const fabric = ['front', 'back', 'sleeveL', 'sleeveR', 'collar'].map((k) => b.geos[k]).filter(Boolean);
+    const done = await bakeAO(fabric, b.hanger ? [...fabric, b.hanger.bar] : fabric, cancelled);
+    if (!done || cancelled()) return;
+    b.baked = true;
+    refreshShadows();
+  }
   setStatus('');
 }
 
@@ -443,6 +517,10 @@ document.getElementById('hanger').addEventListener('change', (e) => {
     if (o.userData.hanger) o.material = hangerMats[state.hanger];
   });
   requestRender();
+});
+document.getElementById('presentation').addEventListener('change', (e) => {
+  state.presentation = e.target.value;
+  if (mold) layoutShirts();
 });
 document.getElementById('ao').addEventListener('change', (e) => {
   state.ao = e.target.checked;
@@ -665,12 +743,18 @@ renderer.setAnimationLoop((now) => {
   renderer.render(scene, camera);
 });
 
-fetch(`${import.meta.env.BASE_URL}molde-ejemplo.svg`)
-  .then((r) => r.text())
-  .then((t) => loadMold(t, 'molde-ejemplo.svg'))
-  .catch((err) => {
-    console.error(err);
-    setStatus(err.message, true);
-  });
+// Moldes de ejemplo incluidos.
+const examples = document.getElementById('examples');
+function loadExample(name) {
+  return fetch(`${import.meta.env.BASE_URL}${name}`)
+    .then((r) => r.text())
+    .then((t) => loadMold(t, name))
+    .catch((err) => {
+      console.error(err);
+      setStatus(err.message, true);
+    });
+}
+examples.addEventListener('change', () => loadExample(examples.value));
+loadExample(examples.value);
 
 window.__mockup = { state, refreshTexture, scene, camera, controls, materials: () => materials, getAtlas: () => atlas, getMold: () => mold };

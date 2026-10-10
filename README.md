@@ -1,8 +1,8 @@
 # Mockup de camiseta 3D
 
 Visor en three.js que arma una camiseta realista a partir de un **molde SVG** y la
-muestra duplicada (una de frente y otra de espaldas), colgada de una percha, con
-tela mate y sin brillos.
+muestra de dos maneras: **sostenida** por un maniquí invisible (como en las fotos
+de catálogo) y **colgada** de una percha, con tela mate y sin brillos.
 
 ## Uso
 
@@ -12,9 +12,12 @@ npm run dev      # servidor de desarrollo
 npm run build    # versión estática en dist/
 ```
 
-Se abre con `public/molde-ejemplo.svg`. Con **Cargar molde SVG** (o arrastrando el
-archivo a la ventana) se carga cualquier otro molde.
+Se abre con un molde de ejemplo (`public/molde-futbol.svg`, también está
+`public/molde-ejemplo.svg`). Con **Cargar molde SVG** (o arrastrando el archivo a
+la ventana) se carga cualquier otro molde.
 
+- **Presentación**: sostenida y colgada lado a lado, o cualquiera de las dos de
+  frente y de espaldas.
 - **Partes**: cada pieza (frente, espalda, mangas, cuello) tiene su color base y
   un interruptor para mostrar u ocultar el diseño del SVG encima.
 - **Colores del diseño**: reemplaza globalmente cualquier color del estampado.
@@ -50,10 +53,19 @@ cuello como una tira horizontal.
 
 ## Cómo funciona
 
-La forma 3D no se calcula con cada molde: es una **plantilla**, una camiseta
-"ideal" que ya cuelga de la percha, simulada una sola vez con el simulador de
-tela de Blender (con su molde plano como forma en reposo, costuras, gravedad y
-la percha como sólido). Cada molde del cliente se **estampa** sobre ella:
+La forma 3D no se calcula con cada molde: son dos **plantillas**, una camiseta
+"ideal" simulada una sola vez con el simulador de tela de Blender (con su molde
+plano como forma en reposo, costuras y gravedad):
+
+- **Colgada:** cuelga de la percha, que actúa como sólido.
+- **Sostenida:** vestida sobre un maniquí invisible. Como en un programa de
+  confección, cada pieza arranca curvada alrededor del cuerpo (curvarla así no
+  la estira) y las costuras se cierran solas: primero hombros y costados,
+  después las mangas, que arrancan pegadas a la sisa. Al final un suavizado
+  borra el rizado fino que deja el contacto con el maniquí.
+
+Las dos comparten la malla, así que cada molde del cliente se **estampa** igual
+sobre cualquiera:
 
 - **Frente y espalda:** cada punto de la plantilla conoce su lugar en el molde
   canónico. Una deformación suave (thin plate spline) lleva ese molde al del
@@ -71,13 +83,13 @@ Así la caída es siempre la de una prenda real (hombros apoyados, mangas que
 caen plegándose en la sisa, costados que se pliegan y se enciman) y no depende
 de cómo esté dibujado cada molde: el molde sólo aporta el diseño.
 
-### Regenerar la plantilla
+### Regenerar las plantillas
 
-Sólo hace falta si se cambia el molde canónico, la percha o la tela:
+Sólo hace falta si se cambia el molde canónico, la percha, el maniquí o la tela:
 
 ```bash
 pip install bpy                      # Blender como módulo de Python
-npm run template                     # o PYTHON=/ruta/python tools/template/build.sh
+npm run template                     # o PYTHON=/ruta/python tools/template/build.sh [colgada|sostenida]
 ```
 
 1. `tools/template/canonical.mjs` — molde canónico (hombros poco caídos,
@@ -87,13 +99,20 @@ npm run template                     # o PYTHON=/ruta/python tools/template/buil
 3. `tools/template/drape_blender.py` — simula la caída en Blender: frente y
    espalda chocan entre sí (no se atraviesan), las costuras se mantienen
    cerradas y el aire amortigua el balanceo hasta que la prenda se asienta.
+   Con `{"body": true}` arma la camiseta sobre el maniquí de
+   `tools/template/body.py` en lugar de colgarla.
 4. `tools/template/finalize.mjs` — cierra cada costura en un punto común y
-   guarda `src/assets/tshirt-template.json` (posiciones en 16 bits).
+   guarda `src/assets/tshirt-template.json` (colgada) o
+   `src/assets/tshirt-maniqui.json` (sostenida), con posiciones en 16 bits.
+
+El molde de ejemplo de fútbol se genera sobre el molde canónico con
+`node tools/demo-mold.mjs`.
 
 ## Estructura
 
 - `src/svgMold.js` — lectura del SVG, detección de piezas, contornos y paleta.
-- `src/template.js` — arma la camiseta desde la plantilla y estampa el molde.
+- `src/template.js` — arma la camiseta desde una plantilla (colgada o
+  sostenida) y estampa el molde.
 - `src/garment.js` — análisis de las piezas del molde (puntos notables,
   parametrización de la manga), percha, y el generador de la forma inicial
   que usa la herramienta de la plantilla.
@@ -106,7 +125,7 @@ npm run template                     # o PYTHON=/ruta/python tools/template/buil
 
 ## Rendimiento
 
-Al cargar un molde sólo se estampa el diseño sobre la plantilla y se calculan
+Al cargar un molde sólo se estampa el diseño sobre las plantillas y se calculan
 las sombras de los pliegues: no hay simulación en la página. A partir de ahí la
 escena queda quieta y sólo se redibuja cuando se mueve la cámara o cambia un
 color, así que girar es fluido incluso en equipos modestos.

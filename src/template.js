@@ -18,9 +18,9 @@ const decode = (b64, Type) => {
   return new Type(bytes.buffer);
 };
 
-let cache = null;
+const cache = new Map();
 function loadTemplate(tpl = template) {
-  if (cache && cache.src === tpl) return cache;
+  if (cache.has(tpl)) return cache.get(tpl);
   const pieces = {};
   const scaled = (b64, step) => Float32Array.from(decode(b64, Int16Array), (v) => v * step);
   for (const [key, p] of Object.entries(tpl.pieces)) {
@@ -34,8 +34,9 @@ function loadTemplate(tpl = template) {
   }
   const canonical = {};
   for (const [key, c] of Object.entries(tpl.canonical)) canonical[key] = { poly: c.poly.map(([x, y]) => ({ x, y })), bbox: c.bbox };
-  cache = { src: tpl, pieces, canonical, seams: tpl.seams, neck: tpl.neck, hanger: tpl.hanger };
-  return cache;
+  const T = { pieces, canonical, seams: tpl.seams, neck: tpl.neck, hanger: tpl.hanger };
+  cache.set(tpl, T);
+  return T;
 }
 
 // ---------- deformación suave entre contornos (thin plate spline) ----------
@@ -255,7 +256,7 @@ export function buildFromTemplate(mold, atlas, tpl) {
   weldSeams(geos, T.seams);
   geos.collar = buildCollar(T, geos, atlas, P.collar);
   // El cuello (suavizado) no puede quedar atravesado por la percha.
-  pushOutOfBar(geos.collar, T.hanger, 0.0015);
+  if (T.hanger) pushOutOfBar(geos.collar, T.hanger, 0.0015);
   geos.collar.computeVertexNormals();
   // Costuras de la sisa en el molde del cliente (para sombrearlas en la textura).
   const seamEdges = { front: [], back: [], sleeveL: [], sleeveR: [] };
@@ -265,7 +266,7 @@ export function buildFromTemplate(mold, atlas, tpl) {
     for (const [sh, ua] of [[pn.shL, pn.uaL], [pn.shR, pn.uaR]]) seamEdges[key].push(pathBetween(pts, pts.indexOf(sh), pts.indexOf(ua), pn.iHem, false));
   }
   for (const key of ['sleeveL', 'sleeveR']) if (P[key]) seamEdges[key].push(sleeveCap(P[key]).path);
-  return { geos, hanger: buildHanger(T.hanger), seamEdges, metersPerUnit: BODY_LENGTH / user.front.H };
+  return { geos, hanger: T.hanger ? buildHanger(T.hanger) : null, seamEdges, metersPerUnit: BODY_LENGTH / user.front.H };
 }
 
 function makeGeometry(p, uvs) {

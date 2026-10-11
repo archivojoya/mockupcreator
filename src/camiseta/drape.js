@@ -28,18 +28,28 @@ const SLACK = 1.01; // lo que se puede estirar la tela con su peso
 const VOLUME_TOP = 0.3;
 const VOLUME_HEM = 0.06;
 const VOLUME_SLEEVE = 0.5;
-// Broches: filas de la costura del hombro que pellizcan (desde la punta del
-// hombro hacia el cuello) y media separación entre las mordazas.
+// Broches: filas de la costura del hombro donde pellizcan (desde la punta
+// del hombro hacia el cuello), cuánto más atrás de la costura (a lo largo de
+// la espalda) y media separación entre las mordazas.
 const CLIP_ROWS = [1, 2];
+const CLIP_BACK = 0.03;
 const PINCH = 0.0035;
+// La barra de la percha queda un poco detrás de la costura del hombro: la
+// tela del frente pasa por arriba y de frente se ve el frente entero.
+const HANGER_BACK = 0.025;
+// Grosor de la tela para el choque entre puntos: dos puntos que no son
+// vecinos en la tela no se acercan más que esto (algo menos que la diagonal
+// de una celda de la malla, así ningún punto pasa entre otros cuatro).
+const THICK = 0.011;
+const VMAX = 0.004; // velocidad máxima por subpaso (≈ 1 m/s)
 // Cuánto se deja achatar el cuello: 0 = pieza rígida; 1 = cualquier
 // deformación lineal (sigue siendo un óvalo parejo, sin arrugas).
 const COLLAR_FLEX = 1;
 
 // ---------- percha ----------
 
-// Barra de la percha bajo la costura de los hombros, con gancho. Queda en el
-// plano de la costura (paralela a la camiseta): baja del centro hacia las
+// Barra de la percha bajo los hombros, con gancho, un poco detrás de la
+// costura. Es plana y paralela a la camiseta: baja del centro hacia las
 // puntas siguiendo la caída de los hombros.
 export function makeHanger(M) {
   const xEnd = M.shA - 0.05;
@@ -48,11 +58,11 @@ export function makeHanger(M) {
     return ax <= M.neck.a ? 0 : (M.shY * (ax - M.neck.a)) / (M.shA - M.neck.a);
   };
   const radius = (x) => 0.0095 + 0.0075 * (Math.abs(x) / xEnd) ** 2;
-  const z0 = M.neck.c + 0.003;
+  const z0 = M.neck.c + 0.003 - HANGER_BACK;
   const ctrl = [];
   for (const x of [-xEnd, -0.75 * xEnd, -0.5 * xEnd, -0.28 * xEnd, 0, 0.28 * xEnd, 0.5 * xEnd, 0.75 * xEnd, xEnd]) {
     const t = Math.abs(x) / xEnd;
-    ctrl.push(new THREE.Vector3(x, Math.min(seamY(x) - radius(x) - 0.006, -0.032 - 0.02 * t * t), z0));
+    ctrl.push(new THREE.Vector3(x, Math.min(seamY(x) - radius(x) - 0.012, -0.036 - 0.02 * t * t), z0));
   }
   const curve = new THREE.CatmullRomCurve3(ctrl, false, 'centripetal');
   const cpts = curve.getSpacedPoints(48);
@@ -60,7 +70,7 @@ export function makeHanger(M) {
   for (let i = 0; i + 1 < cpts.length; i++) segments.push({ a: cpts[i], b: cpts[i + 1], ra: radius(cpts[i].x), rb: radius(cpts[i + 1].x) });
   // La barra que se ve es un poco más corta que la de choque: las puntas
   // quedan siempre tapadas por la tela del hombro.
-  const trim = 0.038 / curve.getLength();
+  const trim = (xEnd - 0.115) / curve.getLength();
   const pts = Array.from({ length: 49 }, (_, i) => curve.getPointAt(trim + ((1 - 2 * trim) * i) / 48));
   const radii = pts.map((p) => radius(p.x));
 
@@ -407,33 +417,50 @@ export class HangingShirt {
       o[last * CSW * 3 + i] = (o[last * CSW * 3 + i] + o[(last - 1) * CSW * 3 + i]) / 2;
     }
 
-    // Broches: pellizcan dos puntos de cada costura del hombro, con la tela
-    // de adelante y de atrás apretada entre las mordazas (justo debajo de la
-    // costura). Los puntos quedan fijos.
+    // Broches: pellizcan la espalda un poco detrás de la costura de cada
+    // hombro (en dos puntos), con la tela apretada entre las mordazas en un
+    // pliegue vertical. Los puntos quedan fijos; la costura y el frente pasan
+    // por arriba y caen adelante.
     this.pins = [];
     this.clips = [];
     if (support.kind === 'clips') {
       const at = (id) => new THREE.Vector3(P[id * 3], P[id * 3 + 1], P[id * 3 + 2]);
       for (const col of [0, C]) {
-        const rows = CLIP_ROWS.map((r) => i2 + r);
-        const seams = rows.map((i) => map.front[i * WC + col]);
-        const ys = seams.reduce((s, id) => s + P[id * 3 + 1], 0) / seams.length;
-        const zs = seams.reduce((s, id) => s + P[id * 3 + 2], 0) / seams.length;
+        // Columna k de la espalda contando desde la costura (k = 0).
+        const back = (i, k) => map.back[i * WC + (col ? k : C - k)];
+        const picks = CLIP_ROWS.map((r) => {
+          const i = i2 + r;
+          let s = 0;
+          let best = 1;
+          let bd = Infinity;
+          for (let k = 1; k < 8; k++) {
+            s += at(back(i, k)).distanceTo(at(back(i, k - 1)));
+            if (Math.abs(s - CLIP_BACK) < bd) {
+              bd = Math.abs(s - CLIP_BACK);
+              best = k;
+            }
+          }
+          return [i, best];
+        });
+        const centers = picks.map(([i, k]) => back(i, k));
+        const ys = centers.reduce((s, id) => s + P[id * 3 + 1], 0) / centers.length;
+        const zs = centers.reduce((s, id) => s + P[id * 3 + 2], 0) / centers.length;
         let depth = 0;
-        rows.forEach((i, r) => {
-          const s = at(seams[r]);
-          const seam = new THREE.Vector3(s.x, ys, zs);
-          this.pins.push({ id: seams[r], from: s, to: seam });
+        picks.forEach(([i, k], r) => {
+          const c = at(centers[r]);
+          this.pins.push({ id: centers[r], from: c, to: new THREE.Vector3(c.x, ys, zs) });
+          // El vecino hacia la costura va contra la mordaza de adelante; el
+          // otro, contra la de atrás.
           for (const [id, side] of [
-            [map.front[i * WC + (col ? C - 1 : 1)], 1],
-            [map.back[i * WC + (col ? 1 : C - 1)], -1],
+            [back(i, k - 1), 1],
+            [back(i, k + 1), -1],
           ]) {
-            const d = at(id).distanceTo(s);
+            const d = at(id).distanceTo(c);
             depth = Math.max(depth, d);
-            this.pins.push({ id, from: at(id), to: new THREE.Vector3(s.x, ys - d, zs + side * PINCH) });
+            this.pins.push({ id, from: at(id), to: new THREE.Vector3(c.x, ys - d, zs + side * PINCH) });
           }
         });
-        const xs = seams.map((id) => P[id * 3]);
+        const xs = centers.map((id) => P[id * 3]);
         this.clips.push({ x: (xs[0] + xs[1]) / 2, y: ys, z: zs, width: Math.abs(xs[0] - xs[1]) + 0.02, depth });
       }
       for (const pin of this.pins) this.w[pin.id] = 0;
@@ -498,6 +525,23 @@ export class HangingShirt {
     this.layers = Int32Array.from(layers);
     this.layerGap = Float32Array.from({ length: layers.length / 2 }, (_, c) => Math.max(GAP, (P[layers[2 * c] * 3 + 2] - P[layers[2 * c + 1] * 3 + 2]) * VOLUME_SLEEVE));
     this.bindFine(L, W, SW);
+    // Choque entre puntos: posiciones de reposo (para saber quién es vecino
+    // en la tela) y la grilla espacial, armada de nuevo en cada pasada.
+    this.p0 = Float32Array.from(this.p);
+    // Junto a los broches la tela queda apretada a propósito (más cerca que
+    // el grosor): ahí no hay choque entre puntos. Tampoco en el contorno del
+    // cuello, que se mueve como una pieza.
+    this.noCollide = new Uint8Array(n);
+    for (const id of this.ringIds) this.noCollide[id] = 1;
+    for (let i = 0; i < n; i++)
+      for (const { id } of this.pins)
+        if (Math.hypot(P[i * 3] - P[id * 3], P[i * 3 + 1] - P[id * 3 + 1], P[i * 3 + 2] - P[id * 3 + 2]) < 0.035) this.noCollide[i] = 1;
+    this.cellStart = new Int32Array(1);
+    this.cellFill = new Int32Array(0);
+    this.pairs = new Int32Array(4096);
+    this.pairCount = 0;
+    this.cellIds = new Int32Array(n);
+    this.cellOf = new Int32Array(n);
     this.time = 0;
     this.calm = 0;
     this.sleeping = false;
@@ -648,9 +692,18 @@ export class HangingShirt {
       for (let i = 0; i < n; i++) {
         if (!this.w[i]) continue;
         const k = i * 3;
-        const vx = (P[k] - Q[k]) * DAMP;
-        const vy = (P[k + 1] - Q[k + 1]) * DAMP;
-        const vz = (P[k + 2] - Q[k + 2]) * DAMP;
+        let vx = (P[k] - Q[k]) * DAMP;
+        let vy = (P[k + 1] - Q[k + 1]) * DAMP;
+        let vz = (P[k + 2] - Q[k + 2]) * DAMP;
+        // Tope de velocidad: ningún punto salta en un subpaso más que una
+        // fracción del grosor (así no atraviesa otra capa de tela).
+        const v2 = vx * vx + vy * vy + vz * vz;
+        if (v2 > VMAX * VMAX) {
+          const s = VMAX / Math.sqrt(v2);
+          vx *= s;
+          vy *= s;
+          vz *= s;
+        }
         Q[k] = P[k];
         Q[k + 1] = P[k + 1];
         Q[k + 2] = P[k + 2];
@@ -661,18 +714,21 @@ export class HangingShirt {
         P[k + 2] += vz + wz * gust;
       }
       this.holdPins();
+      if (s === 0) this.findPairs();
       if (this.hanger) this.findContacts();
       for (let it = 0; it < ITERATIONS; it++) {
         this.solveLengths();
         this.tethers();
         this.matchCollar();
+        this.collideSelf();
+        this.holdApart(this.volPairs, this.volGap, 0.5);
+        this.holdApart(this.layers, this.layerGap, 0.5);
         if (this.hanger) this.collideHanger();
       }
-      this.separateLayers();
     }
     for (let i = 0; i < n * 3; i++) motion = Math.max(motion, Math.abs(P[i] - Q[i]));
     this.wind.multiplyScalar(Math.exp(-2.2 * dt));
-    if (motion < 4e-5 && this.wind.lengthSq() < 1e-3) this.calm++;
+    if (motion < 1e-4 && this.wind.lengthSq() < 1e-3) this.calm++;
     else this.calm = 0;
     if (this.calm > 40 && this.time > 1.5) this.sleeping = true;
     return true;
@@ -881,81 +937,155 @@ export class HangingShirt {
     }
   }
 
-  // Cada punto de la capa de adelante se mantiene delante del punto más
-  // cercano (en el plano) de la capa de atrás (grilla de celdas de 2 cm).
-  keepApart(front, back) {
+  // Choque entre todos los puntos de la tela: si dos puntos que en la tela
+  // están lejos (no son vecinos) quedan a menos de THICK, se separan. Cubre
+  // manga contra cuerpo, pliegues que se meten en otros y frente contra
+  // espalda en cualquier dirección.
+  //
+  // Una vez por cuadro se buscan los pares que están cerca (a menos de dos
+  // grosores), con una grilla espacial sobre la caja que ocupa la tela: cada
+  // punto sólo mira las 27 celdas que lo rodean. En cada subpaso sólo se
+  // revisan esos pares (en un cuadro la tela se mueve mucho menos que eso).
+  findPairs() {
     const P = this.p;
-    const W = this.w;
-    const cell = 0.02;
-    const grid = (this._grid ||= new Map());
-    grid.clear();
-    const cellKey = (x, y) => (Math.floor(x / cell) + 512) * 1024 + Math.floor(y / cell) + 512;
-    for (const b of back) {
-      const key = cellKey(P[b * 3], P[b * 3 + 1]);
-      let list = grid.get(key);
-      if (!list) grid.set(key, (list = []));
-      list.push(b);
+    const P0 = this.p0;
+    const n = this.n;
+    const reach = 2 * THICK;
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let z0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    let z1 = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const x = P[i * 3];
+      const y = P[i * 3 + 1];
+      const z = P[i * 3 + 2];
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+      if (z < z0) z0 = z;
+      if (z > z1) z1 = z;
     }
-    for (const f of front) {
-      const fx = P[f * 3];
-      const fy = P[f * 3 + 1];
-      const cx = Math.floor(fx / cell);
-      const cy = Math.floor(fy / cell);
-      let best = -1;
-      let bd = cell * cell;
-      for (let ox = -1; ox <= 1; ox++)
-        for (let oy = -1; oy <= 1; oy++) {
-          const list = grid.get((cx + ox + 512) * 1024 + cy + oy + 512);
-          if (!list) continue;
-          for (const b of list) {
-            const d = (P[b * 3] - fx) ** 2 + (P[b * 3 + 1] - fy) ** 2;
-            if (d < bd) {
-              bd = d;
-              best = b;
+    const inv = 1 / reach;
+    const nx = Math.floor((x1 - x0) * inv) + 1;
+    const ny = Math.floor((y1 - y0) * inv) + 1;
+    const nz = Math.floor((z1 - z0) * inv) + 1;
+    const cells = nx * ny * nz;
+    this.pairCount = 0;
+    if (!(cells < 2e6)) return;
+    if (this.cellStart.length < cells + 1) {
+      this.cellStart = new Int32Array(cells + 1);
+      this.cellFill = new Int32Array(cells);
+    }
+    const start = this.cellStart;
+    const fill = this.cellFill;
+    const ids = this.cellIds;
+    const cellOf = this.cellOf;
+    start.fill(0, 0, cells + 1);
+    for (let i = 0; i < n; i++) {
+      const c = (Math.floor((P[i * 3] - x0) * inv) * ny + Math.floor((P[i * 3 + 1] - y0) * inv)) * nz + Math.floor((P[i * 3 + 2] - z0) * inv);
+      cellOf[i] = c;
+      start[c + 1]++;
+    }
+    for (let c = 1; c <= cells; c++) start[c] += start[c - 1];
+    fill.set(start.subarray(0, cells));
+    for (let i = 0; i < n; i++) ids[fill[cellOf[i]]++] = i;
+    const r2 = reach * reach;
+    const far2 = (2.5 * THICK) ** 2;
+    let pairs = this.pairs;
+    let count = 0;
+    const skip = this.noCollide;
+    for (let i = 0; i < n; i++) {
+      if (skip[i]) continue;
+      const ix = Math.floor((P[i * 3] - x0) * inv);
+      const iy = Math.floor((P[i * 3 + 1] - y0) * inv);
+      const iz = Math.floor((P[i * 3 + 2] - z0) * inv);
+      for (let ax = Math.max(0, ix - 1); ax <= Math.min(nx - 1, ix + 1); ax++)
+        for (let ay = Math.max(0, iy - 1); ay <= Math.min(ny - 1, iy + 1); ay++) {
+          const row = (ax * ny + ay) * nz;
+          const c0 = row + Math.max(0, iz - 1);
+          const c1 = row + Math.min(nz - 1, iz + 1);
+          for (let e = start[c0]; e < start[c1 + 1]; e++) {
+            const j = ids[e];
+            if (j <= i || skip[j]) continue;
+            const dx = P[j * 3] - P[i * 3];
+            const dy = P[j * 3 + 1] - P[i * 3 + 1];
+            const dz = P[j * 3 + 2] - P[i * 3 + 2];
+            if (dx * dx + dy * dy + dz * dz >= r2) continue;
+            const rx = P0[j * 3] - P0[i * 3];
+            const ry = P0[j * 3 + 1] - P0[i * 3 + 1];
+            const rz = P0[j * 3 + 2] - P0[i * 3 + 2];
+            if (rx * rx + ry * ry + rz * rz < far2) continue;
+            if (count * 2 + 2 > pairs.length) {
+              const grown = new Int32Array(pairs.length * 2);
+              grown.set(pairs);
+              pairs = this.pairs = grown;
             }
+            pairs[count * 2] = i;
+            pairs[count * 2 + 1] = j;
+            count++;
           }
         }
-      if (best < 0) continue;
-      const wf = W[f];
-      const wb = W[best];
-      if (!(wf + wb)) continue;
-      const d = P[f * 3 + 2] - P[best * 3 + 2] - GAP;
-      if (d < 0) {
-        P[f * 3 + 2] -= (d * wf) / (wf + wb);
-        P[best * 3 + 2] += (d * wb) / (wf + wb);
-      }
+    }
+    this.pairCount = count;
+  }
+
+  // Los pares que se tocan se separan (a medias en cada iteración: corre
+  // dentro del ciclo de restricciones y así converge sin vibrar).
+  collideSelf() {
+    const P = this.p;
+    const W = this.w;
+    const pairs = this.pairs;
+    const t2 = THICK * THICK;
+    for (let c = 0; c < this.pairCount; c++) {
+      const i = pairs[c * 2];
+      const j = pairs[c * 2 + 1];
+      const dx = P[j * 3] - P[i * 3];
+      const dy = P[j * 3 + 1] - P[i * 3 + 1];
+      const dz = P[j * 3 + 2] - P[i * 3 + 2];
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 >= t2 || d2 < 1e-12) continue;
+      const wi = W[i];
+      const wj = W[j];
+      if (!(wi + wj)) continue;
+      const d = Math.sqrt(d2);
+      const f = (((THICK - d) / d) * 0.5) / (wi + wj);
+      P[i * 3] -= dx * f * wi;
+      P[i * 3 + 1] -= dy * f * wi;
+      P[i * 3 + 2] -= dz * f * wi;
+      P[j * 3] += dx * f * wj;
+      P[j * 3 + 1] += dy * f * wj;
+      P[j * 3 + 2] += dz * f * wj;
     }
   }
 
-  separateLayers() {
+  // Volumen: cada par (frente y espalda, o las dos caras de una manga) no se
+  // acerca más que su separación mínima, en la dirección que los une (así
+  // vale aunque la tela gire).
+  holdApart(pairs, gaps, k) {
     const P = this.p;
     const W = this.w;
-    this.keepApart(this.frontIds, this.backIds);
-    const V = this.volPairs;
-    for (let c = 0; c < V.length; c += 2) {
-      const wf = W[V[c]];
-      const wb = W[V[c + 1]];
-      if (!(wf + wb)) continue;
-      const f = V[c] * 3 + 2;
-      const b = V[c + 1] * 3 + 2;
-      const d = (P[f] - P[b] - this.volGap[c / 2]) * 0.5;
-      if (d < 0) {
-        P[f] -= (d * wf) / (wf + wb);
-        P[b] += (d * wb) / (wf + wb);
-      }
-    }
-    const L = this.layers;
-    for (let c = 0; c < L.length; c += 2) {
-      const wf = W[L[c]];
-      const wb = W[L[c + 1]];
-      if (!(wf + wb)) continue;
-      const f = L[c] * 3 + 2;
-      const b = L[c + 1] * 3 + 2;
-      const d = P[f] - P[b] - this.layerGap[c / 2];
-      if (d < 0) {
-        P[f] -= (d * wf) / (wf + wb);
-        P[b] += (d * wb) / (wf + wb);
-      }
+    for (let c = 0; c < pairs.length; c += 2) {
+      const a = pairs[c];
+      const b = pairs[c + 1];
+      const wa = W[a];
+      const wb = W[b];
+      if (!(wa + wb)) continue;
+      const dx = P[a * 3] - P[b * 3];
+      const dy = P[a * 3 + 1] - P[b * 3 + 1];
+      const dz = P[a * 3 + 2] - P[b * 3 + 2];
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const gap = gaps[c / 2];
+      if (d >= gap || d < 1e-6) continue;
+      const f = (((gap - d) / d) * k) / (wa + wb);
+      P[a * 3] += dx * f * wa;
+      P[a * 3 + 1] += dy * f * wa;
+      P[a * 3 + 2] += dz * f * wa;
+      P[b * 3] -= dx * f * wb;
+      P[b * 3 + 1] -= dy * f * wb;
+      P[b * 3 + 2] -= dz * f * wb;
     }
   }
 

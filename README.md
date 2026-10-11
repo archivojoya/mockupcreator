@@ -37,10 +37,11 @@ modelada directamente con código, sin moldes, sin Blender y sin simulación. Se
 ve flotando con volumen, como puesta en un cuerpo invisible.
 
 - **Presentación**: con cuerpo (forma fija, como puesta), en percha (de madera,
-  paralela a la camiseta) o con broches (dos broches que pellizcan los hombros,
-  colgados de una barra). Colgada, la tela se simula en vivo: al pasar el mouse
-  se empuja y se balancea, y después se acomoda sola (en el celular, con un
-  toque).
+  paralela a la camiseta) o con broches (dos broches colgados de una barra). La
+  percha y los broches toman la camiseta un poco detrás de la costura del
+  hombro, así el frente pasa por arriba y se ve entero. Colgada, la tela se
+  simula en vivo: al pasar el mouse se empuja y se balancea, y después se
+  acomoda sola (en el celular, con un toque).
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
   de mangas y profundidad del escote. La malla se rehace al instante.
 - **Colores** por parte: cuerpo, mangas, cuello y puños.
@@ -70,13 +71,20 @@ posiciones sobre una malla a media resolución de la misma camiseta; la malla fi
 que se ve sigue a la gruesa y el cuello y los dobladillos acompañan a su borde.
 La camiseta arranca con la forma puesta y cae sobre la percha (la tela que se
 apoya arriba de la barra queda adherida) o queda sostenida por los broches (los
-puntos que pellizcan quedan fijos). Unas ataduras de largo máximo hacia los dos
-hombros evitan que se estire con su peso. El cuello se mueve como una pieza:
-puede inclinarse y achatarse en óvalo pero no arrugarse, y la tira acanalada lo
-acompaña. Frente y espalda no se cruzan y guardan algo del volumen que tenían
-puestos (más arriba, casi nada en el ruedo); lo mismo las mangas, y la copa de
-la manga conserva algo de cuerpo. Cuando la tela se queda quieta la simulación
-se duerme.
+puntos que pellizcan la espalda quedan fijos). Unas ataduras de largo máximo
+hacia los dos hombros evitan que se estire con su peso. El cuello se mueve como
+una pieza: puede inclinarse y achatarse en óvalo pero no arrugarse, y la tira
+acanalada lo acompaña. Frente, espalda y mangas guardan algo del volumen que
+tenían puestas (más arriba, casi nada en el ruedo), y la copa de la manga
+conserva algo de cuerpo.
+
+Ninguna parte de la tela atraviesa a otra: cada punto de la simulación tiene un
+grosor de 1,1 cm y ningún punto que en la tela esté lejos puede acercarse más
+que eso (manga contra cuerpo, frente contra espalda, pliegues). Una vez por
+cuadro se buscan los pares cercanos con una grilla espacial y en cada paso sólo
+se revisan esos pares; además ningún punto se mueve más de 4 mm por paso, así
+un empujón fuerte no hace que una capa salte a través de otra. Cuando la tela se
+queda quieta la simulación se duerme.
 
 ## Cómo preparar el SVG
 

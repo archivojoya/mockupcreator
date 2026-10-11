@@ -36,6 +36,9 @@ prueba aparte, hecha desde cero: una camiseta deportiva de cuello redondo
 modelada directamente con código, sin moldes, sin Blender y sin simulación. Se
 ve flotando con volumen, como puesta en un cuerpo invisible.
 
+- **Presentación**: con cuerpo (forma fija, como puesta) o colgada de una percha
+  de madera, con la tela simulada en vivo: al pasar el mouse la tela se empuja y
+  se balancea, y después se acomoda sola (en el celular, con un toque).
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
   de mangas y profundidad del escote. La malla se rehace al instante.
 - **Colores** por parte: cuerpo, mangas, cuello y puños.
@@ -59,6 +62,14 @@ Cómo se arma (`src/camiseta/shirt.js`):
 - **Terminación**: pliegues suaves (caída hacia el ruedo, tensiones desde la
   axila), costuras hundidas, pespunte doble en ruedo y puños, y relieve de malla
   deportiva.
+
+La versión colgada (`src/camiseta/drape.js`) simula la tela con dinámica de
+posiciones sobre una malla a media resolución de la misma camiseta; la malla fina
+que se ve sigue a la gruesa y el cuello y los dobladillos acompañan a su borde.
+La camiseta arranca con la forma puesta y cae sobre la percha: la tela que se
+apoya arriba de la barra queda adherida, unas ataduras de largo máximo evitan
+que se estire con su peso, frente y espalda no se cruzan y la copa de la manga
+conserva algo de cuerpo. Cuando la tela se queda quieta la simulación se duerme.
 
 ## Cómo preparar el SVG
 
@@ -154,8 +165,9 @@ El molde de ejemplo de fútbol se genera sobre el molde canónico con
   costura y mapa de relieve del tejido.
 - `src/main.js` — escena, iluminación de estudio suave y panel de control.
 - `camiseta.html` y `src/camiseta/` — la camiseta deportiva paramétrica:
-  `shirt.js` (geometría), `fabric.js` (texturas de la tela), `main.js` (escena
-  y controles) y `style.css`.
+  `shirt.js` (geometría), `drape.js` (versión colgada: percha y simulación de
+  la tela), `fabric.js` (texturas de la tela), `main.js` (escena y controles) y
+  `style.css`.
 
 ## Rendimiento
 

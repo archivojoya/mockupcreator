@@ -256,19 +256,17 @@ function buildTorso(M) {
 }
 
 // Borde de cada sisa, desde la axila: sube por el frente, cruza el hombro y
-// baja por la espalda. Devuelve [pieza, índice] de cada punto.
-function armholeLoop(torso, side) {
-  const { i1, i2 } = torso;
-  const W = COLS + 1;
-  const F = (i, j) => ['front', i * W + j];
-  const B = (i, j) => ['back', i * W + j];
+// baja por la espalda. Devuelve [pieza, fila, columna] de cada punto de una
+// grilla de `cols` columnas con la sisa entre las filas i1 e i2.
+export function armholeLoopIJ(cols, A, i1, i2, side) {
+  const F = (i, j) => ['front', i, j];
+  const B = (i, j) => ['back', i, j];
   const out = [];
-  const A = ARM_COLS;
   if (side > 0) {
-    out.push(F(i1, COLS));
-    for (let j = COLS - 1; j >= COLS - A; j--) out.push(F(i1, j));
-    for (let i = i1 + 1; i <= i2; i++) out.push(F(i, COLS - A));
-    for (let j = COLS - A + 1; j <= COLS; j++) out.push(F(i2, j));
+    out.push(F(i1, cols));
+    for (let j = cols - 1; j >= cols - A; j--) out.push(F(i1, j));
+    for (let i = i1 + 1; i <= i2; i++) out.push(F(i, cols - A));
+    for (let j = cols - A + 1; j <= cols; j++) out.push(F(i2, j));
     for (let j = 1; j <= A; j++) out.push(B(i2, j));
     for (let i = i2 - 1; i >= i1; i--) out.push(B(i, A));
     for (let j = A - 1; j >= 1; j--) out.push(B(i1, j));
@@ -277,11 +275,15 @@ function armholeLoop(torso, side) {
     for (let j = 1; j <= A; j++) out.push(F(i1, j));
     for (let i = i1 + 1; i <= i2; i++) out.push(F(i, A));
     for (let j = A - 1; j >= 0; j--) out.push(F(i2, j));
-    for (let j = COLS - 1; j >= COLS - A; j--) out.push(B(i2, j));
-    for (let i = i2 - 1; i >= i1; i--) out.push(B(i, COLS - A));
-    for (let j = COLS - A + 1; j <= COLS - 1; j++) out.push(B(i1, j));
+    for (let j = cols - 1; j >= cols - A; j--) out.push(B(i2, j));
+    for (let i = i2 - 1; i >= i1; i--) out.push(B(i, cols - A));
+    for (let j = cols - A + 1; j <= cols - 1; j++) out.push(B(i1, j));
   }
   return out;
+}
+function armholeLoop(torso, side) {
+  const W = COLS + 1;
+  return armholeLoopIJ(COLS, ARM_COLS, torso.i1, torso.i2, side).map(([key, i, j]) => [key, i * W + j]);
 }
 
 // Pliegues del torso: caída suave hacia el ruedo y tensiones que salen de la
@@ -592,7 +594,25 @@ export function buildShirt(params) {
     g.computeBoundingBox();
     geos[key] = g;
   }
-  return { geos, measures: M };
+  // Estructura de las mallas (para la versión colgada, que simula la tela).
+  const sleeveSW = parts.cuffL.ring.length;
+  const layout = {
+    cols: COLS,
+    armCols: ARM_COLS,
+    rows: N,
+    i1,
+    i2,
+    sleeveRows: SLEEVE_ROWS,
+    cuffRows: CUFF_ROWS,
+    sleeveSW,
+    rings: {
+      collar: neck,
+      hem: [...Array.from({ length: COLS + 1 }, (_, j) => ['front', j, W + j]), ...Array.from({ length: COLS - 1 }, (_, j) => ['back', j + 1, W + j + 1])],
+      cuffLLip: Array.from({ length: sleeveSW - 1 }, (_, i) => ['cuffL', CUFF_ROWS * sleeveSW + i, (CUFF_ROWS - 1) * sleeveSW + i]),
+      cuffRLip: Array.from({ length: sleeveSW - 1 }, (_, i) => ['cuffR', CUFF_ROWS * sleeveSW + i, (CUFF_ROWS - 1) * sleeveSW + i]),
+    },
+  };
+  return { geos, measures: M, layout };
 }
 
 // Tira acanalada del cuello sobre el borde del escote (lazo cerrado).
@@ -629,7 +649,7 @@ function buildCollar(M, neck) {
   const vertical = new THREE.Vector3(0, 1, 0);
   let ups = base.map((b, k) => {
     const o = new THREE.Vector3(ring[k].x - center.x, 0, ring[k].z - center.z).normalize();
-    return new THREE.Vector3().subVectors(b, below[k]).normalize().lerp(vertical, 0.85).normalize().addScaledVector(o, -0.16).normalize();
+    return new THREE.Vector3().subVectors(b, below[k]).normalize().lerp(vertical, 0.45).normalize().addScaledVector(o, -0.16).normalize();
   });
   for (let pass = 0; pass < 6; pass++) ups = ups.map((_, k) => ups[(k - 1 + n) % n].clone().add(ups[(k + 1) % n]).addScaledVector(ups[k], 2).normalize());
   // El borde de arriba no puede subir en punta donde el escote es más alto

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS } from './shirt.js';
+import { makeHanger, HangingShirt } from './drape.js';
 import { makeMeshNormalMap, makeRibNormalMap, makeUVMap, MESH_TILE, RIB_TILE } from './fabric.js';
 import './style.css';
 
@@ -127,7 +128,7 @@ function fabricMaterial(rib) {
 
 const params = { ...DEFAULTS };
 const colors = { ...COLORS };
-const view = { spin: false, uvmap: false };
+const view = { spin: false, uvmap: false, mode: 'body' }; // body: con cuerpo · hang: colgada
 
 const shirt = new THREE.Group();
 scene.add(shirt);
@@ -141,12 +142,35 @@ for (const [k, def] of Object.entries(PARTS)) {
 }
 const uvMaps = {};
 
+// Percha (sólo en la versión colgada).
+const hangerGroup = new THREE.Group();
+const woodMat = new THREE.MeshStandardMaterial({ color: 0xb48a60, roughness: 0.62, metalness: 0 });
+const wireMat = new THREE.MeshStandardMaterial({ color: 0x9a9da2, roughness: 0.35, metalness: 0.85 });
+const barMesh = new THREE.Mesh(new THREE.BufferGeometry(), woodMat);
+const hookMesh = new THREE.Mesh(new THREE.BufferGeometry(), wireMat);
+barMesh.castShadow = hookMesh.castShadow = true;
+barMesh.receiveShadow = true;
+hangerGroup.add(barMesh, hookMesh);
+scene.add(hangerGroup);
+
 let built = null;
+let drape = null;
 function rebuild() {
   built = buildShirt(params);
   for (const [k, mesh] of Object.entries(meshes)) {
     mesh.geometry.dispose();
     mesh.geometry = built.geos[k];
+  }
+  // Colgada: la tela arranca con la forma puesta y cae sobre la percha.
+  drape = null;
+  hangerGroup.visible = view.mode === 'hang';
+  if (view.mode === 'hang') {
+    const hanger = makeHanger(built.measures);
+    barMesh.geometry.dispose();
+    hookMesh.geometry.dispose();
+    barMesh.geometry = hanger.bar;
+    hookMesh.geometry = hanger.hook;
+    drape = new HangingShirt(built, hanger);
   }
   applyLook();
   updateSpec();
@@ -242,6 +266,59 @@ document.getElementById('uvmap').addEventListener('change', (e) => {
   view.uvmap = e.target.checked;
   applyLook();
 });
+// Presentación: con cuerpo (forma fija) o colgada (tela simulada).
+const modeButtons = [...document.querySelectorAll('.mode button')];
+function setMode(mode) {
+  view.mode = mode;
+  modeButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+  document.querySelector('.hint').textContent =
+    mode === 'hang' ? 'Pasá el mouse sobre la tela para moverla · arrastrá para girar' : 'Arrastrá para girar · rueda o pellizco para acercar';
+  rebuild();
+}
+modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+// El mouse empuja la tela al pasar y levanta una brisa suave.
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let lastMove = null;
+const camRight = new THREE.Vector3();
+const camUp = new THREE.Vector3();
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (!drape || e.buttons || e.pointerType === 'touch') {
+    lastMove = null;
+    return;
+  }
+  const now = performance.now();
+  const r = renderer.domElement.getBoundingClientRect();
+  const dx = lastMove ? e.clientX - lastMove.x : 0;
+  const dy = lastMove ? e.clientY - lastMove.y : 0;
+  const dtm = lastMove ? Math.max(now - lastMove.t, 8) : 16;
+  lastMove = { x: e.clientX, y: e.clientY, t: now };
+  const speed = Math.hypot(dx, dy) / dtm; // px/ms
+  if (speed < 0.02) return;
+  pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects(Object.values(meshes), false)[0];
+  if (!hit) return;
+  camRight.setFromMatrixColumn(camera.matrixWorld, 0);
+  camUp.setFromMatrixColumn(camera.matrixWorld, 1);
+  const dir = raycaster.ray.direction.clone().multiplyScalar(0.8).addScaledVector(camRight, dx * 0.02).addScaledVector(camUp, -dy * 0.02).normalize();
+  drape.push(hit.point, dir, Math.min(0.004, speed * 0.0016));
+  drape.breeze(camRight.multiplyScalar(dx * 0.008).addScaledVector(camUp, -dy * 0.008).addScaledVector(raycaster.ray.direction, speed * 0.15));
+});
+renderer.domElement.addEventListener('pointerleave', () => (lastMove = null));
+// En pantallas táctiles, un toque sobre la tela la empuja.
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!drape || e.pointerType !== 'touch') return;
+  const r = renderer.domElement.getBoundingClientRect();
+  pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects(Object.values(meshes), false)[0];
+  if (!hit) return;
+  drape.push(hit.point, raycaster.ray.direction, 0.005, 0.09);
+  drape.breeze(raycaster.ray.direction.clone().multiplyScalar(0.6));
+});
+
 document.getElementById('reset').addEventListener('click', () => {
   Object.assign(params, DEFAULTS);
   Object.assign(colors, COLORS);
@@ -309,6 +386,11 @@ renderer.setAnimationLoop((now) => {
     needsRender = true;
   }
   if (controls.update() || controls.autoRotate) needsRender = true;
+  if (drape && !drape.sleeping) {
+    drape.step(1 / 60);
+    drape.updateMeshes();
+    needsRender = true;
+  }
   if (!needsRender) return;
   needsRender = false;
   renderer.render(scene, camera);
@@ -318,4 +400,4 @@ syncControls();
 rebuild();
 resize();
 
-window.__camiseta = { params, colors, rebuild, applyLook, camera, controls, scene, meshes, view, goToView };
+window.__camiseta = { params, colors, rebuild, applyLook, camera, controls, scene, meshes, view, goToView, setMode, drape: () => drape };

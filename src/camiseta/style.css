@@ -136,7 +136,7 @@ body {
 }
 .mode {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 4px;
   padding: 4px;
   border-radius: 10px;
@@ -144,14 +144,14 @@ body {
   border: 1px solid var(--line);
 }
 .mode button {
-  font: 600 15px/1 var(--display);
-  letter-spacing: 0.06em;
+  font: 600 14px/1 var(--display);
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
   background: none;
   border: 0;
   border-radius: 7px;
-  padding: 10px 8px;
+  padding: 10px 4px;
   cursor: pointer;
 }
 .mode button[aria-pressed='true'] {

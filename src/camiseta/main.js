@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS } from './shirt.js';
-import { makeHanger, HangingShirt } from './drape.js';
+import { makeHanger, makeClipHanger, HangingShirt } from './drape.js';
 import { makeMeshNormalMap, makeRibNormalMap, makeUVMap, MESH_TILE, RIB_TILE } from './fabric.js';
 import './style.css';
 
@@ -128,7 +128,7 @@ function fabricMaterial(rib) {
 
 const params = { ...DEFAULTS };
 const colors = { ...COLORS };
-const view = { spin: false, uvmap: false, mode: 'body' }; // body: con cuerpo · hang: colgada
+const view = { spin: false, uvmap: false, mode: 'body' }; // body: con cuerpo · hanger: en percha · clips: con broches
 
 const shirt = new THREE.Group();
 scene.add(shirt);
@@ -142,16 +142,19 @@ for (const [k, def] of Object.entries(PARTS)) {
 }
 const uvMaps = {};
 
-// Percha (sólo en la versión colgada).
-const hangerGroup = new THREE.Group();
-const woodMat = new THREE.MeshStandardMaterial({ color: 0xb48a60, roughness: 0.62, metalness: 0 });
-const wireMat = new THREE.MeshStandardMaterial({ color: 0x9a9da2, roughness: 0.35, metalness: 0.85 });
-const barMesh = new THREE.Mesh(new THREE.BufferGeometry(), woodMat);
-const hookMesh = new THREE.Mesh(new THREE.BufferGeometry(), wireMat);
-barMesh.castShadow = hookMesh.castShadow = true;
-barMesh.receiveShadow = true;
-hangerGroup.add(barMesh, hookMesh);
-scene.add(hangerGroup);
+// Percha o broches (sólo en la versión colgada).
+const supportGroup = new THREE.Group();
+const supportMeshes = {
+  wood: new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0xb48a60, roughness: 0.62, metalness: 0 })),
+  metal: new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0x9a9da2, roughness: 0.35, metalness: 0.85 })),
+  plastic: new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0x24272c, roughness: 0.55, metalness: 0.1 })),
+};
+for (const m of Object.values(supportMeshes)) {
+  m.castShadow = m.receiveShadow = true;
+  supportGroup.add(m);
+}
+scene.add(supportGroup);
+const hanging = () => view.mode !== 'body';
 
 let built = null;
 let drape = null;
@@ -161,16 +164,23 @@ function rebuild() {
     mesh.geometry.dispose();
     mesh.geometry = built.geos[k];
   }
-  // Colgada: la tela arranca con la forma puesta y cae sobre la percha.
+  // Colgada: la tela arranca con la forma puesta y cae (sobre la percha, o
+  // sostenida por los broches).
   drape = null;
-  hangerGroup.visible = view.mode === 'hang';
-  if (view.mode === 'hang') {
-    const hanger = makeHanger(built.measures);
-    barMesh.geometry.dispose();
-    hookMesh.geometry.dispose();
-    barMesh.geometry = hanger.bar;
-    hookMesh.geometry = hanger.hook;
-    drape = new HangingShirt(built, hanger);
+  supportGroup.visible = hanging();
+  if (hanging()) {
+    let support;
+    if (view.mode === 'hanger') {
+      support = makeHanger(built.measures);
+      drape = new HangingShirt(built, support);
+    } else {
+      drape = new HangingShirt(built, { kind: 'clips' });
+      support = makeClipHanger(drape.clips);
+    }
+    for (const [k, m] of Object.entries(supportMeshes)) {
+      m.geometry.dispose();
+      m.geometry = support[k] || new THREE.BufferGeometry();
+    }
   }
   applyLook();
   updateSpec();
@@ -266,12 +276,13 @@ document.getElementById('uvmap').addEventListener('change', (e) => {
   view.uvmap = e.target.checked;
   applyLook();
 });
-// Presentación: con cuerpo (forma fija) o colgada (tela simulada).
+// Presentación: con cuerpo (forma fija) o colgada, en percha o con broches
+// (tela simulada).
 const modeButtons = [...document.querySelectorAll('.mode button')];
 function setMode(mode) {
   // La colgada queda más baja (el gancho arriba, la tela estirada por su
   // peso): la vista se centra un poco más abajo.
-  const dy = (mode === 'hang' ? -0.42 : CENTER.y) - controls.target.y;
+  const dy = (mode === 'body' ? CENTER.y : -0.4) - controls.target.y;
   controls.target.y += dy;
   camera.position.y += dy;
   lightTarget.position.y = controls.target.y;
@@ -279,7 +290,11 @@ function setMode(mode) {
   view.mode = mode;
   modeButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
   document.querySelector('.hint').textContent =
-    mode === 'hang' ? 'Pasá el mouse sobre la tela para moverla · arrastrá para girar' : 'Arrastrá para girar · rueda o pellizco para acercar';
+    mode === 'body'
+      ? 'Arrastrá para girar · rueda o pellizco para acercar'
+      : matchMedia('(hover: none)').matches
+        ? 'Tocá la tela para moverla · arrastrá para girar'
+        : 'Pasá el mouse sobre la tela para moverla · arrastrá para girar';
   rebuild();
 }
 modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));

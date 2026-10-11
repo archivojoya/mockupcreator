@@ -269,6 +269,13 @@ document.getElementById('uvmap').addEventListener('change', (e) => {
 // Presentación: con cuerpo (forma fija) o colgada (tela simulada).
 const modeButtons = [...document.querySelectorAll('.mode button')];
 function setMode(mode) {
+  // La colgada queda más baja (el gancho arriba, la tela estirada por su
+  // peso): la vista se centra un poco más abajo.
+  const dy = (mode === 'hang' ? -0.42 : CENTER.y) - controls.target.y;
+  controls.target.y += dy;
+  camera.position.y += dy;
+  lightTarget.position.y = controls.target.y;
+  controls.update();
   view.mode = mode;
   modeButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
   document.querySelector('.hint').textContent =

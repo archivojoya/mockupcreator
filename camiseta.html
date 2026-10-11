@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Camiseta Deportiva 3D</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" />
+  </head>
+  <body>
+    <main class="studio">
+      <section id="stage" class="stage" aria-label="Camiseta en 3D">
+        <div class="views" role="group" aria-label="Vistas">
+          <button type="button" data-view="0">Frente</button>
+          <button type="button" data-view="1">Perfil</button>
+          <button type="button" data-view="2">Espalda</button>
+        </div>
+        <p class="hint">Arrastrá para girar · rueda o pellizco para acercar</p>
+      </section>
+
+      <aside class="panel">
+        <header class="title">
+          <h1>Camiseta deportiva</h1>
+          <p>Cuello redondo · modelo 3D paramétrico</p>
+        </header>
+
+        <section class="group" aria-labelledby="g-forma">
+          <h2 id="g-forma">Forma</h2>
+          <div class="control">
+            <label for="fit">Calce</label>
+            <output id="fit-out" for="fit"></output>
+            <input id="fit" type="range" min="0" max="1" step="0.01" />
+          </div>
+          <div class="control">
+            <label for="length">Largo</label>
+            <output id="length-out" for="length"></output>
+            <input id="length" type="range" min="0.62" max="0.82" step="0.005" />
+          </div>
+          <div class="control">
+            <label for="sleeveLength">Largo de manga</label>
+            <output id="sleeveLength-out" for="sleeveLength"></output>
+            <input id="sleeveLength" type="range" min="0.13" max="0.3" step="0.005" />
+          </div>
+          <div class="control">
+            <label for="sleeveAngle">Apertura de mangas</label>
+            <output id="sleeveAngle-out" for="sleeveAngle"></output>
+            <input id="sleeveAngle" type="range" min="30" max="65" step="1" />
+          </div>
+          <div class="control">
+            <label for="neckDepth">Escote</label>
+            <output id="neckDepth-out" for="neckDepth"></output>
+            <input id="neckDepth" type="range" min="0.055" max="0.12" step="0.001" />
+          </div>
+        </section>
+
+        <section class="group" aria-labelledby="g-colores">
+          <h2 id="g-colores">Colores</h2>
+          <div class="swatches">
+            <label class="swatch"><input id="c-body" type="color" /><span>Cuerpo</span></label>
+            <label class="swatch"><input id="c-sleeves" type="color" /><span>Mangas</span></label>
+            <label class="swatch"><input id="c-collar" type="color" /><span>Cuello</span></label>
+            <label class="swatch"><input id="c-cuffs" type="color" /><span>Puños</span></label>
+          </div>
+        </section>
+
+        <section class="group" aria-labelledby="g-vista">
+          <h2 id="g-vista">Vista</h2>
+          <label class="toggle"><input id="spin" type="checkbox" /> Girar sola</label>
+          <label class="toggle"><input id="uvmap" type="checkbox" /> Mapa de estampado</label>
+          <button id="reset" type="button" class="reset">Restablecer forma y colores</button>
+        </section>
+
+        <section class="group spec" aria-labelledby="g-ficha">
+          <h2 id="g-ficha">Ficha</h2>
+          <dl>
+            <div><dt>Contorno de pecho</dt><dd id="s-chest"></dd></div>
+            <div><dt>Ancho de hombros</dt><dd id="s-shoulders"></dd></div>
+            <div><dt>Largo total</dt><dd id="s-length"></dd></div>
+            <div><dt>Boca de manga</dt><dd id="s-sleeve"></dd></div>
+          </dl>
+        </section>
+      </aside>
+    </main>
+    <script type="module" src="/src/camiseta/main.js"></script>
+  </body>
+</html>

@@ -29,6 +29,37 @@ la ventana) se carga cualquier otro molde.
   lista de partes la resalta en 3D.
 - **Descargar PNG** guarda el render actual en alta resolución.
 
+## Camiseta deportiva paramétrica
+
+`camiseta.html` (en desarrollo: `http://localhost:5173/camiseta.html`) es una
+prueba aparte, hecha desde cero: una camiseta deportiva de cuello redondo
+modelada directamente con código, sin moldes, sin Blender y sin simulación. Se
+ve flotando con volumen, como puesta en un cuerpo invisible.
+
+- **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
+  de mangas y profundidad del escote. La malla se rehace al instante.
+- **Colores** por parte: cuerpo, mangas, cuello y puños.
+- **Mapa de estampado**: muestra una grilla de 5 cm con el nombre de cada pieza,
+  para ver cómo caería un diseño. Las coordenadas de textura están en metros
+  sobre la tela, listas para estampar más adelante.
+- **Ficha**: contorno de pecho, ancho de hombros, largo y boca de manga.
+
+Cómo se arma (`src/camiseta/shirt.js`):
+
+- **Torso**: anillos horizontales desde el ruedo hasta el escote. Cerca del
+  escote cada columna se curva hacia el contorno del cuello; a los costados esa
+  curva es la línea del hombro.
+- **Sisas**: un hueco en la grilla del torso a cada lado, deformado hasta
+  quedar ovalado. La manga arranca exactamente de ese borde, así la costura
+  queda cerrada.
+- **Mangas**: de la sisa a un ruedo circular alrededor del eje del brazo, con
+  puño aparte.
+- **Cuello y dobladillos**: tira acanalada sobre el escote; ruedo y puños se dan
+  vuelta hacia adentro y muestran el espesor de la tela.
+- **Terminación**: pliegues suaves (caída hacia el ruedo, tensiones desde la
+  axila), costuras hundidas, pespunte doble en ruedo y puños, y relieve de malla
+  deportiva.
+
 ## Cómo preparar el SVG
 
 Cada pieza debe estar en un grupo (`<g>`) cuyo id contenga:
@@ -122,6 +153,9 @@ El molde de ejemplo de fútbol se genera sobre el molde canónico con
 - `src/atlas.js` — textura con todas las piezas coloreadas, dobladillo con
   costura y mapa de relieve del tejido.
 - `src/main.js` — escena, iluminación de estudio suave y panel de control.
+- `camiseta.html` y `src/camiseta/` — la camiseta deportiva paramétrica:
+  `shirt.js` (geometría), `fabric.js` (texturas de la tela), `main.js` (escena
+  y controles) y `style.css`.
 
 ## Rendimiento
 

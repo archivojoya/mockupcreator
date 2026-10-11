@@ -84,7 +84,7 @@ export function measures(p) {
     fit: f,
     neck: { a: 0.088, b: 0.08, c: -0.014 }, // contorno del cuello en el hombro
     dropF: p.neckDepth,
-    dropB: 0.02,
+    dropB: 0.014,
     shY: -0.046, // altura de la punta del hombro
     pitY: -0.205 - 0.03 * f, // altura de la axila
     n: 2.35, // exponente de los cortes (2 = elipse)
@@ -132,9 +132,11 @@ export function girth(M, y) {
   return per;
 }
 
+// Altura del escote: baja al frente y apenas atrás. Con el exponente la curva
+// llega plana al punto del hombro (sin pico donde se juntan frente y espalda).
 const neckY = (M, th) => {
   const c = Math.cos(th);
-  return c >= 0 ? -M.dropF * c : M.dropB * c;
+  return -(c >= 0 ? M.dropF : M.dropB) * Math.abs(c) ** 1.6;
 };
 
 // Punto del torso para el ángulo th (0 frente, π/2 costado izquierdo, π
@@ -479,26 +481,36 @@ export function buildShirt(params) {
     for (let k = 1; k <= L; k++) cum.push(cum[k - 1] + loop[k % L].distanceTo(loop[k - 1]));
     const per = cum[L];
     const rows = SLEEVE_ROWS + CUFF_ROWS;
-    const sCuff = 1 - S.cuff / S.len;
-    const sRow = (r) => (r <= SLEEVE_ROWS ? (sCuff * r) / SLEEVE_ROWS : lerp(sCuff, 1, (r - SLEEVE_ROWS) / CUFF_ROWS));
+    // Costura del puño: un anillo paralelo al ruedo, así el puño es una
+    // banda recta del mismo ancho todo alrededor.
+    const cuffC = hemC.clone().addScaledVector(dir, -S.cuff);
+    const sRow = (r) => Math.min(1, r / SLEEVE_ROWS);
     const SW = L + 1; // columna repetida al final (costura de abajo)
     const pos = new Float32Array(SW * (rows + 1) * 3);
     const P = new THREE.Vector3();
     const H = new THREE.Vector3();
+    const C = new THREE.Vector3();
     for (let k = 0; k <= L; k++) {
       const Lp = loop[k % L];
       const phi = (cum[k] / per) * Math.PI * 2;
-      H.copy(hemC).addScaledVector(up, -Math.cos(phi) * S.rHem).addScaledVector(fwd, Math.sin(phi) * S.rHem);
-      const span = Lp.distanceTo(H);
-      for (let r = 0; r <= rows; r++) {
-        const s = sRow(r);
+      const ou = -Math.cos(phi) * S.rHem;
+      const of = Math.sin(phi) * S.rHem;
+      H.copy(hemC).addScaledVector(up, ou).addScaledVector(fwd, of);
+      C.copy(cuffC).addScaledVector(up, ou).addScaledVector(fwd, of);
+      const span = Lp.distanceTo(C);
+      for (let r = SLEEVE_ROWS + 1; r <= rows; r++) {
+        P.lerpVectors(C, H, (r - SLEEVE_ROWS) / CUFF_ROWS);
+        P.toArray(pos, (r * SW + k) * 3);
+      }
+      for (let r = 0; r <= SLEEVE_ROWS; r++) {
+        const s = r / SLEEVE_ROWS;
         const s2 = s * s;
         const s3 = s2 * s;
         const h00 = 2 * s3 - 3 * s2 + 1;
         const h10 = s3 - 2 * s2 + s;
         const h01 = -2 * s3 + 3 * s2;
         const h11 = s3 - s2;
-        P.copy(Lp).multiplyScalar(h00).addScaledVector(dir, h10 * span * 0.95).addScaledVector(H, h01).addScaledVector(dir, h11 * span * 0.9);
+        P.copy(Lp).multiplyScalar(h00).addScaledVector(dir, h10 * span * 0.95).addScaledVector(C, h01).addScaledVector(dir, h11 * span * 0.9);
         P.toArray(pos, (r * SW + k) * 3);
       }
     }
@@ -519,7 +531,7 @@ export function buildShirt(params) {
       const b = (r * SW + L) * 3;
       for (let c = 0; c < 3; c++) nrm[a + c] = nrm[b + c] = (nrm[a + c] + nrm[b + c]) / 2;
     }
-    for (let r = 1; r <= rows; r++) {
+    for (let r = 1; r < SLEEVE_ROWS; r++) {
       const s = sRow(r);
       for (let k = 0; k <= L; k++) {
         const f = cum[k] / per;
@@ -527,7 +539,7 @@ export function buildShirt(params) {
         const under = Math.exp(-((dphi / 0.13) ** 2)) * smoothstep(0, 0.18, s) * (1 - smoothstep(0.4, 0.62, s));
         const v = (r * SW + k) * 3;
         let d = (0.0026 + 0.002 * M.fit) * under * Math.sin(2 * Math.PI * (s * S.len / 0.045 + f * 4));
-        d += 0.0007 * noise3(pos[v] * 20, pos[v + 1] * 20, pos[v + 2] * 20) * smoothstep(0, 0.1, s);
+        d += 0.0007 * noise3(pos[v] * 20, pos[v + 1] * 20, pos[v + 2] * 20) * smoothstep(0, 0.1, s) * (1 - smoothstep(0.8, 1, s));
         pos[v] += nrm[v] * d;
         pos[v + 1] += nrm[v + 1] * d;
         pos[v + 2] += nrm[v + 2] * d;
@@ -596,6 +608,9 @@ function buildCollar(M, neck) {
   }
   const h = 0.021;
   const th = 0.0034;
+  const center = new THREE.Vector3();
+  for (const p of ring) center.add(p);
+  center.divideScalar(n);
   // Perfil (subida, hacia afuera): cara de afuera, borde enrollado, cara de
   // adentro que baja un poco dentro de la camiseta.
   const prof = [[0, 0], [h * 0.5, -0.0006], [h - th / 2, -0.0012]];
@@ -608,9 +623,28 @@ function buildCollar(M, neck) {
   const SW = n + 1;
   const pos = new Float32Array(SW * P * 3);
   const uv = new Float32Array(SW * P * 2);
-  const center = new THREE.Vector3();
-  for (const p of ring) center.add(p);
-  center.divideScalar(n);
+  // Arriba: siguiendo la tela hacia el cuello, casi vertical e inclinado un
+  // poco hacia adentro para abrazar el cuello; suavizado alrededor para que
+  // el borde de arriba sea parejo.
+  const vertical = new THREE.Vector3(0, 1, 0);
+  let ups = base.map((b, k) => {
+    const o = new THREE.Vector3(ring[k].x - center.x, 0, ring[k].z - center.z).normalize();
+    return new THREE.Vector3().subVectors(b, below[k]).normalize().lerp(vertical, 0.85).normalize().addScaledVector(o, -0.16).normalize();
+  });
+  for (let pass = 0; pass < 6; pass++) ups = ups.map((_, k) => ups[(k - 1 + n) % n].clone().add(ups[(k + 1) % n]).addScaledVector(ups[k], 2).normalize());
+  // El borde de arriba no puede subir en punta donde el escote es más alto
+  // (junto al hombro): se empareja su altura alrededor del cuello y, donde
+  // baja, la tira se inclina hacia adentro (abraza el cuello) sin acortarse.
+  let ty = ring.map((r, k) => r.y + ups[k].y * h);
+  const minRise = 0.3 * h;
+  for (let pass = 0; pass < 80; pass++) ty = ty.map((y, k) => Math.max((ty[(k - 1 + n) % n] + ty[(k + 1) % n] + 2 * y) / 4, ring[k].y + minRise));
+  ups = ups.map((u0, k) => {
+    const rise = Math.min(h, ty[k] - ring[k].y);
+    const hz = new THREE.Vector3(u0.x, 0, u0.z);
+    if (hz.lengthSq() < 1e-8) hz.set(center.x - ring[k].x, 0, center.z - ring[k].z);
+    hz.normalize().multiplyScalar(Math.sqrt(Math.max(0, h * h - rise * rise)));
+    return new THREE.Vector3(hz.x, rise, hz.z).normalize();
+  });
   const up = new THREE.Vector3();
   const out = new THREE.Vector3();
   const q = new THREE.Vector3();
@@ -618,12 +652,9 @@ function buildCollar(M, neck) {
   for (let i = 0; i <= n; i++) {
     const k = i % n;
     if (i > 0) u += ring[k].distanceTo(ring[i - 1]);
-    // Arriba: siguiendo la tela hacia el cuello, inclinado un poco hacia
-    // adentro para abrazar el cuello.
-    up.subVectors(base[k], below[k]).normalize().lerp(new THREE.Vector3(0, 1, 0), 0.85).normalize();
-    out.set(ring[k].x - center.x, 0, ring[k].z - center.z).normalize();
-    up.addScaledVector(out, -0.16).normalize();
+    up.copy(ups[k]);
     // Afuera: perpendicular a "arriba" dentro del plano vertical radial.
+    out.set(ring[k].x - center.x, 0, ring[k].z - center.z).normalize();
     out.addScaledVector(up, -out.dot(up)).normalize();
     let v = 0;
     for (let j = 0; j < P; j++) {

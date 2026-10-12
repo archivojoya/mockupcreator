@@ -36,12 +36,13 @@ prueba aparte, hecha desde cero: una camiseta deportiva de cuello redondo
 modelada directamente con código, sin moldes, sin Blender y sin simulación. Se
 ve flotando con volumen, como puesta en un cuerpo invisible.
 
-- **Presentación**: con cuerpo (forma fija, como puesta), en percha (de madera,
-  paralela a la camiseta) o con broches (dos broches colgados de una barra). La
-  percha y los broches toman la camiseta un poco detrás de la costura del
-  hombro, así el frente pasa por arriba y se ve entero. Colgada, la tela se
-  simula en vivo: al pasar el mouse se empuja y se balancea, y después se
-  acomoda sola (en el celular, con un toque).
+- **Presentación**: con cuerpo (forma fija, como puesta), en percha o con
+  broches. La percha es de madera, plana y paralela a la camiseta, con el arco
+  de una percha de verdad y bordes definidos; apoya bajo la costura de los
+  hombros. Los dos broches cuelgan de una barra y pellizcan la espalda apenas
+  detrás de la costura. Colgada, la tela se simula en vivo: al pasar el mouse
+  se empuja y se balancea, y después se acomoda sola (en el celular, con un
+  toque).
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
   de mangas y profundidad del escote. La malla se rehace al instante.
 - **Colores** por parte: cuerpo, mangas, cuello y puños.
@@ -80,11 +81,14 @@ conserva algo de cuerpo.
 
 Ninguna parte de la tela atraviesa a otra: cada punto de la simulación tiene un
 grosor de 1,1 cm y ningún punto que en la tela esté lejos puede acercarse más
-que eso (manga contra cuerpo, frente contra espalda, pliegues). Una vez por
-cuadro se buscan los pares cercanos con una grilla espacial y en cada paso sólo
-se revisan esos pares; además ningún punto se mueve más de 4 mm por paso, así
-un empujón fuerte no hace que una capa salte a través de otra. Cuando la tela se
-queda quieta la simulación se duerme.
+que eso (manga contra cuerpo, frente contra espalda, pliegues). El centro de
+cada celda de la malla también choca, así ningún punto pasa por el medio de una
+celda grande. Los pares cercanos se buscan con una grilla espacial sólo cuando
+algún punto se movió más de medio grosor desde la última búsqueda, y en cada
+paso sólo se revisan esos pares; además ningún punto se mueve más de 4 mm por
+paso, así un empujón fuerte no hace que una capa salte a través de otra. Los
+dobladillos siguen la curva de su propia tela. Cuando la tela se queda quieta
+la simulación se duerme.
 
 ## Cómo preparar el SVG
 

@@ -87,8 +87,11 @@ celda grande. Los pares cercanos se buscan con una grilla espacial sólo cuando
 algún punto se movió más de medio grosor desde la última búsqueda, y en cada
 paso sólo se revisan esos pares; además ningún punto se mueve más de 4 mm por
 paso, así un empujón fuerte no hace que una capa salte a través de otra. Los
-dobladillos siguen la curva de su propia tela. Cuando la tela se queda quieta
-la simulación se duerme.
+dobladillos siguen la curva de su propia tela. En reposo la camiseta cuelga
+simétrica: el lado derecho (visto de frente) copia en espejo al izquierdo, y la
+forma de partida se hace simétrica antes de armar la simulación. Después de un
+empujón la tela se mueve libre y a los dos segundos vuelve de a poco a la
+simetría. Cuando la tela se queda quieta la simulación se duerme.
 
 ## Cómo preparar el SVG
 

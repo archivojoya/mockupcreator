@@ -35,6 +35,11 @@ const CLIP_ROWS = [1, 2];
 const CLIP_BACK = 0.015;
 const PINCH = 0.0035;
 const LIP_ROWS = 4; // filas de tela que sigue cada dobladillo (más que su alto)
+// En reposo la camiseta cuelga simétrica: el lado derecho (visto de frente)
+// copia en espejo al izquierdo. Después de un empujón se mueve libre y, pasado
+// este tiempo, vuelve de a poco a quedar simétrica.
+const MIRROR_WAIT = 2;
+const MIRROR_BLEND = 1.5;
 // Grosor de la tela para el choque entre puntos: dos puntos que no son
 // vecinos en la tela no se acercan más que esto (algo menos que la diagonal
 // de una celda de la malla, así ningún punto pasa entre otros cuatro).
@@ -376,11 +381,42 @@ export class HangingShirt {
     this.p = Float32Array.from(pos);
     this.q = Float32Array.from(pos);
     this.w = new Float32Array(n).fill(1); // 0 = adherida a la percha o al broche
+    // Espejo: columna j del torso con C - j, y cada punto de una manga con el
+    // mismo de la otra. Manda el lado izquierdo visto de frente (x < 0). La
+    // forma de partida se hace simétrica antes de armar las restricciones
+    // (el molde tiene pliegues que no son iguales de los dos lados): así la
+    // camiseta simétrica es también la que está en equilibrio.
+    const mirror = new Int32Array(n).fill(-1);
+    const P = this.p;
+    for (const key of ['front', 'back'])
+      for (let i = 0; i <= NC; i++)
+        for (let j = 0; j <= C; j++) {
+          const a = map[key][i * WC + j];
+          const m = map[key][i * WC + C - j];
+          if (a >= 0 && m >= 0) mirror[a] = m;
+        }
+    for (let k = 0; k < sleeveMap.sleeveL.length; k++) {
+      const a = sleeveMap.sleeveL[k];
+      const m = sleeveMap.sleeveR[k];
+      if (mirror[a] < 0 && mirror[m] < 0) {
+        mirror[a] = m;
+        mirror[m] = a;
+      }
+    }
+    const mpairs = [];
+    const mid = [];
+    for (let i = 0; i < n; i++) {
+      if (mirror[i] === i) mid.push(i);
+      else if (mirror[i] >= 0 && P[i * 3] < 0) mpairs.push(i, mirror[i]);
+    }
+    this.mirrorPairs = Int32Array.from(mpairs);
+    this.midline = Int32Array.from(mid);
+    this.lastPoke = -Infinity;
+    this.symmetrize(1);
 
     // Restricciones de largo: lados y diagonales de cada celda, y "flexión"
     // (saltando un punto) con menos rigidez.
     const pairs = new Map();
-    const P = this.p;
     const dist = (a, b) => Math.hypot(P[a * 3] - P[b * 3], P[a * 3 + 1] - P[b * 3 + 1], P[a * 3 + 2] - P[b * 3 + 2]);
     const link = (a, b, kind) => {
       if (a < 0 || b < 0 || a === b) return;
@@ -733,10 +769,12 @@ export class HangingShirt {
       P[i * 3 + 1] += dir.y * w;
       P[i * 3 + 2] += dir.z * w;
     }
+    this.lastPoke = this.time;
     this.wake();
   }
 
   breeze(v) {
+    this.lastPoke = this.time;
     this.wind.add(v);
     if (this.wind.length() > 1.4) this.wind.setLength(1.4);
     this.wake();
@@ -754,6 +792,9 @@ export class HangingShirt {
     const wy = this.wind.y * h * h;
     const wz = this.wind.z * h * h;
     let motion = 0;
+    // Simetría: completa (en cada subpaso) hasta el primer empujón y otra vez
+    // un rato después del último; en el medio, se mezcla de a poco.
+    const mirrorT = Math.min(1, Math.max(0, (this.time - this.lastPoke - MIRROR_WAIT) / MIRROR_BLEND));
     for (let s = 0; s < SUBSTEPS; s++) {
       for (let i = 0; i < n; i++) {
         if (!this.w[i]) continue;
@@ -791,13 +832,44 @@ export class HangingShirt {
         this.holdApart(this.layers, this.layerGap, 0.5);
         if (this.hanger) this.collideHanger();
       }
+      if (mirrorT >= 1) this.symmetrize(1);
     }
+    if (mirrorT > 0 && mirrorT < 1) this.symmetrize(mirrorT * mirrorT * (3 - 2 * mirrorT));
     for (let i = 0; i < n * 3; i++) motion = Math.max(motion, Math.abs(P[i] - Q[i]));
     this.wind.multiplyScalar(Math.exp(-2.2 * dt));
     if (motion < 1e-4 && this.wind.lengthSq() < 1e-3) this.calm++;
     else this.calm = 0;
     if (this.calm > 40 && this.time > 1.5) this.sleeping = true;
     return true;
+  }
+
+  // Lleva cada punto del lado derecho (y su velocidad) hacia el espejo de su
+  // par del izquierdo; k = 1 lo copia exacto. Los puntos del medio quedan en
+  // x = 0.
+  symmetrize(k) {
+    const P = this.p;
+    const Q = this.q;
+    const M = this.mirrorPairs;
+    for (let c = 0; c < M.length; c += 2) {
+      const a = M[c] * 3;
+      const b = M[c + 1] * 3;
+      const dx = (-P[a] - P[b]) * k;
+      const dy = (P[a + 1] - P[b + 1]) * k;
+      const dz = (P[a + 2] - P[b + 2]) * k;
+      const vx = (-Q[a] - Q[b]) * k;
+      const vy = (Q[a + 1] - Q[b + 1]) * k;
+      const vz = (Q[a + 2] - Q[b + 2]) * k;
+      P[b] += dx;
+      P[b + 1] += dy;
+      P[b + 2] += dz;
+      Q[b] += vx;
+      Q[b + 1] += vy;
+      Q[b + 2] += vz;
+    }
+    for (const i of this.midline) {
+      P[i * 3] *= 1 - k;
+      Q[i * 3] *= 1 - k;
+    }
   }
 
   tethers() {

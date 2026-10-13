@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS } from './shirt.js';
 import { makeHanger, makeClipHanger, HangingShirt } from './drape.js';
-import { makeMeshNormalMap, makeRibNormalMap, makeUVMap, MESH_TILE, RIB_TILE } from './fabric.js';
+import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
 import './style.css';
 
 const COLORS = { body: '#c81e3a', sleeves: '#c81e3a', collar: '#17191d', cuffs: '#17191d' };
@@ -36,7 +36,6 @@ stage.prepend(renderer.domElement);
 const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.42;
 
 const camera = new THREE.PerspectiveCamera(28, 1, 0.05, 20);
 camera.position.set(0, -0.28, 2.15);
@@ -52,36 +51,76 @@ controls.maxPolarAngle = 2.35;
 controls.autoRotateSpeed = 1.6;
 controls.update();
 
-// Luces de estudio que acompañan a la cámara: la camiseta siempre se ve bien
-// iluminada desde donde se la mire.
-scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa0a8, 0.45));
+// Luces que acompañan a la cámara: la camiseta siempre se ve bien iluminada
+// desde donde se la mire. Cuatro ambientes:
+// - Estudio: luz principal alta de costado, relleno suave y un contraluz.
+// - Pareja: luz amplia de frente y sombras muy suaves; lo que mira de frente
+//   se ve con el color elegido tal cual (para comparar colores).
+// - Contraste: luz rasante de costado, casi sin relleno; marca el relieve de
+//   la tela y los pliegues.
+// - Día: sol cálido alto y cielo azulado, sombras más definidas.
+const LIGHTS = {
+  studio: { key: [0xfff7ee, 2.1, [1.3, 1.5, 0.4]], fill: [0xeef3ff, 0.55, [-1.8, 0.3, 0.3]], rim: [0xffffff, 0.8, [0.4, 1.6, -3]], hemi: [0xffffff, 0x9aa0a8, 0.45], env: 0.42, soft: 5 },
+  soft: { key: [0xffffff, 0.84, [0.45, 0.7, 1]], fill: [0xffffff, 0.44, [-1.2, 0.25, 0.9]], rim: [0xffffff, 0.15, [0.4, 1.6, -3]], hemi: [0xffffff, 0xd4d7db, 0.4], env: 0.33, soft: 9 },
+  contrast: { key: [0xfff1e2, 3.1, [2.4, 0.9, -0.15]], fill: [0xdfe8ff, 0.1, [-1.8, 0.3, 0.3]], rim: [0xffffff, 1.3, [-0.7, 1.4, -3]], hemi: [0xffffff, 0x6e737a, 0.16], env: 0.16, soft: 2 },
+  day: { key: [0xfff0d8, 2.6, [1.1, 2.3, 0.7]], fill: [0xcfe0ff, 0.5, [-1.6, 0.6, 0.4]], rim: [0xfff6e8, 0.55, [0.4, 1.6, -3]], hemi: [0xcfe2ff, 0x8c8a7e, 0.6], env: 0.5, soft: 2.5 },
+};
+const hemi = new THREE.HemisphereLight(0xffffff, 0x9aa0a8, 0.45);
+scene.add(hemi);
 const lightTarget = new THREE.Object3D();
 lightTarget.position.copy(CENTER);
 scene.add(lightTarget);
-const key = new THREE.DirectionalLight(0xfff7ee, 2.1);
-key.position.set(1.3, 1.5, 0.4);
+const key = new THREE.DirectionalLight();
 key.target = lightTarget;
 key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
 Object.assign(key.shadow.camera, { left: -0.6, right: 0.6, top: 0.6, bottom: -0.6, near: 0.5, far: 6 });
-key.shadow.radius = 5;
 key.shadow.bias = -0.0003;
 key.shadow.normalBias = 0.006;
-const fill = new THREE.DirectionalLight(0xeef3ff, 0.55);
-fill.position.set(-1.8, 0.3, 0.3);
+const fill = new THREE.DirectionalLight();
 fill.target = lightTarget;
-const rim = new THREE.DirectionalLight(0xffffff, 0.8);
-rim.position.set(0.4, 1.6, -3);
+const rim = new THREE.DirectionalLight();
 rim.target = lightTarget;
 camera.add(key, fill, rim);
+function applyLights(name) {
+  const L = LIGHTS[name] || LIGHTS.studio;
+  for (const [light, [color, intensity, at]] of [
+    [key, L.key],
+    [fill, L.fill],
+    [rim, L.rim],
+  ]) {
+    light.color.set(color);
+    light.intensity = intensity;
+    light.position.set(...at);
+  }
+  hemi.color.set(L.hemi[0]);
+  hemi.groundColor.set(L.hemi[1]);
+  hemi.intensity = L.hemi[2];
+  scene.environmentIntensity = L.env;
+  key.shadow.radius = L.soft;
+}
 
 // ---------- materiales ----------
 
-const meshNormal = makeMeshNormalMap();
+// Tela: un tejido (relieve, tono y brillo punto a punto) y cómo se ve según
+// la calidad y el jaspeado. Los valores compartidos están en `shared`: al
+// cambiar la tela se cambian una vez para todas las piezas.
+const flatDetail = makeFlatDetail();
 const ribNormal = makeRibNormalMap();
-meshNormal.repeat.set(1 / MESH_TILE, 1 / MESH_TILE);
-ribNormal.repeat.set(1 / RIB_TILE, 1 / RIB_TILE);
-
+const shared = {
+  macroMap: { value: makeMacroMap() },
+  macroTile: { value: MACRO_TILE },
+  feature: { value: 0.002 },
+  roughAdd: { value: 0.05 },
+  irregular: { value: 0 },
+  pills: { value: 0 },
+  pucker: { value: 0 },
+  heather: { value: 0 },
+  zoneOn: { value: 0 },
+  zoneNormal: { value: flatDetail },
+  zoneDetail: { value: flatDetail },
+  zoneTile: { value: new THREE.Vector2(1, 1) },
+};
 function fabricMaterial(rib) {
   const m = new THREE.MeshPhysicalMaterial({
     roughness: 0.9,
@@ -90,30 +129,76 @@ function fabricMaterial(rib) {
     sheen: 0.35,
     sheenRoughness: 0.75,
     sheenColor: new THREE.Color(0xffffff),
-    normalMap: rib ? ribNormal : meshNormal,
-    normalScale: new THREE.Vector2(rib ? 0.55 : 0.35, rib ? 0.55 : 0.35),
+    normalMap: ribNormal,
+    normalScale: new THREE.Vector2(0.55, 0.55),
     side: THREE.DoubleSide,
   });
+  // Tono y aspereza punto a punto del tejido (el cuello acanalado no tiene).
+  const own = { detailMap: { value: flatDetail }, detailTile: { value: new THREE.Vector2(1, 1) } };
+  m.userData = { rib, own };
   m.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, shared, own);
     shader.vertexShader = shader.vertexShader.replace(
       'void main() {',
-      'attribute vec2 seam;\nvarying vec2 vSeam;\nvarying vec2 vCloth;\nvoid main() {\n vSeam = seam;\n vCloth = uv;',
+      'attribute vec2 seam;\nattribute float zone;\nvarying vec2 vSeam;\nvarying vec2 vCloth;\nvarying float vZone;\nvoid main() {\n vSeam = seam;\n vCloth = uv;\n vZone = zone;',
     );
     shader.fragmentShader = shader.fragmentShader
-      .replace('void main() {', 'varying vec2 vSeam;\nvarying vec2 vCloth;\nvoid main() {')
+      .replace(
+        'void main() {',
+        `varying vec2 vSeam;
+varying vec2 vCloth;
+varying float vZone;
+uniform sampler2D detailMap, macroMap, zoneNormal, zoneDetail;
+uniform vec2 detailTile, zoneTile;
+uniform float macroTile, feature, roughAdd, irregular, pills, pucker, heather, zoneOn;
+void main() {
+  // De lejos el relieve es más chico que un píxel: se pasa a aspereza (así
+  // la tela no se ve plástica).
+  vec2 fp = fwidth(vCloth);
+  float fabricBlur = smoothstep(0.35, 1.6, max(fp.x, fp.y) / feature);
+  // Dos copias a escalas distintas: juntas no se repiten.
+  vec3 macro = texture2D(macroMap, vCloth / macroTile).rgb;
+  vec3 macro2 = texture2D(macroMap, vCloth / (macroTile * 1.618) + vec2(0.37, 0.71)).rgb;
+  macro.r = 0.5 * (macro.r + macro2.r);
+  macro.b = max(macro.b, macro2.b);
+  vec4 det = texture2D(detailMap, vCloth / detailTile);
+  float inZone = zoneOn * vZone;
+  if (inZone > 0.001) det = mix(det, texture2D(zoneDetail, vCloth / zoneTile), inZone);
+  float pill = smoothstep(0.35, 0.8, macro.g) * pills;`,
+      )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-  // Costuras: un hundido fino y la tela apenas levantada al lado.
+  // Tono del tejido, hilos jaspeados, irregularidad del teñido y bolitas.
+  diffuseColor.rgb *= 0.5 + det.r;
+  diffuseColor.rgb = mix(diffuseColor.rgb, mix(diffuseColor.rgb, vec3(0.78), 0.55), heather * macro.b);
+  diffuseColor.rgb *= 1.0 + (macro.r - 0.5) * (0.05 + 0.12 * irregular);
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.15 + 0.025, pill * 0.7);
+  // Costuras: un hundido fino y la tela apenas levantada al lado (fruncida
+  // en la tela económica).
   float groove = 1.0 - smoothstep(0.0005, 0.0016, vSeam.x);
   float ridge = smoothstep(0.0016, 0.0028, vSeam.x) * (1.0 - smoothstep(0.0028, 0.0055, vSeam.x));
   diffuseColor.rgb *= 1.0 - 0.34 * groove + 0.05 * ridge;
+  float nearSeam = 1.0 - smoothstep(0.003, 0.013, vSeam.x);
+  diffuseColor.rgb *= 1.0 + pucker * nearSeam * 0.08 * sin((vCloth.x + vCloth.y) * 6.2832 / 0.011);
   // Pespunte doble del ruedo y de los puños.
   float line = max(1.0 - smoothstep(0.0002, 0.00055, abs(vSeam.y - 0.0125)), 1.0 - smoothstep(0.0002, 0.00055, abs(vSeam.y - 0.0185)));
   float dash = smoothstep(0.25, 0.35, fract(vCloth.x / 0.004)) * (1.0 - smoothstep(0.75, 0.85, fract(vCloth.x / 0.004)));
   diffuseColor.rgb *= 1.0 - 0.22 * line * dash;
   // Por dentro la tela queda en sombra.
   if (!gl_FrontFacing) diffuseColor.rgb *= 0.72;`,
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>
+  roughnessFactor = clamp(roughnessFactor + (det.g - 0.5) * 0.5 + roughAdd * fabricBlur + pill * 0.15, 0.04, 1.0);`,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `vec3 mapN = texture2D(normalMap, vNormalMapUv).xyz * 2.0 - 1.0;
+  if (inZone > 0.001) mapN = mix(mapN, texture2D(zoneNormal, vCloth / zoneTile).xyz * 2.0 - 1.0, inZone);
+  mapN.xy *= normalScale * (1.0 + (macro.r - 0.5) * 1.2 * irregular) * (1.0 - 0.5 * fabricBlur);
+  normal = normalize(tbn * mapN);`,
       )
       .replace(
         '#include <lights_fragment_end>',
@@ -124,11 +209,54 @@ function fabricMaterial(rib) {
   return m;
 }
 
+// Cómo devuelve la luz según la calidad: económica (brillo plástico),
+// estándar y premium (mate con un brillo suave y parejo). El algodón tiene
+// algo más de pelusa (brillo suave) que el poliéster.
+const FINISH = [
+  { roughness: 0.68, specularIntensity: 0.48, sheen: 0.12, sheenRoughness: 0.8 },
+  { roughness: 0.9, specularIntensity: 0.15, sheen: 0.35, sheenRoughness: 0.75 },
+  { roughness: 0.87, specularIntensity: 0.2, sheen: 0.62, sheenRoughness: 0.55 },
+];
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+function applyFabric() {
+  const w = WEAVES[fabric.weave] || WEAVES.mesh;
+  const t = weaveTextures(WEAVES[fabric.weave] ? fabric.weave : 'mesh');
+  const q = clamp01(fabric.quality);
+  shared.feature.value = w.feature;
+  shared.roughAdd.value = w.roughAdd;
+  shared.irregular.value = clamp01((0.5 - q) * 2);
+  shared.pills.value = clamp01((0.35 - q) / 0.35);
+  shared.pucker.value = clamp01((0.4 - q) / 0.4);
+  shared.heather.value = clamp01(fabric.heather);
+  shared.zoneOn.value = t.zone ? 1 : 0;
+  if (t.zone) {
+    shared.zoneNormal.value = t.zone.normal;
+    shared.zoneDetail.value = t.zone.detail;
+    shared.zoneTile.value.set(...w.zone.tile);
+  }
+  const [a, b, f] = q < 0.5 ? [FINISH[0], FINISH[1], q * 2] : [FINISH[1], FINISH[2], q * 2 - 1];
+  const cotton = w.fiber === 'cotton' ? 1 : 0;
+  for (const mesh of Object.values(meshes)) {
+    const m = mesh.material;
+    for (const k of Object.keys(a)) m[k] = a[k] + (b[k] - a[k]) * f;
+    m.sheen += 0.08 * cotton;
+    m.roughness = Math.min(1, m.roughness + 0.02 * cotton);
+    if (m.userData.rib) continue;
+    m.normalMap = t.normal;
+    const s = w.scale * (0.85 + 0.3 * q);
+    m.normalScale.set(s, s);
+    m.userData.own.detailMap.value = t.detail;
+    m.userData.own.detailTile.value.set(...w.tile);
+  }
+  requestRender();
+}
+
 // ---------- estado ----------
 
 // Configuración opcional escrita en la página (así se adapta la camiseta sin
 // tocar el código): <script type="application/json" id="camiseta-config">
-// { "params": {...}, "colors": {...}, "mode": "hanger", "spin": false, "uvmap": false }
+// { "params": {...}, "colors": {...}, "fabric": {...}, "light": "studio",
+//   "mode": "hanger", "spin": false, "uvmap": false }
 const CONFIG = (() => {
   try {
     return JSON.parse(document.getElementById('camiseta-config')?.textContent || '{}');
@@ -136,11 +264,17 @@ const CONFIG = (() => {
     return {};
   }
 })();
+// Tela: tejido (ver WEAVES en fabric.js), calidad (0 económica · 0,5
+// estándar · 1 premium), peso (0 liviana · 1 pesada) y jaspeado (0 a 1).
+const FABRIC = { weave: 'mesh', quality: 0.5, weight: 0.5, heather: 0 };
 const BASE_PARAMS = { ...DEFAULTS, ...CONFIG.params };
 const BASE_COLORS = { ...COLORS, ...CONFIG.colors };
+const BASE_FABRIC = { ...FABRIC, ...CONFIG.fabric };
+const BASE_LIGHT = CONFIG.light in LIGHTS ? CONFIG.light : 'studio';
 const params = { ...BASE_PARAMS };
 const colors = { ...BASE_COLORS };
-const view = { spin: !!CONFIG.spin, uvmap: !!CONFIG.uvmap, mode: 'body' }; // body: con cuerpo · hanger: en percha · clips: con broches
+const fabric = { ...BASE_FABRIC };
+const view = { spin: !!CONFIG.spin, uvmap: !!CONFIG.uvmap, mode: 'body', light: BASE_LIGHT }; // body: con cuerpo · hanger: en percha · clips: con broches
 
 const shirt = new THREE.Group();
 scene.add(shirt);
@@ -184,9 +318,9 @@ function rebuild() {
     let support;
     if (view.mode === 'hanger') {
       support = makeHanger(built.measures);
-      drape = new HangingShirt(built, support);
+      drape = new HangingShirt(built, support, { weight: fabric.weight });
     } else {
-      drape = new HangingShirt(built, { kind: 'clips' });
+      drape = new HangingShirt(built, { kind: 'clips' }, { weight: fabric.weight });
       support = makeClipHanger(drape.clips);
     }
     for (const [k, m] of Object.entries(supportMeshes)) {
@@ -241,17 +375,40 @@ const OUT = {
   sleeveAngle: (v) => `${Math.round(v)}°`,
   neckDepth: (v) => `${(v * 100).toFixed(1).replace('.', ',')} cm`,
 };
+// Tela (fuera de la forma: cambiarla no rehace la camiseta, salvo el peso
+// colgada).
+const FOUT = {
+  quality: (v) => (v < 0.3 ? 'Económica' : v < 0.7 ? 'Estándar' : 'Premium'),
+  weight: (v) => `${Math.round(120 + 100 * v)} g/m²`,
+  heather: (v) => (v < 0.05 ? 'Sin jaspeado' : v < 0.5 ? 'Suave' : 'Marcado'),
+};
+// Escote según el tipo de cuello: mínimo, máximo y valor al elegirlo.
+const NECK = { round: [0.055, 0.12, 0.085], v: [0.07, 0.15, 0.105] };
 const sliders = {};
+const fabricSliders = {};
 function setFill(input) {
   const f = ((input.value - input.min) / (input.max - input.min)) * 100;
   input.style.setProperty('--fill', `${f}%`);
 }
 function syncControls() {
+  const [lo, hi] = NECK[params.neckStyle] || NECK.round;
+  sliders.neckDepth.min = lo;
+  sliders.neckDepth.max = hi;
+  params.neckDepth = Math.min(hi, Math.max(lo, params.neckDepth));
   for (const [k, input] of Object.entries(sliders)) {
     input.value = params[k];
     document.getElementById(`${k}-out`).textContent = OUT[k](params[k]);
     setFill(input);
   }
+  for (const [k, input] of Object.entries(fabricSliders)) {
+    input.value = fabric[k];
+    document.getElementById(`${k}-out`).textContent = FOUT[k](fabric[k]);
+    setFill(input);
+  }
+  neckButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.neck === (params.neckStyle === 'v' ? 'v' : 'round'))));
+  weaveButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.weave === fabric.weave)));
+  document.getElementById('weave-note').textContent = (WEAVES[fabric.weave] || WEAVES.mesh).note;
+  lightButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.light === view.light)));
   for (const [k, id] of Object.entries({ body: 'c-body', sleeves: 'c-sleeves', collar: 'c-collar', cuffs: 'c-cuffs' })) document.getElementById(id).value = colors[k];
 }
 let pending = false;
@@ -273,6 +430,62 @@ for (const k of Object.keys(OUT)) {
     scheduleRebuild();
   });
 }
+// Tipo de cuello: al cambiarlo, el escote vuelve al valor típico de ese
+// cuello.
+const neckButtons = [...document.querySelectorAll('[data-neck]')];
+neckButtons.forEach((b) =>
+  b.addEventListener('click', () => {
+    if (params.neckStyle === b.dataset.neck) return;
+    params.neckStyle = b.dataset.neck;
+    params.neckDepth = NECK[params.neckStyle][2];
+    syncControls();
+    scheduleRebuild();
+  }),
+);
+// Tejidos: un botón con una muestra del relieve para cada uno.
+const weaveBox = document.querySelector('.weaves');
+const weaveButtons = Object.entries(WEAVES).map(([k, w]) => {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.dataset.weave = k;
+  b.setAttribute('aria-pressed', 'false');
+  const img = document.createElement('img');
+  img.alt = '';
+  img.src = weaveSwatch(k);
+  const label = document.createElement('span');
+  label.textContent = w.label;
+  b.append(img, label);
+  b.addEventListener('click', () => {
+    fabric.weave = k;
+    syncControls();
+    applyFabric();
+    updateSpec();
+  });
+  weaveBox.append(b);
+  return b;
+});
+for (const k of Object.keys(FOUT)) {
+  const input = document.getElementById(k);
+  fabricSliders[k] = input;
+  input.addEventListener('input', () => {
+    fabric[k] = Number(input.value);
+    document.getElementById(`${k}-out`).textContent = FOUT[k](fabric[k]);
+    setFill(input);
+    applyFabric();
+    updateSpec();
+    // El peso cambia cómo cae: colgada, se vuelve a soltar.
+    if (k === 'weight' && hanging()) scheduleRebuild();
+  });
+}
+// Luz.
+const lightButtons = [...document.querySelectorAll('[data-light]')];
+function setLight(name) {
+  view.light = LIGHTS[name] ? name : 'studio';
+  applyLights(view.light);
+  lightButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.light === view.light)));
+  requestRender();
+}
+lightButtons.forEach((b) => b.addEventListener('click', () => setLight(b.dataset.light)));
 for (const [k, id] of Object.entries({ body: 'c-body', sleeves: 'c-sleeves', collar: 'c-collar', cuffs: 'c-cuffs' })) {
   document.getElementById(id).addEventListener('input', (e) => {
     colors[k] = e.target.value;
@@ -356,7 +569,10 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 document.getElementById('reset').addEventListener('click', () => {
   Object.assign(params, BASE_PARAMS);
   Object.assign(colors, BASE_COLORS);
+  Object.assign(fabric, BASE_FABRIC);
+  setLight(BASE_LIGHT);
   syncControls();
+  applyFabric();
   rebuild();
 });
 
@@ -366,6 +582,7 @@ function updateSpec() {
   document.getElementById('s-shoulders').textContent = fmtCm(M.shA * 2);
   document.getElementById('s-length').textContent = fmtCm(M.L);
   document.getElementById('s-sleeve').textContent = fmtCm(Math.PI * 2 * M.sleeve.rHem);
+  document.getElementById('s-fabric').textContent = `${(WEAVES[fabric.weave] || WEAVES.mesh).label} · ${FOUT.weight(fabric.weight)}`;
 }
 
 // Vistas rápidas: frente, perfil y espalda (giro animado de la cámara).
@@ -431,6 +648,8 @@ renderer.setAnimationLoop((now) => {
 });
 
 syncControls();
+applyLights(view.light);
+applyFabric();
 document.getElementById('spin').checked = view.spin;
 document.getElementById('uvmap').checked = view.uvmap;
 controls.autoRotate = view.spin;
@@ -438,4 +657,4 @@ if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
 else rebuild();
 resize();
 
-window.__camiseta = { params, colors, rebuild, applyLook, camera, controls, scene, meshes, view, goToView, setMode, drape: () => drape };
+window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, view, goToView, setMode, drape: () => drape };

@@ -5,8 +5,9 @@
 //
 // - Cuelga de una percha de madera (sólido de choque bajo la costura de los
 //   hombros) o de dos broches que pellizcan la espalda junto a la costura.
-// - El cuello se mueve como una pieza: gira y se achata, pero no se estira
-//   ni se arruga.
+// - La tira del cuello es una cinta con cuerpo propio: se dobla y se gira
+//   libre, pero no se estira ni se dobla de canto, así el escote no cae en
+//   V ni se arruga. El contorno y el pecho caen libres.
 // - Ninguna parte de la tela atraviesa a otra (choque entre puntos y contra
 //   el centro de cada celda), y frente, espalda y mangas guardan algo del
 //   volumen que tenían puestos.
@@ -49,14 +50,18 @@ const SETTLE_MAX = 8; // segundos sin empujones tras los que se termina de acomo
 const THICK = 0.011;
 const GEO_NEAR = 0.045; // por la tela más cerca que esto: no chocan (los sostiene la malla)
 const VMAX = 0.004; // velocidad máxima por subpaso (≈ 1 m/s)
-// Cuánto se puede deformar el cuello (en su forma puesta: x a lo ancho, y
-// hacia arriba, z de adelante hacia atrás). Gira libre y se achata de
-// adelante hacia atrás, pero casi no se estira: la tira acanalada sostiene
-// la forma del escote.
-const COLLAR_X = [0.94, 1.06];
-const COLLAR_Y = [0.97, 1.03];
-const COLLAR_Z = [0.5, 1.03];
-const COLLAR_SHEAR = 0.05;
+// Tira del cuello: fila del perfil de la tira que hace de borde de arriba de
+// la cinta (la cara de afuera, justo antes del doblez).
+const BAND_ROW = 2;
+// Cuerpo de la tira: cada tramo de la cinta (BAND_SPAN puntos a cada lado)
+// tiende a su forma puesta, girado como haga falta. Así se dobla de a poco a
+// lo largo del cuello pero no hace quiebres, y sostiene el escote sin fijar
+// la forma de toda la vuelta.
+const BAND_SPAN = 6;
+const BAND_STIFF = 1;
+// La tira acanalada es más firme que la tela: sus uniones se resuelven
+// estas veces más en cada iteración (casi no se estira con el peso del pecho).
+const BAND_PASSES = 4;
 
 // ---------- percha ----------
 
@@ -297,21 +302,29 @@ function geodesic(n, adj, anchors) {
 // rotación q (Müller y otros, 2016). Deja el resultado en q.
 const _dq = new THREE.Quaternion();
 const _axis = new THREE.Vector3();
+const _r = new Float32Array(9);
 function extractRotation(a, q, iterations) {
+  const r = _r;
   for (let it = 0; it < iterations; it++) {
     const { x, y, z, w } = q;
-    const r = [1 - 2 * (y * y + z * z), 2 * (x * y + w * z), 2 * (x * z - w * y), 2 * (x * y - w * z), 1 - 2 * (x * x + z * z), 2 * (y * z + w * x), 2 * (x * z + w * y), 2 * (y * z - w * x), 1 - 2 * (x * x + y * y)];
+    r[0] = 1 - 2 * (y * y + z * z);
+    r[1] = 2 * (x * y + w * z);
+    r[2] = 2 * (x * z - w * y);
+    r[3] = 2 * (x * y - w * z);
+    r[4] = 1 - 2 * (x * x + z * z);
+    r[5] = 2 * (y * z + w * x);
+    r[6] = 2 * (x * z + w * y);
+    r[7] = 2 * (y * z - w * x);
+    r[8] = 1 - 2 * (x * x + y * y);
     let ox = 0;
     let oy = 0;
     let oz = 0;
     let dot = 0;
-    for (let c = 0; c < 3; c++) {
-      const [rx, ry, rz] = [r[c * 3], r[c * 3 + 1], r[c * 3 + 2]];
-      const [ax, ay, az] = [a[c * 3], a[c * 3 + 1], a[c * 3 + 2]];
-      ox += ry * az - rz * ay;
-      oy += rz * ax - rx * az;
-      oz += rx * ay - ry * ax;
-      dot += rx * ax + ry * ay + rz * az;
+    for (let c = 0; c < 9; c += 3) {
+      ox += r[c + 1] * a[c + 2] - r[c + 2] * a[c + 1];
+      oy += r[c + 2] * a[c] - r[c] * a[c + 2];
+      oz += r[c] * a[c + 1] - r[c + 1] * a[c];
+      dot += r[c] * a[c] + r[c + 1] * a[c + 1] + r[c + 2] * a[c + 2];
     }
     const s = 1 / (Math.abs(dot) + 1e-9);
     const angle = Math.hypot(ox, oy, oz) * s;
@@ -324,7 +337,16 @@ function extractRotation(a, q, iterations) {
 export class HangingShirt {
   // support: la percha de makeHanger, o { kind: 'clips' } para colgarla de
   // dos broches (después de crearla, `clips` dice dónde dibujarlos).
-  constructor(built, support) {
+  // opts.weight: peso de la tela (0 liviana · 0,5 estándar · 1 pesada). Una
+  // tela más pesada es más gruesa (se dobla en pliegues más amplios y guarda
+  // más volumen), el aire la frena menos y el mouse la mueve menos.
+  constructor(built, support, opts = {}) {
+    const heavy = Math.min(1, Math.max(0, opts.weight ?? 0.5)) - 0.5;
+    this.bend = [0.4 + 0.5 * heavy, 0.25 + 0.36 * heavy]; // flexión: estirar, comprimir
+    this.damp = DAMP + 0.006 * heavy;
+    this.dampCalm = DAMP_CALM + 0.01 * heavy;
+    this.pushScale = 1 - 0.7 * heavy;
+    const volTop = VOLUME_TOP + 0.16 * heavy;
     this.geos = built.geos;
     this.hanger = support.kind === 'hanger' ? support : null;
     const L = built.layout;
@@ -383,6 +405,16 @@ export class HangingShirt {
         }
       sleeveMap[key] = m;
     }
+    // Tira del cuello: un punto en su borde de arriba sobre cada punto del
+    // escote (el escote es la fila de arriba del torso: frente de costado a
+    // costado y espalda de vuelta, una vuelta cerrada).
+    const ring = [...Array.from({ length: C + 1 }, (_, j) => map.front[NC * WC + j]), ...Array.from({ length: C - 1 }, (_, j) => map.back[NC * WC + j + 1])];
+    const collarPos = this.geos.collar.attributes.position.array;
+    const CSW = L.rings.collar.length + 1;
+    const bandRest = ring.map((_, k) => Array.from(collarPos.subarray((BAND_ROW * CSW + 2 * k) * 3, (BAND_ROW * CSW + 2 * k) * 3 + 3)));
+    const band = bandRest.map((p) => add(p));
+    this.ring = Int32Array.from(ring);
+    this.band = Int32Array.from(band);
     this.map = map;
     this.sleeveMap = sleeveMap;
     const n = pos.length / 3;
@@ -412,11 +444,17 @@ export class HangingShirt {
         mirror[m] = a;
       }
     }
+    const ringIndex = new Map(ring.map((id, k) => [id, k]));
+    band.forEach((id, k) => (mirror[id] = band[ringIndex.get(mirror[ring[k]])]));
+    // Lado de cada punto (los de la tira, el de su punto del escote: en V
+    // varios quedan justo en el medio, en la costura de la punta).
+    const sideX = Float32Array.from({ length: n }, (_, i) => P[i * 3]);
+    band.forEach((id, k) => (sideX[id] = P[ring[k] * 3]));
     const mpairs = [];
     const mid = [];
     for (let i = 0; i < n; i++) {
       if (mirror[i] === i) mid.push(i);
-      else if (mirror[i] >= 0 && P[i * 3] < 0) mpairs.push(i, mirror[i]);
+      else if (mirror[i] >= 0 && sideX[i] < 0) mpairs.push(i, mirror[i]);
     }
     this.mirrorOf = mirror;
     this.mirrorPairs = Int32Array.from(mpairs);
@@ -428,10 +466,11 @@ export class HangingShirt {
     // (saltando un punto) con menos rigidez.
     const pairs = new Map();
     const dist = (a, b) => Math.hypot(P[a * 3] - P[b * 3], P[a * 3 + 1] - P[b * 3 + 1], P[a * 3 + 2] - P[b * 3 + 2]);
-    const link = (a, b, kind) => {
+    const link = (a, b, kind, force = false) => {
       if (a < 0 || b < 0 || a === b) return;
       const key = a < b ? a * n + b : b * n + a;
       if (!pairs.has(key)) pairs.set(key, [a, b, dist(a, b), kind]);
+      else if (force) pairs.get(key)[3] = kind;
     };
     const grid = (m, w, h, cellOk) => {
       for (let i = 0; i <= h; i++)
@@ -470,39 +509,78 @@ export class HangingShirt {
           link(mirror[a], mirror[id], 4);
         }
       }
+    // Tira del cuello: escote y borde de arriba unidos por travesaños y
+    // diagonales (una cinta de triángulos), más uniones que saltan un punto
+    // a lo largo de los dos bordes. La cinta gira libre sobre los
+    // travesaños (se dobla hacia adentro o afuera, se achata), pero no se
+    // estira ni se dobla de canto: el escote conserva su curva sin dar forma
+    // al resto de la camiseta.
+    const K = ring.length;
+    for (let k = 0; k < K; k++) {
+      const k1 = (k + 1) % K;
+      const k2 = (k + 2) % K;
+      link(ring[k], band[k], 5);
+      link(band[k], band[k1], 5);
+      link(ring[k], band[k1], 5);
+      link(ring[k1], band[k], 5);
+      link(ring[k], ring[k1], 5, true);
+      link(band[k], band[k2], 6);
+      link(ring[k], ring[k2], 6, true);
+    }
     const list = [...pairs.values()];
+    // Tramos de la cinta para su cuerpo (ver holdBand): puntos del escote y
+    // del borde de arriba, con su forma puesta respecto de su centro.
+    const win = [];
+    const winRest = [];
+    for (let k = 0; k < K; k++) {
+      const ids = [];
+      for (let j = -BAND_SPAN; j <= BAND_SPAN; j++) ids.push(ring[(k + j + K) % K], band[(k + j + K) % K]);
+      const c = [0, 1, 2].map((d) => ids.reduce((sum, id) => sum + P[id * 3 + d], 0) / ids.length);
+      win.push(...ids);
+      winRest.push(...ids.flatMap((id) => [0, 1, 2].map((d) => P[id * 3 + d] - c[d])));
+    }
+    this.bandWin = Int32Array.from(win);
+    this.bandWinRest = Float32Array.from(winRest);
+    this.bandWinQ = Array.from({ length: K }, () => new THREE.Quaternion());
+    this.bandGoal = new Float32Array(n * 3);
+    this.bandCount = new Uint8Array(n);
     this.ca = Int32Array.from(list, (c) => c[0]);
     this.cb = Int32Array.from(list, (c) => c[1]);
     this.rest = Float32Array.from(list, (c) => c[2]);
     this.kind = Uint8Array.from(list, (c) => c[3]);
+    this.bandLinks = Int32Array.from(list.flatMap((c, i) => (c[3] === 5 || c[3] === 6 ? [i] : [])));
 
-    // El cuello: la fila de arriba del torso se mueve como una pieza rígida.
-    const ring = [...new Set([...Array.from({ length: C + 1 }, (_, j) => map.front[NC * WC + j]), ...Array.from({ length: C + 1 }, (_, j) => map.back[NC * WC + j])])];
-    this.ringIds = Int32Array.from(ring);
-    const c0 = new THREE.Vector3();
-    for (const id of ring) c0.add(new THREE.Vector3(P[id * 3], P[id * 3 + 1], P[id * 3 + 2]));
-    c0.divideScalar(ring.length);
-    this.ringRest = Float32Array.from(ring.flatMap((id) => [P[id * 3] - c0.x, P[id * 3 + 1] - c0.y, P[id * 3 + 2] - c0.z]));
-    this.ringQ = new THREE.Quaternion();
-    this.ringC = c0.clone();
-    this.ringG = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
-    const qq = new Float32Array(9);
-    for (let k = 0; k < ring.length; k++)
-      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) qq[c * 3 + r] += this.ringRest[k * 3 + r] * this.ringRest[k * 3 + c];
-    this.ringQQ = new THREE.Matrix3().fromArray(qq).invert().elements;
-    // Tira del cuello: su borde de abajo va cosido al escote; el resto de la
-    // tira sólo acompaña el giro del contorno (no se deforma).
-    const collar = this.geos.collar.attributes.position.array;
-    const CSW = L.rings.collar.length + 1;
+    // Dibujo de la tira: cada vértice guarda su posición en el marco local
+    // (a lo largo del escote, subida de la cinta, normal) de su punto del
+    // escote; colgada, el marco sale de la tela y de la cinta simuladas.
+    // La cara de adentro llega sólo hasta el escote (puesta baja un poco
+    // dentro de la camiseta; colgada, asomaría por la tela).
+    const collarRing = L.rings.collar;
+    const nf = collarRing.length;
+    const rest = Float32Array.from(collarPos);
+    const last = rest.length / 3 / CSW - 1;
+    for (let i = 0; i < CSW * 3; i++) rest[last * CSW * 3 + i] = (rest[last * CSW * 3 + i] + rest[(last - 1) * CSW * 3 + i]) / 2;
+    const seamRest = new Float32Array(nf * 3);
+    collarRing.forEach(([key, v], e) => seamRest.set(this.geos[key].attributes.position.array.subarray(v * 3, v * 3 + 3), e * 3));
+    const topRest = new Float32Array(nf * 3);
+    this.bandTop((k, c) => bandRest[k][c], topRest);
+    this.collarRing = collarRing;
     this.collarSW = CSW;
-    this.collarRing = L.rings.collar;
-    this.collarOff = Float32Array.from(collar, (v, i) => v - collar[((Math.floor(i / 3) % CSW) * 3) + (i % 3)]);
-    // La cara de adentro de la tira llega sólo hasta el escote (puesta baja
-    // un poco dentro de la camiseta; colgada, asomaría por la tela).
-    const last = collar.length / 3 / CSW - 1;
-    for (let i = 0; i < CSW * 3; i++) {
-      const o = this.collarOff;
-      o[last * CSW * 3 + i] = (o[last * CSW * 3 + i] + o[(last - 1) * CSW * 3 + i]) / 2;
+    this.collarSeam = new Float32Array(nf * 3);
+    this.collarTop = new Float32Array(nf * 3);
+    this.collarFrames = new Float32Array(nf * 10);
+    this.collarLocal = new Float32Array(rest.length);
+    this.collarFrame(seamRest, topRest);
+    const F = this.collarFrames;
+    for (let v = 0; v < rest.length / 3; v++) {
+      const e = (v % CSW) % nf;
+      const f = e * 10;
+      const ox = rest[v * 3] - seamRest[e * 3];
+      const oy = rest[v * 3 + 1] - seamRest[e * 3 + 1];
+      const oz = rest[v * 3 + 2] - seamRest[e * 3 + 2];
+      this.collarLocal[v * 3] = ox * F[f] + oy * F[f + 1] + oz * F[f + 2];
+      this.collarLocal[v * 3 + 1] = (ox * F[f + 3] + oy * F[f + 4] + oz * F[f + 5]) / F[f + 9];
+      this.collarLocal[v * 3 + 2] = ox * F[f + 6] + oy * F[f + 7] + oz * F[f + 8];
     }
 
     // Broches: pellizcan la espalda un poco detrás de la costura de cada
@@ -565,7 +643,7 @@ export class HangingShirt {
         : [0, C].map((col) => Array.from({ length: NC - i2 + 1 }, (_, r) => map.front[(i2 + r) * WC + col]));
     const adj = Array.from({ length: n }, () => []);
     for (const [a, b, r, kd] of list) {
-      if (kd > 1) continue;
+      if (kd > 1 && kd !== 5) continue;
       adj[a].push(b, r);
       adj[b].push(a, r);
     }
@@ -647,7 +725,7 @@ export class HangingShirt {
     for (const f of this.frontIds) {
       const best = partner[f];
       const t = Math.min(1, rowOf[f] / i1);
-      const g = (P[f * 3 + 2] - P[best * 3 + 2]) * (VOLUME_HEM + (VOLUME_TOP - VOLUME_HEM) * t * t * (3 - 2 * t));
+      const g = (P[f * 3 + 2] - P[best * 3 + 2]) * (VOLUME_HEM + (volTop - VOLUME_HEM) * t * t * (3 - 2 * t));
       if (g <= GAP) continue;
       vol.push(f, best);
       volGap.push(g);
@@ -663,10 +741,8 @@ export class HangingShirt {
     this.layerGap = Float32Array.from({ length: layers.length / 2 }, (_, c) => Math.max(GAP, (P[layers[2 * c] * 3 + 2] - P[layers[2 * c + 1] * 3 + 2]) * VOLUME_SLEEVE));
     this.bindFine(L, W, SW);
     // Choque entre puntos. Junto a los broches la tela queda apretada a
-    // propósito (más cerca que el grosor): ahí no hay choque. Tampoco en el
-    // contorno del cuello, que se mueve como una pieza.
+    // propósito (más cerca que el grosor): ahí no hay choque.
     this.noCollide = new Uint8Array(n);
-    for (const id of this.ringIds) this.noCollide[id] = 1;
     for (let i = 0; i < n; i++)
       for (const { id } of this.pins)
         if (Math.hypot(P[i * 3] - P[id * 3], P[i * 3 + 1] - P[id * 3 + 1], P[i * 3 + 2] - P[id * 3 + 2]) < 0.035) this.noCollide[i] = 1;
@@ -687,6 +763,8 @@ export class HangingShirt {
     addQuads(map.front, WC, NC, cellOk);
     addQuads(map.back, WC, NC, cellOk);
     for (const m of Object.values(sleeveMap)) addQuads(m, SWC, RC, () => true);
+    const bandRows = [...ring, ring[0], ...band, band[0]];
+    addQuads(bandRows, K + 1, 1, () => true);
     this.quads = Int32Array.from(quads);
     const nq = quads.length / 4;
     this.quadPos = new Float32Array(nq * 3);
@@ -757,8 +835,8 @@ export class HangingShirt {
     // Dobladillos: cada vértice guarda su posición en el marco local
     // (tangente, subida, normal) de su punto del borde: la subida se mide a
     // lo largo de la tela (sigue su curva), así el dobladillo no se separa de
-    // su panel ni atraviesa el de enfrente. (El cuello acompaña al anillo
-    // rígido.)
+    // su panel ni atraviesa el de enfrente. (La tira del cuello se arma
+    // aparte, con la cinta simulada: ver updateMeshes.)
     this.ribbons = [];
     for (const [key, ring, sign] of [
       ['hem', L.rings.hem, 1],
@@ -806,6 +884,61 @@ export class HangingShirt {
     });
   }
 
+  // Borde de arriba de la tira en cada punto del escote fino: los pares son
+  // los puntos de la cinta; los impares, una curva suave entre ellos.
+  bandTop(get, out) {
+    const K = this.band.length;
+    for (let k = 0; k < K; k++) {
+      const km = (k - 1 + K) % K;
+      const k1 = (k + 1) % K;
+      const k2 = (k + 2) % K;
+      for (let c = 0; c < 3; c++) {
+        out[2 * k * 3 + c] = get(k, c);
+        out[(2 * k + 1) * 3 + c] = (9 * (get(k, c) + get(k1, c)) - get(km, c) - get(k2, c)) / 16;
+      }
+    }
+  }
+
+  // Marco de cada punto del escote fino: a lo largo del escote (t), subida de
+  // la tira hasta su borde de arriba (u), normal (t × u), y alto de la subida.
+  collarFrame(seam, top) {
+    const nf = seam.length / 3;
+    const F = this.collarFrames;
+    for (let e = 0; e < nf; e++) {
+      const ep = ((e + 1) % nf) * 3;
+      const em = ((e - 1 + nf) % nf) * 3;
+      let tx = seam[ep] - seam[em];
+      let ty = seam[ep + 1] - seam[em + 1];
+      let tz = seam[ep + 2] - seam[em + 2];
+      const tl = Math.hypot(tx, ty, tz) || 1;
+      tx /= tl;
+      ty /= tl;
+      tz /= tl;
+      let ux = top[e * 3] - seam[e * 3];
+      let uy = top[e * 3 + 1] - seam[e * 3 + 1];
+      let uz = top[e * 3 + 2] - seam[e * 3 + 2];
+      const ut = ux * tx + uy * ty + uz * tz;
+      ux -= tx * ut;
+      uy -= ty * ut;
+      uz -= tz * ut;
+      const ul = Math.hypot(ux, uy, uz) || 1e-6;
+      ux /= ul;
+      uy /= ul;
+      uz /= ul;
+      const f = e * 10;
+      F[f] = tx;
+      F[f + 1] = ty;
+      F[f + 2] = tz;
+      F[f + 3] = ux;
+      F[f + 4] = uy;
+      F[f + 5] = uz;
+      F[f + 6] = ty * uz - tz * uy;
+      F[f + 7] = tz * ux - tx * uz;
+      F[f + 8] = tx * uy - ty * ux;
+      F[f + 9] = ul;
+    }
+  }
+
   wake() {
     this.sleeping = false;
     this.calm = 0;
@@ -822,7 +955,7 @@ export class HangingShirt {
       const dz = P[i * 3 + 2] - point.z;
       const d = Math.hypot(dx, dy, dz);
       if (d >= radius) continue;
-      const w = (1 - d / radius) ** 2 * amount;
+      const w = (1 - d / radius) ** 2 * amount * this.pushScale;
       P[i * 3] += dir.x * w;
       P[i * 3 + 1] += dir.y * w;
       P[i * 3 + 2] += dir.z * w;
@@ -833,7 +966,7 @@ export class HangingShirt {
 
   breeze(v) {
     this.lastPoke = this.time;
-    this.wind.add(v);
+    this.wind.addScaledVector(v, this.pushScale);
     if (this.wind.length() > 1.4) this.wind.setLength(1.4);
     this.wake();
   }
@@ -855,7 +988,7 @@ export class HangingShirt {
     // frena más, así no quedan balanceos lentos (una tela real se aquieta
     // enseguida).
     const quiet = Math.min(1, Math.max(0, (this.time - Math.max(0, this.lastPoke) - CALM_AFTER) / 2));
-    const damp = DAMP + (DAMP_CALM - DAMP) * quiet;
+    const damp = this.damp + (this.dampCalm - this.damp) * quiet;
     for (let s = 0; s < SUBSTEPS; s++) {
       for (let i = 0; i < n; i++) {
         if (!this.w[i]) continue;
@@ -886,8 +1019,9 @@ export class HangingShirt {
       if (this.hanger) this.findContacts();
       for (let it = 0; it < ITERATIONS; it++) {
         this.solveLengths();
+        for (let b = 0; b < BAND_PASSES; b++) this.solveLengths(this.bandLinks);
         this.tethers();
-        this.matchCollar();
+        this.holdBand();
         this.collideSelf();
         this.holdApart(this.volPairs, this.volGap, 0.5);
         this.holdApart(this.layers, this.layerGap, 0.5);
@@ -939,17 +1073,11 @@ export class HangingShirt {
       for (let k = 0; k < 3; k++) P[b + k] = Q[b + k] = f.from[o + k] + (f.to[o + k] - f.from[o + k]) * e;
     }
     this.midline.forEach((i, k) => (P[i * 3] = Q[i * 3] = f.mid[k] * (1 - e)));
-    this.fitCollar();
     if (t >= 1) {
       this.finishing = null;
       this.sleeping = true;
     }
     return true;
-  }
-
-  // Forma del cuello para dibujar la tira, sin mover la tela (simétrica).
-  fitCollar() {
-    this.matchCollar(false, true);
   }
 
   // Lleva cada punto del lado derecho (y su velocidad) hacia el espejo de su
@@ -1030,82 +1158,98 @@ export class HangingShirt {
     }
   }
 
-  // El cuello se mueve como una pieza: se busca la deformación lineal que
-  // mejor lleva su forma original a la actual, se limita (gira y se achata,
-  // pero no se estira) y cada punto vuelve a su lugar en esa forma. Así se
-  // puede inclinar y achatar en óvalo, pero no arrugarse ni caer en V.
-  matchCollar(project = true, symmetric = false) {
+  // Cuerpo de la tira: cada tramo busca el giro que mejor lleva su forma
+  // puesta a la actual, y sus puntos se acercan (de a poco) a esa forma
+  // girada. Cada punto participa de varios tramos y va al promedio.
+  holdBand() {
     const P = this.p;
-    const ids = this.ringIds;
-    const R = this.ringRest;
-    let cx = 0;
-    let cy = 0;
-    let cz = 0;
-    for (const id of ids) {
-      cx += P[id * 3];
-      cy += P[id * 3 + 1];
-      cz += P[id * 3 + 2];
-    }
-    cx /= ids.length;
-    cy /= ids.length;
-    cz /= ids.length;
-    const a = (this._a ||= new Float32Array(9)).fill(0);
-    for (let k = 0; k < ids.length; k++) {
-      const px = P[ids[k] * 3] - cx;
-      const py = P[ids[k] * 3 + 1] - cy;
-      const pz = P[ids[k] * 3 + 2] - cz;
-      for (let c = 0; c < 3; c++) {
-        const q = R[k * 3 + c];
-        a[c * 3] += px * q;
-        a[c * 3 + 1] += py * q;
-        a[c * 3 + 2] += pz * q;
+    const W = this.w;
+    const ids = this.bandWin;
+    const R = this.bandWinRest;
+    const G = this.bandGoal;
+    const cnt = this.bandCount;
+    const m = 2 * (2 * BAND_SPAN + 1);
+    const a = (this._ba ||= new Float32Array(9));
+    for (const id of this.ring) cnt[id] = 0;
+    for (const id of this.band) cnt[id] = 0;
+    for (let w = 0; w < this.bandWinQ.length; w++) {
+      const o = w * m;
+      let cx = 0;
+      let cy = 0;
+      let cz = 0;
+      for (let k = 0; k < m; k++) {
+        const i = ids[o + k] * 3;
+        cx += P[i];
+        cy += P[i + 1];
+        cz += P[i + 2];
+      }
+      cx /= m;
+      cy /= m;
+      cz /= m;
+      a.fill(0);
+      for (let k = 0; k < m; k++) {
+        const i = ids[o + k] * 3;
+        const r = (o + k) * 3;
+        const px = P[i] - cx;
+        const py = P[i + 1] - cy;
+        const pz = P[i + 2] - cz;
+        for (let c = 0; c < 3; c++) {
+          const rc = R[r + c];
+          a[c * 3] += px * rc;
+          a[c * 3 + 1] += py * rc;
+          a[c * 3 + 2] += pz * rc;
+        }
+      }
+      const q = this.bandWinQ[w];
+      extractRotation(a, q, 3);
+      const { x, y, z, w: qw } = q;
+      const r00 = 1 - 2 * (y * y + z * z);
+      const r01 = 2 * (x * y - qw * z);
+      const r02 = 2 * (x * z + qw * y);
+      const r10 = 2 * (x * y + qw * z);
+      const r11 = 1 - 2 * (x * x + z * z);
+      const r12 = 2 * (y * z - qw * x);
+      const r20 = 2 * (x * z - qw * y);
+      const r21 = 2 * (y * z + qw * x);
+      const r22 = 1 - 2 * (x * x + y * y);
+      for (let k = 0; k < m; k++) {
+        const id = ids[o + k];
+        const r = (o + k) * 3;
+        const qx = R[r];
+        const qy = R[r + 1];
+        const qz = R[r + 2];
+        const gx = cx + r00 * qx + r01 * qy + r02 * qz;
+        const gy = cy + r10 * qx + r11 * qy + r12 * qz;
+        const gz = cz + r20 * qx + r21 * qy + r22 * qz;
+        if (cnt[id]) {
+          G[id * 3] += gx;
+          G[id * 3 + 1] += gy;
+          G[id * 3 + 2] += gz;
+        } else {
+          G[id * 3] = gx;
+          G[id * 3 + 1] = gy;
+          G[id * 3 + 2] = gz;
+        }
+        cnt[id]++;
       }
     }
-    const G = this.ringG;
-    const qq = this.ringQQ;
-    // Ajuste lineal (A·Aqq⁻¹), separado en giro (R) y deformación (S); la
-    // deformación se limita y se vuelve a armar G = R·S.
-    const lin = (this._lin ||= new Float32Array(9));
-    for (let c = 0; c < 3; c++)
-      for (let r = 0; r < 3; r++) lin[c * 3 + r] = a[r] * qq[c * 3] + a[3 + r] * qq[c * 3 + 1] + a[6 + r] * qq[c * 3 + 2];
-    extractRotation(lin, this.ringQ, 4);
-    if (symmetric) {
-      // Simétrico: el cuello sólo se inclina (giro alrededor de x), no se
-      // tuerce de costado.
-      const q = this.ringQ;
-      const th = Math.atan2(2 * (q.y * q.z + q.w * q.x), 1 - 2 * (q.x * q.x + q.z * q.z));
-      q.set(Math.sin(th / 2), 0, 0, Math.cos(th / 2));
-    }
-    const { x, y, z, w } = this.ringQ;
-    const rot = [1 - 2 * (y * y + z * z), 2 * (x * y + w * z), 2 * (x * z - w * y), 2 * (x * y - w * z), 1 - 2 * (x * x + z * z), 2 * (y * z + w * x), 2 * (x * z + w * y), 2 * (y * z - w * x), 1 - 2 * (x * x + y * y)];
-    const s = (this._s ||= new Float32Array(9));
-    for (let c = 0; c < 3; c++)
-      for (let r = 0; r < 3; r++) s[c * 3 + r] = rot[r * 3] * lin[c * 3] + rot[r * 3 + 1] * lin[c * 3 + 1] + rot[r * 3 + 2] * lin[c * 3 + 2];
-    const lim = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
-    const off = (i, j) => lim((s[i] + s[j]) / 2, [-COLLAR_SHEAR, COLLAR_SHEAR]);
-    const sxy = symmetric ? 0 : off(3, 1);
-    const sxz = symmetric ? 0 : off(6, 2);
-    const syz = off(7, 5);
-    const S = [lim(s[0], COLLAR_X), sxy, sxz, sxy, lim(s[4], COLLAR_Y), syz, sxz, syz, lim(s[8], COLLAR_Z)];
-    for (let c = 0; c < 3; c++)
-      for (let r = 0; r < 3; r++) G[c * 3 + r] = rot[r] * S[c * 3] + rot[3 + r] * S[c * 3 + 1] + rot[6 + r] * S[c * 3 + 2];
-    this.ringC.set(cx, cy, cz);
-    if (!project) return;
-    for (let k = 0; k < ids.length; k++) {
-      if (!this.w[ids[k]]) continue;
-      const [qx, qy, qz] = [R[k * 3], R[k * 3 + 1], R[k * 3 + 2]];
-      const i = ids[k] * 3;
-      P[i] = cx + G[0] * qx + G[3] * qy + G[6] * qz;
-      P[i + 1] = cy + G[1] * qx + G[4] * qy + G[7] * qz;
-      P[i + 2] = cz + G[2] * qx + G[5] * qy + G[8] * qz;
-    }
+    for (const list of [this.ring, this.band])
+      for (const id of list) {
+        if (!W[id] || !cnt[id]) continue;
+        const i = id * 3;
+        for (let c = 0; c < 3; c++) P[i + c] += (G[i + c] / cnt[id] - P[i + c]) * BAND_STIFF;
+      }
   }
 
-  solveLengths() {
+  // Restricciones de largo (todas, o sólo las de la lista `only`).
+  solveLengths(only = null) {
     const P = this.p;
     const W = this.w;
     const { ca, cb, rest, kind } = this;
-    for (let c = 0; c < ca.length; c++) {
+    const [bendS, bendC] = this.bend;
+    const count = only ? only.length : ca.length;
+    for (let o = 0; o < count; o++) {
+      const c = only ? only[o] : o;
       const a = ca[c] * 3;
       const b = cb[c] * 3;
       const dx = P[b] - P[a];
@@ -1117,7 +1261,7 @@ export class HangingShirt {
       // Estirar cuesta mucho; comprimir, poco (la tela se pliega). La
       // flexión es blanda.
       const kd = kind[c];
-      const k = kd === 2 ? (err > 0 ? 0.4 : 0.25) : kd === 4 ? 0.35 : err > 0 ? 1 : kd === 1 ? 0.5 : 0.7;
+      const k = kd === 2 ? (err > 0 ? bendS : bendC) : kd === 4 ? 0.35 : kd === 6 ? (err > 0 ? 0.6 : 0.45) : err > 0 ? 1 : kd === 1 ? 0.5 : kd === 5 ? 0.9 : 0.7;
       const wa = W[ca[c]];
       const wb = W[cb[c]];
       const ws = wa + wb;
@@ -1598,22 +1742,24 @@ export class HangingShirt {
     }
     for (const r of this.ribbons) this.updateRibbon(r);
     // La tira del cuello: su borde de abajo va cosido al escote de la tela (el
-    // mismo punto del borde del frente o la espalda) y el resto de la tira
-    // acompaña el giro del contorno.
+    // mismo punto del borde del frente o la espalda) y sube hasta el borde de
+    // la cinta simulada.
+    const seam = this.collarSeam;
+    this.collarRing.forEach(([key, e], i) => seam.set(this.geos[key].attributes.position.array.subarray(e * 3, e * 3 + 3), i * 3));
+    this.bandTop((k, c) => P[this.band[k] * 3 + c], this.collarTop);
+    this.collarFrame(seam, this.collarTop);
+    const F = this.collarFrames;
+    const l = this.collarLocal;
+    const SW = this.collarSW;
+    const nf = this.collarRing.length;
     const attr = this.geos.collar.attributes.position;
     const a = attr.array;
-    const O = this.collarOff;
-    const SW = this.collarSW;
-    const ring = this.collarRing;
-    extractRotation(this.ringG, this.ringQ, 8);
-    const m = (this._m ||= new THREE.Matrix4()).makeRotationFromQuaternion(this.ringQ).elements;
     for (let v = 0; v < a.length / 3; v++) {
-      const [key, e] = ring[(v % SW) % ring.length];
-      const body = this.geos[key].attributes.position.array;
+      const e = (v % SW) % nf;
+      const f = e * 10;
       const i = v * 3;
-      a[i] = body[e * 3] + m[0] * O[i] + m[4] * O[i + 1] + m[8] * O[i + 2];
-      a[i + 1] = body[e * 3 + 1] + m[1] * O[i] + m[5] * O[i + 1] + m[9] * O[i + 2];
-      a[i + 2] = body[e * 3 + 2] + m[2] * O[i] + m[6] * O[i + 1] + m[10] * O[i + 2];
+      const lu = l[i + 1] * F[f + 9];
+      for (let c = 0; c < 3; c++) a[i + c] = seam[e * 3 + c] + F[f + c] * l[i] + F[f + 3 + c] * lu + F[f + 6 + c] * l[i + 2];
     }
     attr.needsUpdate = true;
     this.geos.collar.computeVertexNormals();

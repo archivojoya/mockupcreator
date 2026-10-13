@@ -32,7 +32,7 @@ la ventana) se carga cualquier otro molde.
 ## Camiseta deportiva paramétrica
 
 `camiseta.html` (en desarrollo: `http://localhost:5173/camiseta.html`) es una
-prueba aparte, hecha desde cero: una camiseta deportiva de cuello redondo
+prueba aparte, hecha desde cero: una camiseta deportiva de cuello redondo o en V
 modelada directamente con código, sin moldes, sin Blender y sin simulación. Se
 ve flotando con volumen, como puesta en un cuerpo invisible.
 
@@ -44,16 +44,35 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   se empuja y se balancea, y después se acomoda sola (en el celular, con un
   toque).
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
-  de mangas y profundidad del escote. La malla se rehace al instante.
+  de mangas, cuello (redondo o en V) y profundidad del escote. La malla se rehace
+  al instante. En V, la tira es más angosta, va acostada sobre el pecho y sus
+  dos puntas se juntan en una costura al medio.
+- **Tela**: siete tejidos (malla deportiva, piqué, panal, jersey liso,
+  acanalada, jacquard con rayas tono sobre tono y microperforada con zonas
+  caladas a los costados y bajo los brazos), más tres controles:
+  - **Calidad**: económica (brillo plástico, tejido y teñido desparejos,
+    bolitas, costuras fruncidas), estándar o premium (mate con un brillo suave
+    y parejo, relieve nítido).
+  - **Peso** (120 a 220 g/m²): colgada, la tela pesada hace pliegues más amplios,
+    guarda más volumen y el mouse la mueve menos.
+  - **Jaspeado**: hilos de otro tono a lo largo de las pasadas (melange).
+  De lejos el relieve es más chico que un píxel: se pasa a aspereza, así la
+  tela no se ve plástica. Una textura grande con irregularidades evita que se
+  note la repetición.
+- **Luz**: estudio, pareja (luz amplia de frente: lo que mira de frente se ve
+  con el color elegido tal cual, para comparar colores), contraste (rasante,
+  marca el relieve y los pliegues) y día (sol cálido y cielo azulado).
 - **Colores** por parte: cuerpo, mangas, cuello y puños.
 - **Mapa de estampado**: muestra una grilla de 5 cm con el nombre de cada pieza,
   para ver cómo caería un diseño. Las coordenadas de textura están en metros
   sobre la tela, listas para estampar más adelante.
-- **Ficha**: contorno de pecho, ancho de hombros, largo y boca de manga.
+- **Ficha**: contorno de pecho, ancho de hombros, largo, boca de manga y tela.
 - **Configuración sin tocar código**: si la página trae un bloque
-  `<script type="application/json" id="camiseta-config">` con `params`,
-  `colors`, `mode` (`body`, `hanger` o `clips`), `spin` o `uvmap`, arranca con
-  esos valores (y "Restablecer" vuelve a ellos).
+  `<script type="application/json" id="camiseta-config">` con `params`
+  (incluido `neckStyle`: `round` o `v`), `colors`, `fabric` (`weave`,
+  `quality`, `weight`, `heather`), `light` (`studio`, `soft`, `contrast` o
+  `day`), `mode` (`body`, `hanger` o `clips`), `spin` o `uvmap`, arranca con
+  esos valores (y "Restablecer todo" vuelve a ellos).
 
 Cómo se arma (`src/camiseta/shirt.js`):
 
@@ -68,8 +87,9 @@ Cómo se arma (`src/camiseta/shirt.js`):
 - **Cuello y dobladillos**: tira acanalada sobre el escote; ruedo y puños se dan
   vuelta hacia adentro y muestran el espesor de la tela.
 - **Terminación**: pliegues suaves (caída hacia el ruedo, tensiones desde la
-  axila), costuras hundidas, pespunte doble en ruedo y puños, y relieve de malla
-  deportiva.
+  axila), costuras hundidas y pespunte doble en ruedo y puños. El relieve, el
+  tono y el brillo punto a punto de cada tejido se generan en canvas
+  (`src/camiseta/fabric.js`).
 
 La versión colgada (`src/camiseta/drape.js`) simula la tela con dinámica de
 posiciones sobre una malla a media resolución de la misma camiseta; la malla fina
@@ -77,10 +97,11 @@ que se ve sigue a la gruesa y el cuello y los dobladillos acompañan a su borde.
 La camiseta arranca con la forma puesta y cae sobre la percha (la tela que se
 apoya arriba de la barra queda adherida) o queda sostenida por los broches (los
 puntos que pellizcan la espalda quedan fijos). Unas ataduras de largo máximo
-hacia los dos hombros evitan que se estire con su peso. El cuello se mueve como
-una pieza: puede inclinarse y achatarse de adelante hacia atrás, pero no
-estirarse ni arrugarse (el escote conserva su forma colgado); la tira acanalada
-va cosida al borde de la tela y acompaña el giro del contorno. Frente, espalda y mangas guardan algo del volumen que
+hacia los dos hombros evitan que se estire con su peso. La tira del cuello es una
+cinta simulada, cosida al escote: se dobla y se gira libre, pero no se estira
+(sus uniones se resuelven varias veces por paso) y cada tramo de unos 10 cm
+tiende a su forma puesta, girado como haga falta. Así el escote cae en U, sin
+quebrarse en V, y el contorno y el pecho caen libres. Frente, espalda y mangas guardan algo del volumen que
 tenían puestas (más arriba, casi nada en el ruedo), y la copa de la manga
 conserva algo de cuerpo.
 

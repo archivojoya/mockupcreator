@@ -22,7 +22,7 @@
       <aside class="panel">
         <header class="title">
           <h1>Camiseta deportiva</h1>
-          <p>Cuello redondo · modelo 3D paramétrico</p>
+          <p>Modelo 3D paramétrico</p>
         </header>
 
         <div class="mode" role="group" aria-label="Presentación">
@@ -54,9 +54,37 @@
             <input id="sleeveAngle" type="range" min="30" max="65" step="1" />
           </div>
           <div class="control">
+            <span class="label" id="neckStyle-label">Cuello</span>
+            <div class="seg" role="group" aria-labelledby="neckStyle-label">
+              <button type="button" data-neck="round" aria-pressed="true">Redondo</button>
+              <button type="button" data-neck="v" aria-pressed="false">En V</button>
+            </div>
+          </div>
+          <div class="control">
             <label for="neckDepth">Escote</label>
             <output id="neckDepth-out" for="neckDepth"></output>
             <input id="neckDepth" type="range" min="0.055" max="0.12" step="0.001" />
+          </div>
+        </section>
+
+        <section class="group" aria-labelledby="g-tela">
+          <h2 id="g-tela">Tela</h2>
+          <div class="weaves" role="group" aria-label="Tejido"></div>
+          <p id="weave-note" class="note"></p>
+          <div class="control">
+            <label for="quality">Calidad</label>
+            <output id="quality-out" for="quality"></output>
+            <input id="quality" type="range" min="0" max="1" step="0.01" />
+          </div>
+          <div class="control">
+            <label for="weight">Peso</label>
+            <output id="weight-out" for="weight"></output>
+            <input id="weight" type="range" min="0" max="1" step="0.01" />
+          </div>
+          <div class="control">
+            <label for="heather">Jaspeado</label>
+            <output id="heather-out" for="heather"></output>
+            <input id="heather" type="range" min="0" max="1" step="0.01" />
           </div>
         </section>
 
@@ -72,9 +100,18 @@
 
         <section class="group" aria-labelledby="g-vista">
           <h2 id="g-vista">Vista</h2>
+          <div class="control">
+            <span class="label" id="light-label">Luz</span>
+            <div class="seg" role="group" aria-labelledby="light-label">
+              <button type="button" data-light="studio" aria-pressed="true">Estudio</button>
+              <button type="button" data-light="soft" aria-pressed="false">Pareja</button>
+              <button type="button" data-light="contrast" aria-pressed="false">Contraste</button>
+              <button type="button" data-light="day" aria-pressed="false">Día</button>
+            </div>
+          </div>
           <label class="toggle"><input id="spin" type="checkbox" /> Girar sola</label>
           <label class="toggle"><input id="uvmap" type="checkbox" /> Mapa de estampado</label>
-          <button id="reset" type="button" class="reset">Restablecer forma y colores</button>
+          <button id="reset" type="button" class="reset">Restablecer todo</button>
         </section>
 
         <section class="group spec" aria-labelledby="g-ficha">
@@ -84,6 +121,7 @@
             <div><dt>Ancho de hombros</dt><dd id="s-shoulders"></dd></div>
             <div><dt>Largo total</dt><dd id="s-length"></dd></div>
             <div><dt>Boca de manga</dt><dd id="s-sleeve"></dd></div>
+            <div><dt>Tela</dt><dd id="s-fabric"></dd></div>
           </dl>
         </section>
       </aside>

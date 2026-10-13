@@ -1,4 +1,4 @@
-// Camiseta deportiva de cuello redondo, modelada con código (sin moldes ni
+// Camiseta deportiva de cuello redondo o en V, modelada con código (sin moldes ni
 // simulación). La forma es la de una prenda puesta sobre un cuerpo invisible:
 //
 // - Torso: anillos horizontales (cortes superelípticos) desde el ruedo hasta
@@ -8,8 +8,9 @@
 //   quedar ovalado. Las mangas arrancan exactamente de su borde.
 // - Mangas: de la sisa a un ruedo circular alrededor del eje del brazo, con
 //   puño aparte.
-// - Cuello: tira acanalada sobre el borde del escote. Ruedo y puños llevan
-//   un dobladillo hacia adentro (se ve el espesor de la tela).
+// - Cuello: tira acanalada sobre el borde del escote (en V, las dos puntas
+//   de la tira se juntan en una costura al medio). Ruedo y puños llevan un
+//   dobladillo hacia adentro (se ve el espesor de la tela).
 //
 // Medidas en metros, y hacia arriba, z hacia el frente; y = 0 es el punto
 // más alto del hombro (junto al cuello). Las coordenadas UV de cada pieza
@@ -23,6 +24,7 @@ export const DEFAULTS = {
   sleeveLength: 0.21, // de la punta del hombro al ruedo de la manga
   sleeveAngle: 40, // apertura de las mangas, grados desde la vertical
   neckDepth: 0.085, // profundidad del escote delantero
+  neckStyle: 'round', // 'round' redondo · 'v' en V
 };
 
 // Resolución de las mallas.
@@ -82,9 +84,11 @@ export function measures(p) {
   const M = {
     L,
     fit: f,
-    neck: { a: 0.088, b: 0.08, c: -0.014 }, // contorno del cuello en el hombro
+    // Contorno del cuello en el hombro (en V, algo más abierto).
+    neck: { a: p.neckStyle === 'v' ? 0.097 : 0.088, b: 0.08, c: -0.014 },
     dropF: p.neckDepth,
     dropB: 0.014,
+    vNeck: p.neckStyle === 'v',
     shY: -0.046, // altura de la punta del hombro
     pitY: -0.205 - 0.03 * f, // altura de la axila
     n: 2.35, // exponente de los cortes (2 = elipse)
@@ -134,8 +138,11 @@ export function girth(M, y) {
 
 // Altura del escote: baja al frente y apenas atrás. Con el exponente la curva
 // llega plana al punto del hombro (sin pico donde se juntan frente y espalda).
+// En V, adelante baja casi en línea recta desde cada hombro hasta la punta
+// (u es la distancia al hombro medida a lo ancho: 0 en el hombro, 1 al medio).
 const neckY = (M, th) => {
   const c = Math.cos(th);
+  if (c >= 0 && M.vNeck) return -M.dropF * (1 - Math.abs(Math.sin(th))) ** 1.35;
   return -(c >= 0 ? M.dropF : M.dropB) * Math.abs(c) ** 1.6;
 };
 
@@ -563,7 +570,7 @@ export function buildShirt(params) {
   const neck = [];
   for (let j = 0; j <= COLS; j++) neck.push(['front', N * W + j, (N - 3) * W + j]);
   for (let j = 1; j < COLS; j++) neck.push(['back', N * W + j, (N - 3) * W + j]);
-  parts.collar = buildCollar(M, neck.map(([key, v, below]) => [panels[key].pos, v, below]));
+  parts.collar = buildCollar(M, neck.map(([key, v, below]) => [panels[key].pos, v, below]), COLS / 2);
 
   // ---------- dobladillos (espesor de la tela en ruedo y puños) ----------
   const hemRing = [];
@@ -582,6 +589,7 @@ export function buildShirt(params) {
   for (const part of Object.values(parts)) part.nrm = computeNormals(part.pos, part.idx);
   weldNormals([parts.front, parts.back, parts.sleeveL, parts.sleeveR, parts.cuffL, parts.cuffR]);
   seamMarks(parts, N, W);
+  zoneMarks(parts, M, W);
 
   const geos = {};
   for (const [key, part] of Object.entries(parts)) {
@@ -590,6 +598,7 @@ export function buildShirt(params) {
     g.setAttribute('normal', new THREE.BufferAttribute(part.nrm, 3));
     g.setAttribute('uv', new THREE.BufferAttribute(part.uv, 2));
     g.setAttribute('seam', new THREE.BufferAttribute(part.seam || new Float32Array((part.pos.length / 3) * 2).fill(1), 2));
+    g.setAttribute('zone', new THREE.BufferAttribute(part.zone || new Float32Array(part.pos.length / 3), 1));
     g.setIndex(part.idx);
     g.computeBoundingBox();
     geos[key] = g;
@@ -615,18 +624,22 @@ export function buildShirt(params) {
   return { geos, measures: M, layout };
 }
 
-// Tira acanalada del cuello sobre el borde del escote (lazo cerrado).
-function buildCollar(M, neck) {
+// Tira acanalada del cuello sobre el borde del escote (lazo cerrado). En V,
+// la punta del escote es el punto `tip` del lazo.
+function buildCollar(M, neck, tip) {
   const n = neck.length;
   const base = neck.map(([pos, v]) => new THREE.Vector3().fromArray(pos, v * 3));
   const below = neck.map(([pos, , b]) => new THREE.Vector3().fromArray(pos, b * 3));
-  // Contorno suavizado (redondo y parejo).
+  // Contorno suavizado (redondo y parejo; en V, el frente queda tal cual para
+  // que la punta sea neta).
+  const front = (k) => M.vNeck && k <= 2 * tip;
   const ring = base.map((p) => p.clone());
   for (let pass = 0; pass < 2; pass++) {
     const prev = ring.map((p) => p.clone());
-    for (let i = 0; i < n; i++) ring[i].copy(prev[(i - 1 + n) % n]).add(prev[(i + 1) % n]).multiplyScalar(0.25).addScaledVector(prev[i], 0.5);
+    for (let i = 0; i < n; i++) if (!front(i)) ring[i].copy(prev[(i - 1 + n) % n]).add(prev[(i + 1) % n]).multiplyScalar(0.25).addScaledVector(prev[i], 0.5);
   }
-  const h = 0.021;
+  // Alto de la tira: más angosta en V.
+  const h = M.vNeck ? 0.016 : 0.021;
   const th = 0.0034;
   const center = new THREE.Vector3();
   for (const p of ring) center.add(p);
@@ -672,6 +685,19 @@ function buildCollar(M, neck) {
     hz.normalize().multiplyScalar(Math.sqrt(Math.max(0, h * h - rise * rise)));
     return along(new THREE.Vector3(hz.x, rise, hz.z), k);
   });
+  // En V, adelante la tira no se para: queda acostada sobre el pecho,
+  // siguiendo la tela hacia el escote; atrás y en los hombros se para como en
+  // el cuello redondo.
+  if (M.vNeck) {
+    let zMax = -Infinity;
+    for (const r of ring) zMax = Math.max(zMax, r.z);
+    ups = ups.map((u, k) => {
+      const f = smoothstep(0.1, 0.65, (ring[k].z - center.z) / (zMax - center.z));
+      if (f <= 0) return u;
+      const flat = along(new THREE.Vector3().subVectors(base[k], below[k]).normalize(), k);
+      return along(u.clone().lerp(flat, f).normalize(), k);
+    });
+  }
   const up = new THREE.Vector3();
   const out = new THREE.Vector3();
   const q = new THREE.Vector3();
@@ -691,6 +717,20 @@ function buildCollar(M, neck) {
       q.toArray(pos, (j * SW + i) * 3);
       uv[(j * SW + i) * 2] = u;
       uv[(j * SW + i) * 2 + 1] = v;
+    }
+  }
+  // En V, cada lado de la tira llega hasta el medio y ahí se corta (costura
+  // en inglete): nada pasa al otro lado.
+  if (M.vNeck) {
+    const half = Math.round(n / 4);
+    for (let i = 0; i <= n; i++) {
+      const k = i % n;
+      if (k === tip || Math.abs(k - tip) > half) continue;
+      const side = Math.sign(base[k].x);
+      for (let j = 0; j < P; j++) {
+        const v = (j * SW + i) * 3;
+        if (pos[v] * side < 0) pos[v] = 0;
+      }
     }
   }
   const idx = gridIndex(n, P - 1, SW);
@@ -733,6 +773,36 @@ function buildLip(ring, height, closed) {
   }
   const idx = gridIndex(n - (closed ? 0 : 1), P - 1, SW);
   return { pos, uv, idx: orient(pos, idx, (x, y, z) => [x - center.x, y - center.y, z - center.z]) };
+}
+
+// Zonas de tela calada (para los tejidos que las tienen): una franja a cada
+// costado, de la axila al ruedo, y otra bajo el brazo en cada manga. 1 en la
+// zona, 0 afuera, con un borde suave.
+function zoneMarks(parts, M, W) {
+  for (const key of ['front', 'back']) {
+    const p = parts[key];
+    const n = p.pos.length / 3;
+    p.zone = new Float32Array(n);
+    for (let v = 0; v < n; v++) {
+      const r0 = Math.floor(v / W) * W;
+      const u = p.uv[v * 2];
+      const side = Math.min(u - p.uv[r0 * 2], p.uv[(r0 + COLS) * 2] - u);
+      const y = p.pos[v * 3 + 1];
+      p.zone[v] = smoothstep(0.075, 0.06, side) * smoothstep(M.pitY + 0.01, M.pitY - 0.02, y);
+    }
+  }
+  for (const key of ['sleeveL', 'sleeveR']) {
+    const p = parts[key];
+    const n = p.pos.length / 3;
+    const SW = p.uv.length / 2 / (SLEEVE_ROWS + 1);
+    p.zone = new Float32Array(n);
+    for (let v = 0; v < n; v++) {
+      const r = Math.floor(v / SW);
+      const per = p.uv[(r * SW + SW - 1) * 2];
+      const u = p.uv[v * 2];
+      p.zone[v] = smoothstep(0.05, 0.035, Math.min(u, per - u));
+    }
+  }
 }
 
 // Marcas de costura por vértice: x = distancia a la costura más cercana

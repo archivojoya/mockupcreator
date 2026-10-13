@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 
 const TAU = Math.PI * 2;
-const smooth = (a, b, x) => {
+const ramp = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
@@ -199,11 +199,11 @@ export const WEAVES = {
     fiber: 'poly',
     height(u, v) {
       const d = hexCell(u, v);
-      return smooth(0.62, 0.92, d) - 0.15 * Math.exp(-((d / 0.25) ** 2));
+      return ramp(0.62, 0.92, d) - 0.15 * Math.exp(-((d / 0.25) ** 2));
     },
     detail(u, v) {
       const d = hexCell(u, v);
-      const wall = smooth(0.62, 0.92, d);
+      const wall = ramp(0.62, 0.92, d);
       return [0.45 + 0.1 * wall, 0.54 - 0.08 * wall];
     },
   },
@@ -256,7 +256,7 @@ export const WEAVES = {
     band(u) {
       // 1 en la raya con dibujo, 0 en la lisa, con un borde de 0,3 mm.
       const x = frac(u) * 0.024;
-      return smooth(0.0118, 0.0121, x) * (1 - smooth(0.0236, 0.0239, x));
+      return ramp(0.0118, 0.0121, x) * (1 - ramp(0.0236, 0.0239, x));
     },
     height(u, v) {
       const b = this.band(u);
@@ -308,10 +308,10 @@ export const WEAVES = {
       },
       height(u, v) {
         const d = this.hole(u, v);
-        return -smooth(0.00055, 0.00035, d) + 0.15 * smooth(0.0007, 0.00045, d) * smooth(0.00035, 0.00045, d);
+        return -ramp(0.00055, 0.00035, d) + 0.15 * ramp(0.0007, 0.00045, d) * ramp(0.00035, 0.00045, d);
       },
       detail(u, v) {
-        const hole = smooth(0.00048, 0.00038, this.hole(u, v));
+        const hole = ramp(0.00048, 0.00038, this.hole(u, v));
         return [0.5 - 0.42 * hole, 0.5 + 0.2 * hole];
       },
     },

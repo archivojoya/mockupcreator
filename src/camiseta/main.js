@@ -217,17 +217,17 @@ const FINISH = [
   { roughness: 0.9, specularIntensity: 0.15, sheen: 0.35, sheenRoughness: 0.75 },
   { roughness: 0.87, specularIntensity: 0.2, sheen: 0.62, sheenRoughness: 0.55 },
 ];
-const clamp01 = (x) => Math.min(1, Math.max(0, x));
+const unit = (x) => Math.min(1, Math.max(0, x));
 function applyFabric() {
   const w = WEAVES[fabric.weave] || WEAVES.mesh;
   const t = weaveTextures(WEAVES[fabric.weave] ? fabric.weave : 'mesh');
-  const q = clamp01(fabric.quality);
+  const q = unit(fabric.quality);
   shared.feature.value = w.feature;
   shared.roughAdd.value = w.roughAdd;
-  shared.irregular.value = clamp01((0.5 - q) * 2);
-  shared.pills.value = clamp01((0.35 - q) / 0.35);
-  shared.pucker.value = clamp01((0.4 - q) / 0.4);
-  shared.heather.value = clamp01(fabric.heather);
+  shared.irregular.value = unit((0.5 - q) * 2);
+  shared.pills.value = unit((0.35 - q) / 0.35);
+  shared.pucker.value = unit((0.4 - q) / 0.4);
+  shared.heather.value = unit(fabric.heather);
   shared.zoneOn.value = t.zone ? 1 : 0;
   if (t.zone) {
     shared.zoneNormal.value = t.zone.normal;

@@ -50,6 +50,10 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   para ver cómo caería un diseño. Las coordenadas de textura están en metros
   sobre la tela, listas para estampar más adelante.
 - **Ficha**: contorno de pecho, ancho de hombros, largo y boca de manga.
+- **Configuración sin tocar código**: si la página trae un bloque
+  `<script type="application/json" id="camiseta-config">` con `params`,
+  `colors`, `mode` (`body`, `hanger` o `clips`), `spin` o `uvmap`, arranca con
+  esos valores (y "Restablecer" vuelve a ellos).
 
 Cómo se arma (`src/camiseta/shirt.js`):
 

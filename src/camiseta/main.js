@@ -126,9 +126,21 @@ function fabricMaterial(rib) {
 
 // ---------- estado ----------
 
-const params = { ...DEFAULTS };
-const colors = { ...COLORS };
-const view = { spin: false, uvmap: false, mode: 'body' }; // body: con cuerpo · hanger: en percha · clips: con broches
+// Configuración opcional escrita en la página (así se adapta la camiseta sin
+// tocar el código): <script type="application/json" id="camiseta-config">
+// { "params": {...}, "colors": {...}, "mode": "hanger", "spin": false, "uvmap": false }
+const CONFIG = (() => {
+  try {
+    return JSON.parse(document.getElementById('camiseta-config')?.textContent || '{}');
+  } catch {
+    return {};
+  }
+})();
+const BASE_PARAMS = { ...DEFAULTS, ...CONFIG.params };
+const BASE_COLORS = { ...COLORS, ...CONFIG.colors };
+const params = { ...BASE_PARAMS };
+const colors = { ...BASE_COLORS };
+const view = { spin: !!CONFIG.spin, uvmap: !!CONFIG.uvmap, mode: 'body' }; // body: con cuerpo · hanger: en percha · clips: con broches
 
 const shirt = new THREE.Group();
 scene.add(shirt);
@@ -342,8 +354,8 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 });
 
 document.getElementById('reset').addEventListener('click', () => {
-  Object.assign(params, DEFAULTS);
-  Object.assign(colors, COLORS);
+  Object.assign(params, BASE_PARAMS);
+  Object.assign(colors, BASE_COLORS);
   syncControls();
   rebuild();
 });
@@ -419,7 +431,11 @@ renderer.setAnimationLoop((now) => {
 });
 
 syncControls();
-rebuild();
+document.getElementById('spin').checked = view.spin;
+document.getElementById('uvmap').checked = view.uvmap;
+controls.autoRotate = view.spin;
+if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
+else rebuild();
 resize();
 
 window.__camiseta = { params, colors, rebuild, applyLook, camera, controls, scene, meshes, view, goToView, setMode, drape: () => drape };

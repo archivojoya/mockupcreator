@@ -3,15 +3,16 @@
 // resolución de la misma camiseta. La malla fina que se ve sigue a la gruesa;
 // cuello y dobladillos acompañan a su borde.
 //
-// - Cuelga de una percha de madera (sólido de choque con forma de barra) o de
-//   dos broches que pellizcan la costura de los hombros.
-// - El cuello se mueve como una pieza rígida: la tira acanalada no se arruga.
-// - Frente y espalda no se cruzan y guardan algo del volumen que tenían
-//   puestos: cada punto del frente se mantiene delante del punto más cercano
-//   de la espalda, a una fracción de la separación original. Lo mismo las dos
-//   caras de cada manga.
+// - Cuelga de una percha de madera (sólido de choque bajo la costura de los
+//   hombros) o de dos broches que pellizcan la espalda junto a la costura.
+// - El cuello se mueve como una pieza: gira y se achata, pero no se estira
+//   ni se arruga.
+// - Ninguna parte de la tela atraviesa a otra (choque entre puntos y contra
+//   el centro de cada celda), y frente, espalda y mangas guardan algo del
+//   volumen que tenían puestos.
 // - El mouse empuja la tela al pasar y levanta una brisa suave.
-// - Cuando la tela se queda quieta la simulación se duerme (no gasta nada).
+// - Cuando la tela se aquieta, queda simétrica y la simulación se duerme (no
+//   gasta nada).
 
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';

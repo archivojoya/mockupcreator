@@ -652,6 +652,13 @@ function buildCollar(M, neck) {
     return new THREE.Vector3().subVectors(b, below[k]).normalize().lerp(vertical, 0.45).normalize().addScaledVector(o, -0.16).normalize();
   });
   for (let pass = 0; pass < 6; pass++) ups = ups.map((_, k) => ups[(k - 1 + n) % n].clone().add(ups[(k + 1) % n]).addScaledVector(ups[k], 2).normalize());
+  // La tira sube sin inclinarse a lo largo del contorno (si no, en el centro
+  // de la espalda las columnas se juntan arriba y queda una muesca).
+  const along = (u, k) => {
+    const t = new THREE.Vector3().subVectors(ring[(k + 1) % n], ring[(k - 1 + n) % n]).normalize();
+    return u.addScaledVector(t, -u.dot(t)).normalize();
+  };
+  ups = ups.map((u, k) => along(u.clone(), k));
   // El borde de arriba no puede subir en punta donde el escote es más alto
   // (junto al hombro): se empareja su altura alrededor del cuello y, donde
   // baja, la tira se inclina hacia adentro (abraza el cuello) sin acortarse.
@@ -663,7 +670,7 @@ function buildCollar(M, neck) {
     const hz = new THREE.Vector3(u0.x, 0, u0.z);
     if (hz.lengthSq() < 1e-8) hz.set(center.x - ring[k].x, 0, center.z - ring[k].z);
     hz.normalize().multiplyScalar(Math.sqrt(Math.max(0, h * h - rise * rise)));
-    return new THREE.Vector3(hz.x, rise, hz.z).normalize();
+    return along(new THREE.Vector3(hz.x, rise, hz.z), k);
   });
   const up = new THREE.Vector3();
   const out = new THREE.Vector3();

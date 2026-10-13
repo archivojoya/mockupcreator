@@ -74,24 +74,28 @@ La camiseta arranca con la forma puesta y cae sobre la percha (la tela que se
 apoya arriba de la barra queda adherida) o queda sostenida por los broches (los
 puntos que pellizcan la espalda quedan fijos). Unas ataduras de largo máximo
 hacia los dos hombros evitan que se estire con su peso. El cuello se mueve como
-una pieza: puede inclinarse y achatarse en óvalo pero no arrugarse, y la tira
-acanalada lo acompaña. Frente, espalda y mangas guardan algo del volumen que
+una pieza: puede inclinarse y achatarse de adelante hacia atrás, pero no
+estirarse ni arrugarse (el escote conserva su forma colgado); la tira acanalada
+va cosida al borde de la tela y acompaña el giro del contorno. Frente, espalda y mangas guardan algo del volumen que
 tenían puestas (más arriba, casi nada en el ruedo), y la copa de la manga
 conserva algo de cuerpo.
 
 Ninguna parte de la tela atraviesa a otra: cada punto de la simulación tiene un
 grosor de 1,1 cm y ningún punto que en la tela esté lejos puede acercarse más
-que eso (manga contra cuerpo, frente contra espalda, pliegues). El centro de
+que eso (manga contra cuerpo, frente contra espalda, pliegues); los que a lo
+largo de la tela están a menos de 4,5 cm no chocan entre sí (en la axila, por
+ejemplo, la manga y la espalda están cerca sin ser capas distintas). El centro de
 cada celda de la malla también choca, así ningún punto pasa por el medio de una
 celda grande. Los pares cercanos se buscan con una grilla espacial sólo cuando
 algún punto se movió más de medio grosor desde la última búsqueda, y en cada
 paso sólo se revisan esos pares; además ningún punto se mueve más de 4 mm por
 paso, así un empujón fuerte no hace que una capa salte a través de otra. Los
 dobladillos siguen la curva de su propia tela. En reposo la camiseta cuelga
-simétrica: el lado derecho (visto de frente) copia en espejo al izquierdo, y la
-forma de partida se hace simétrica antes de armar la simulación. Después de un
-empujón la tela se mueve libre y a los dos segundos vuelve de a poco a la
-simetría. Cuando la tela se queda quieta la simulación se duerme.
+simétrica: la forma de partida y todas las uniones se arman simétricas, la tela
+se mueve libre y, cuando se aquieta, el lado derecho (visto de frente) se
+acomoda en medio segundo como espejo del izquierdo. Pasado un rato sin
+empujones el aire frena un poco más, así no quedan balanceos lentos. Después
+la simulación se duerme (como mucho 8 s después del último empujón).
 
 ## Cómo preparar el SVG
 

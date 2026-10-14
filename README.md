@@ -45,8 +45,9 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   toque).
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
   de mangas, cuello (redondo o en V) y profundidad del escote. La malla se rehace
-  al instante. En V, la tira es más angosta, va acostada sobre el pecho y sus
-  dos puntas se juntan en una costura al medio.
+  al instante. El cuello en V es el redondo (mismo ancho) con una V chica al
+  medio: ahí la tira va acostada sobre el pecho y sus dos puntas se juntan en
+  una costura.
 - **Tela**: siete tejidos (malla deportiva, piqué, panal, jersey liso,
   acanalada, jacquard con rayas tono sobre tono y microperforada con zonas
   caladas a los costados y bajo los brazos), más tres controles:
@@ -101,7 +102,10 @@ hacia los dos hombros evitan que se estire con su peso. La tira del cuello es un
 cinta simulada, cosida al escote: se dobla y se gira libre, pero no se estira
 (sus uniones se resuelven varias veces por paso) y cada tramo de unos 10 cm
 tiende a su forma puesta, girado como haga falta. Así el escote cae en U, sin
-quebrarse en V, y el contorno y el pecho caen libres. Frente, espalda y mangas guardan algo del volumen que
+quebrarse en V, y el contorno y el pecho caen libres. Con broches nada sostiene
+el cuello atrás ni el hombro de afuera del broche: ahí la tira tiene mucho menos
+cuerpo, se guarda menos volumen arriba y la tela del torso cede más al bies
+(como el punto de verdad), así el cuello y los hombros no se embolsan. Frente, espalda y mangas guardan algo del volumen que
 tenían puestas (más arriba, casi nada en el ruedo), y la copa de la manga
 conserva algo de cuerpo.
 
@@ -109,7 +113,9 @@ Ninguna parte de la tela atraviesa a otra: cada punto de la simulación tiene un
 grosor de 1,1 cm y ningún punto que en la tela esté lejos puede acercarse más
 que eso (manga contra cuerpo, frente contra espalda, pliegues); los que a lo
 largo de la tela están a menos de 4,5 cm no chocan entre sí (en la axila, por
-ejemplo, la manga y la espalda están cerca sin ser capas distintas). El centro de
+ejemplo, la manga y la espalda están cerca sin ser capas distintas); entre
+manga y torso ese margen es de sólo 1,2 cm, así la copa de la manga no
+atraviesa el torso junto a la sisa. El centro de
 cada celda de la malla también choca, así ningún punto pasa por el medio de una
 celda grande. Los pares cercanos se buscan con una grilla espacial sólo cuando
 algún punto se movió más de medio grosor desde la última búsqueda, y en cada

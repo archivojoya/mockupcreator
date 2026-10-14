@@ -84,11 +84,13 @@ export function measures(p) {
   const M = {
     L,
     fit: f,
-    // Contorno del cuello en el hombro (en V, algo más abierto).
-    neck: { a: p.neckStyle === 'v' ? 0.097 : 0.088, b: 0.08, c: -0.014 },
+    neck: { a: 0.088, b: 0.08, c: -0.014 }, // contorno del cuello en el hombro
     dropF: p.neckDepth,
     dropB: 0.014,
     vNeck: p.neckStyle === 'v',
+    // En V: el contorno es el del cuello redondo (con algo más de la mitad de
+    // la profundidad) y al medio baja una V chica de VEE_HALF de cada lado.
+    vDrop: p.neckDepth * 0.45,
     shY: -0.046, // altura de la punta del hombro
     pitY: -0.205 - 0.03 * f, // altura de la axila
     n: 2.35, // exponente de los cortes (2 = elipse)
@@ -138,11 +140,15 @@ export function girth(M, y) {
 
 // Altura del escote: baja al frente y apenas atrás. Con el exponente la curva
 // llega plana al punto del hombro (sin pico donde se juntan frente y espalda).
-// En V, adelante baja casi en línea recta desde cada hombro hasta la punta
-// (u es la distancia al hombro medida a lo ancho: 0 en el hombro, 1 al medio).
+// En V es la misma curva, menos profunda, con una V chica al medio: baja
+// hasta la punta y se junta con la curva sin quiebre.
+const VEE_HALF = 0.055;
 const neckY = (M, th) => {
   const c = Math.cos(th);
-  if (c >= 0 && M.vNeck) return -M.dropF * (1 - Math.abs(Math.sin(th))) ** 1.35;
+  if (c >= 0 && M.vNeck) {
+    const s = Math.min(1, (M.neck.a * Math.abs(Math.sin(th))) / VEE_HALF);
+    return -(M.dropF - M.vDrop) * c ** 1.6 - M.vDrop * (1 - s) ** 1.4;
+  }
   return -(c >= 0 ? M.dropF : M.dropB) * Math.abs(c) ** 1.6;
 };
 
@@ -630,16 +636,16 @@ function buildCollar(M, neck, tip) {
   const n = neck.length;
   const base = neck.map(([pos, v]) => new THREE.Vector3().fromArray(pos, v * 3));
   const below = neck.map(([pos, , b]) => new THREE.Vector3().fromArray(pos, b * 3));
-  // Contorno suavizado (redondo y parejo; en V, el frente queda tal cual para
-  // que la punta sea neta).
-  const front = (k) => M.vNeck && k <= 2 * tip;
+  // Contorno suavizado (redondo y parejo; en V, la V queda tal cual para que
+  // la punta sea neta).
+  const front = (k) => M.vNeck && k <= 2 * tip && Math.abs(base[k].x) < VEE_HALF;
   const ring = base.map((p) => p.clone());
   for (let pass = 0; pass < 2; pass++) {
     const prev = ring.map((p) => p.clone());
     for (let i = 0; i < n; i++) if (!front(i)) ring[i].copy(prev[(i - 1 + n) % n]).add(prev[(i + 1) % n]).multiplyScalar(0.25).addScaledVector(prev[i], 0.5);
   }
-  // Alto de la tira: más angosta en V.
-  const h = M.vNeck ? 0.016 : 0.021;
+  // Alto de la tira (en V, apenas más angosta).
+  const h = M.vNeck ? 0.019 : 0.021;
   const th = 0.0034;
   const center = new THREE.Vector3();
   for (const p of ring) center.add(p);
@@ -685,14 +691,11 @@ function buildCollar(M, neck, tip) {
     hz.normalize().multiplyScalar(Math.sqrt(Math.max(0, h * h - rise * rise)));
     return along(new THREE.Vector3(hz.x, rise, hz.z), k);
   });
-  // En V, adelante la tira no se para: queda acostada sobre el pecho,
-  // siguiendo la tela hacia el escote; atrás y en los hombros se para como en
-  // el cuello redondo.
+  // En V la tira es la del cuello redondo, salvo en la V: ahí no se para,
+  // queda acostada sobre el pecho siguiendo la tela (parada sería una pared).
   if (M.vNeck) {
-    let zMax = -Infinity;
-    for (const r of ring) zMax = Math.max(zMax, r.z);
     ups = ups.map((u, k) => {
-      const f = smoothstep(0.1, 0.65, (ring[k].z - center.z) / (zMax - center.z));
+      const f = k <= 2 * tip ? smoothstep(VEE_HALF, VEE_HALF * 0.35, Math.abs(base[k].x)) : 0;
       if (f <= 0) return u;
       const flat = along(new THREE.Vector3().subVectors(base[k], below[k]).normalize(), k);
       return along(u.clone().lerp(flat, f).normalize(), k);

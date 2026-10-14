@@ -30,6 +30,15 @@ const SLACK = 1.01; // lo que se puede estirar la tela con su peso
 // Fracción de la separación entre frente y espalda (puesta) que conserva la
 // tela colgada: algo más arriba, casi nada en el ruedo.
 const VOLUME_TOP = 0.3;
+// Con broches nada sostiene el cuello atrás ni el hombro de afuera del
+// broche: la tira tiene menos cuerpo, arriba se guarda menos volumen, la copa
+// de la manga cede más y la tela se deja deformar más al bies (el punto de
+// tejido cede mucho en diagonal). Si no, el cuello y los hombros conservan la
+// forma puesta y se embolsan.
+const CLIPS_BAND = 0.1;
+const CLIPS_VOLUME_TOP = 0.1;
+const CLIPS_CAP = 0.15;
+const CLIPS_SHEAR = 0.12;
 const VOLUME_HEM = 0.06;
 const VOLUME_SLEEVE = 0.5;
 // Broches: filas de la costura del hombro donde pellizcan (desde la punta
@@ -49,6 +58,10 @@ const SETTLE_MAX = 8; // segundos sin empujones tras los que se termina de acomo
 // de una celda de la malla, así ningún punto pasa entre otros cuatro).
 const THICK = 0.011;
 const GEO_NEAR = 0.045; // por la tela más cerca que esto: no chocan (los sostiene la malla)
+// Entre manga y torso alcanza con menos: más allá de esto, aunque estén
+// cerca por la tela, chocan (si no, la copa de la manga atraviesa el torso
+// junto a la sisa).
+const GEO_NEAR_SEAM = 0.012;
 const VMAX = 0.004; // velocidad máxima por subpaso (≈ 1 m/s)
 // Tira del cuello: fila del perfil de la tira que hace de borde de arriba de
 // la cinta (la cara de afuera, justo antes del doblez).
@@ -346,7 +359,11 @@ export class HangingShirt {
     this.damp = DAMP + 0.006 * heavy;
     this.dampCalm = DAMP_CALM + 0.01 * heavy;
     this.pushScale = 1 - 0.7 * heavy;
-    const volTop = VOLUME_TOP + 0.16 * heavy;
+    const clips = support.kind === 'clips';
+    const volTop = (clips ? CLIPS_VOLUME_TOP : VOLUME_TOP) + 0.16 * heavy;
+    this.bandStiff = clips ? CLIPS_BAND : BAND_STIFF;
+    this.capK = clips ? CLIPS_CAP : 0.35;
+    this.shear = [1, 0.5].map((k) => k * (clips ? CLIPS_SHEAR : 1)); // diagonales del torso: estirar, comprimir
     this.geos = built.geos;
     this.hanger = support.kind === 'hanger' ? support : null;
     const L = built.layout;
@@ -472,15 +489,17 @@ export class HangingShirt {
       if (!pairs.has(key)) pairs.set(key, [a, b, dist(a, b), kind]);
       else if (force) pairs.get(key)[3] = kind;
     };
-    const grid = (m, w, h, cellOk) => {
+    // diag: tipo de las diagonales (1 en el torso, 7 en las mangas: así la
+    // tela del torso puede ceder al bies sin que cedan las mangas).
+    const grid = (m, w, h, cellOk, diag = 1) => {
       for (let i = 0; i <= h; i++)
         for (let j = 0; j < w; j++) {
           const a = m[i * w + j];
           if (j + 1 < w) link(a, m[i * w + j + 1], 0);
           if (i < h) link(a, m[(i + 1) * w + j], 0);
           if (i < h && j + 1 < w && cellOk(i, j)) {
-            link(a, m[(i + 1) * w + j + 1], 1);
-            link(m[i * w + j + 1], m[(i + 1) * w + j], 1);
+            link(a, m[(i + 1) * w + j + 1], diag);
+            link(m[i * w + j + 1], m[(i + 1) * w + j], diag);
           }
           if (j + 2 < w && m[i * w + j + 1] >= 0) link(a, m[i * w + j + 2], 2);
           if (i + 2 <= h && m[(i + 1) * w + j] >= 0) link(a, m[(i + 2) * w + j], 2);
@@ -489,7 +508,7 @@ export class HangingShirt {
     const cellOk = (i, j) => !(i >= i1 && i < i2 && (j < A || j >= C - A));
     grid(map.front, WC, NC, cellOk);
     grid(map.back, WC, NC, cellOk);
-    for (const m of Object.values(sleeveMap)) grid(m, SWC, RC, () => true);
+    for (const m of Object.values(sleeveMap)) grid(m, SWC, RC, () => true, 7);
     // La copa de la manga tiene algo de cuerpo: uniones blandas entre las
     // primeras filas de la manga y la tela del torso junto a la sisa (la
     // manga no cuelga a plomo).
@@ -643,7 +662,7 @@ export class HangingShirt {
         : [0, C].map((col) => Array.from({ length: NC - i2 + 1 }, (_, r) => map.front[(i2 + r) * WC + col]));
     const adj = Array.from({ length: n }, () => []);
     for (const [a, b, r, kd] of list) {
-      if (kd > 1 && kd !== 5) continue;
+      if (kd > 1 && kd !== 5 && kd !== 7) continue;
       adj[a].push(b, r);
       adj[b].push(a, r);
     }
@@ -660,9 +679,12 @@ export class HangingShirt {
     // Vecinos por la tela: los puntos que a lo largo de la tela están a menos
     // de GEO_NEAR no chocan entre sí (los sostienen las uniones de la malla;
     // junto a las costuras pueden estar cerca en el espacio sin ser capas
-    // distintas, como en la axila).
+    // distintas, como en la axila). Entre manga y torso, sólo hasta
+    // GEO_NEAR_SEAM.
     this.near = new Uint32Array(Math.ceil((n * n) / 32));
     const dist0 = new Float32Array(n).fill(Infinity);
+    const inSleeve = new Uint8Array(n);
+    for (const m of Object.values(sleeveMap)) for (let k = SWC; k < m.length; k++) inSleeve[m[k]] = 1;
     for (let s0 = 0; s0 < n; s0++) {
       const seen = [s0];
       dist0[s0] = 0;
@@ -684,8 +706,10 @@ export class HangingShirt {
         }
       }
       for (const v of seen) {
-        const key = s0 * n + v;
-        this.near[key >>> 5] |= 1 << (key & 31);
+        if (inSleeve[s0] === inSleeve[v] || dist0[v] < GEO_NEAR_SEAM) {
+          const key = s0 * n + v;
+          this.near[key >>> 5] |= 1 << (key & 31);
+        }
         dist0[v] = Infinity;
       }
     }
@@ -745,7 +769,7 @@ export class HangingShirt {
     this.noCollide = new Uint8Array(n);
     for (let i = 0; i < n; i++)
       for (const { id } of this.pins)
-        if (Math.hypot(P[i * 3] - P[id * 3], P[i * 3 + 1] - P[id * 3 + 1], P[i * 3 + 2] - P[id * 3 + 2]) < 0.035) this.noCollide[i] = 1;
+        if (Math.hypot(P[i * 3] - P[id * 3], P[i * 3 + 1] - P[id * 3 + 1], P[i * 3 + 2] - P[id * 3 + 2]) < 0.025) this.noCollide[i] = 1;
     this.cellStart = new Int32Array(1);
     this.cellFill = new Int32Array(0);
     this.pairs = new Int32Array(4096);
@@ -1237,7 +1261,7 @@ export class HangingShirt {
       for (const id of list) {
         if (!W[id] || !cnt[id]) continue;
         const i = id * 3;
-        for (let c = 0; c < 3; c++) P[i + c] += (G[i + c] / cnt[id] - P[i + c]) * BAND_STIFF;
+        for (let c = 0; c < 3; c++) P[i + c] += (G[i + c] / cnt[id] - P[i + c]) * this.bandStiff;
       }
   }
 
@@ -1247,6 +1271,8 @@ export class HangingShirt {
     const W = this.w;
     const { ca, cb, rest, kind } = this;
     const [bendS, bendC] = this.bend;
+    const capK = this.capK;
+    const [shearS, shearC] = this.shear;
     const count = only ? only.length : ca.length;
     for (let o = 0; o < count; o++) {
       const c = only ? only[o] : o;
@@ -1261,7 +1287,7 @@ export class HangingShirt {
       // Estirar cuesta mucho; comprimir, poco (la tela se pliega). La
       // flexión es blanda.
       const kd = kind[c];
-      const k = kd === 2 ? (err > 0 ? bendS : bendC) : kd === 4 ? 0.35 : kd === 6 ? (err > 0 ? 0.6 : 0.45) : err > 0 ? 1 : kd === 1 ? 0.5 : kd === 5 ? 0.9 : 0.7;
+      const k = kd === 2 ? (err > 0 ? bendS : bendC) : kd === 4 ? capK : kd === 6 ? (err > 0 ? 0.6 : 0.45) : kd === 1 ? (err > 0 ? shearS : shearC) : kd === 7 ? (err > 0 ? 1 : 0.5) : err > 0 ? 1 : kd === 5 ? 0.9 : 0.7;
       const wa = W[ca[c]];
       const wb = W[cb[c]];
       const ws = wa + wb;

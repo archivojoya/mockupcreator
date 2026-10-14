@@ -383,7 +383,7 @@ const FOUT = {
   heather: (v) => (v < 0.05 ? 'Sin jaspeado' : v < 0.5 ? 'Suave' : 'Marcado'),
 };
 // Escote según el tipo de cuello: mínimo, máximo y valor al elegirlo.
-const NECK = { round: [0.055, 0.12, 0.085], v: [0.07, 0.15, 0.105] };
+const NECK = { round: [0.055, 0.12, 0.085], v: [0.07, 0.13, 0.09] };
 const sliders = {};
 const fabricSliders = {};
 function setFill(input) {

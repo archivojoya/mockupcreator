@@ -152,6 +152,14 @@ const neckY = (M, th) => {
   return -(c >= 0 ? M.dropF : M.dropB) * Math.abs(c) ** 1.6;
 };
 
+// Frente del torso (sin la curva hacia el cuello) en el punto de ancho x y
+// altura y: el corte superelíptico a esa altura.
+function chestZ(M, x, y) {
+  const a = M.sa(y);
+  const r = Math.min(1, Math.abs(x) / a) ** M.n;
+  return M.sc(y) + M.sb(y) * (1 - r) ** (1 / M.n);
+}
+
 // Punto del torso para el ángulo th (0 frente, π/2 costado izquierdo, π
 // espalda) y t (0 ruedo, 1 escote).
 function torsoPoint(M, th, t, out) {
@@ -172,6 +180,9 @@ function torsoPoint(M, th, t, out) {
     x = lerp(x, M.neck.a * sn, w);
     yy = lerp(y, yn, w);
     z = lerp(z, M.neck.c + M.neck.b * cs, w);
+    // En V el escote baja por el pecho: ahí la tela sigue el pecho y no se
+    // hunde hacia el cuello (el contorno del cuello queda más atrás).
+    if (M.vNeck && cs > 0) z = Math.max(z, chestZ(M, x, yy));
   }
   out[0] = x;
   out[1] = yy;

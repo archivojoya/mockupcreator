@@ -39,8 +39,9 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
 - **Presentación**: con cuerpo (forma fija, como puesta), en percha o con
   broches. La percha es de madera, plana y paralela a la camiseta, con el arco
   de una percha de verdad y bordes definidos; apoya bajo la costura de los
-  hombros. Los dos broches cuelgan de una barra y pellizcan la espalda apenas
-  detrás de la costura. Colgada, la tela se simula en vivo: al pasar el mouse
+  hombros. Los dos broches cuelgan de una barra y pellizcan la costura de cada
+  hombro, como un broche de pinza: la costura arriba, el frente contra la
+  mordaza de adelante y la espalda contra la de atrás. Colgada, la tela se simula en vivo: al pasar el mouse
   se empuja y se balancea, y después se acomoda sola (en el celular, con un
   toque).
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
@@ -98,15 +99,17 @@ posiciones sobre una malla a media resolución de la misma camiseta; la malla fi
 que se ve sigue a la gruesa y el cuello y los dobladillos acompañan a su borde.
 La camiseta arranca con la forma puesta y cae sobre la percha (la tela que se
 apoya arriba de la barra queda adherida) o queda sostenida por los broches (los
-puntos que pellizcan la espalda quedan fijos). Unas ataduras de largo máximo
+puntos que pellizcan quedan fijos: la costura y, a cada lado, el frente y la
+espalda; así la espalda no se escapa hacia abajo y no queda un hueco entre el
+cuello y los hombros). Unas ataduras de largo máximo
 hacia los dos hombros evitan que se estire con su peso. La tira del cuello es una
 cinta simulada, cosida al escote: se dobla y se gira libre, pero no se estira
 (sus uniones se resuelven varias veces por paso) y cada tramo de unos 10 cm
 tiende a su forma puesta, girado como haga falta. Así el escote cae en U, sin
 quebrarse en V, y el contorno y el pecho caen libres. Con broches nada sostiene
-el cuello atrás ni el hombro de afuera del broche: ahí la tira tiene mucho menos
-cuerpo, se guarda menos volumen arriba y la tela del torso cede más al bies
-(como el punto de verdad), así el cuello y los hombros no se embolsan. Frente, espalda y mangas guardan algo del volumen que
+el cuello atrás (entre los broches) ni el hombro de afuera del broche: ahí la
+tira tiene menos cuerpo, se guarda menos volumen arriba y la copa de la manga
+cede más, así el cuello y los hombros no se embolsan. Frente, espalda y mangas guardan algo del volumen que
 tenían puestas (más arriba, casi nada en el ruedo), y la copa de la manga
 conserva algo de cuerpo.
 

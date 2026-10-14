@@ -45,9 +45,10 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   toque).
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
   de mangas, cuello (redondo o en V) y profundidad del escote. La malla se rehace
-  al instante. El cuello en V es el redondo (mismo ancho) con una V chica al
-  medio: ahí la tira va acostada sobre el pecho y sus dos puntas se juntan en
-  una costura.
+  al instante. El cuello en V tiene el mismo ancho que el redondo y patas
+  rectas desde cada hombro hasta la punta; adelante la tira va acostada sobre
+  el pecho, con el mismo ancho en toda la V, y sus dos puntas se juntan en una
+  costura.
 - **Tela**: siete tejidos (malla deportiva, piqué, panal, jersey liso,
   acanalada, jacquard con rayas tono sobre tono y microperforada con zonas
   caladas a los costados y bajo los brazos), más tres controles:

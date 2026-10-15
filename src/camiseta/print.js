@@ -189,44 +189,51 @@ export async function readDesign(text) {
     const name = `${el.getAttribute('id') || ''} ${el.getAttribute('data-name') || ''}`;
     if (/gu[ií]as/i.test(name)) el.remove();
   }
-  const result = {};
-  const found = [];
+  // Lo estampado, el escudo y las marcas, cada uno en su lienzo.
+  const variants = Object.entries(splitKinds(new XMLSerializer().serializeToString(doc))).filter(([, t]) => t);
+  const out = { canvases: {}, crest: {}, marks: {}, found: [] };
   for (const pc of PIECES) {
     const k = Math.min(PX_PER_MM, MAX_PX / Math.max(pc.w, pc.h));
     const pw = Math.round(pc.w * k);
     const ph = Math.round(pc.h * k);
-    root.setAttribute('viewBox', `${vb[0] + pc.x * s} ${vb[1] + pc.y * s} ${pc.w * s} ${pc.h * s}`);
-    root.setAttribute('width', pw);
-    root.setAttribute('height', ph);
-    root.setAttribute('preserveAspectRatio', 'none');
-    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(doc)], { type: 'image/svg+xml' }));
-    try {
-      const img = new Image();
-      img.decoding = 'async';
-      img.src = url;
-      await img.decode();
-      const canvas = document.createElement('canvas');
-      canvas.width = pw;
-      canvas.height = ph;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, pw, ph);
-      // ¿Hay algo dibujado? (mirando una copia chica)
-      const probe = document.createElement('canvas');
-      probe.width = probe.height = 48;
-      const pctx = probe.getContext('2d', { willReadFrequently: true });
-      pctx.drawImage(canvas, 0, 0, 48, 48);
-      const a = pctx.getImageData(0, 0, 48, 48).data;
-      let any = false;
-      for (let i = 3; i < a.length && !any; i += 4) any = a[i] > 8;
-      if (any) {
-        result[pc.key] = canvas;
-        found.push(pc.label.toLowerCase());
+    let anyPart = false;
+    for (const [part, text] of variants) {
+      const d = new DOMParser().parseFromString(text, 'image/svg+xml');
+      const r = d.documentElement;
+      r.setAttribute('viewBox', `${vb[0] + pc.x * s} ${vb[1] + pc.y * s} ${pc.w * s} ${pc.h * s}`);
+      r.setAttribute('width', pw);
+      r.setAttribute('height', ph);
+      r.setAttribute('preserveAspectRatio', 'none');
+      const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(d)], { type: 'image/svg+xml' }));
+      try {
+        const img = new Image();
+        img.decoding = 'async';
+        img.src = url;
+        await img.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = pw;
+        canvas.height = ph;
+        canvas.getContext('2d').drawImage(img, 0, 0, pw, ph);
+        // ¿Hay algo dibujado? (mirando una copia chica)
+        const probe = document.createElement('canvas');
+        probe.width = probe.height = 48;
+        const pctx = probe.getContext('2d', { willReadFrequently: true });
+        pctx.drawImage(canvas, 0, 0, 48, 48);
+        const a = pctx.getImageData(0, 0, 48, 48).data;
+        let any = false;
+        for (let i = 3; i < a.length && !any; i += 4) any = a[i] > 8;
+        if (any || part === 'print') (part === 'print' ? out.canvases : out[part])[pc.key] = canvas;
+        anyPart ||= any;
+      } finally {
+        URL.revokeObjectURL(url);
       }
-    } finally {
-      URL.revokeObjectURL(url);
     }
+    if (anyPart) out.found.push(pc.label.toLowerCase());
+    else delete out.canvases[pc.key];
+    out.k = out.k || {};
+    out.k[pc.key] = k;
   }
-  return { canvases: result, found };
+  return out;
 }
 
 // Textura de estampado de una pieza: lee las coordenadas de estampado (uv1)
@@ -335,7 +342,7 @@ export function readPieces(files) {
     const mm = mmPerUnit(root, vb);
     // Capas con nombre de pieza (las de más arriba).
     const named = [...root.querySelectorAll('[id], [data-name]')].filter((el) => {
-      if (el.nodeName.toLowerCase() === 'svg' || !pieceKeys(`${el.getAttribute('id') || ''} ${el.getAttribute('data-name') || ''}`).length) return false;
+      if (el.nodeName.toLowerCase() === 'svg' || kindOf(el) || !pieceKeys(`${el.getAttribute('id') || ''} ${el.getAttribute('data-name') || ''}`).length) return false;
       for (let p = el.parentElement; p && p !== root; p = p.parentElement) if (pieceKeys(`${p.getAttribute('id') || ''} ${p.getAttribute('data-name') || ''}`).length) return false;
       return true;
     });
@@ -398,8 +405,9 @@ export function isolateLayer(piece) {
   }
 }
 
-// Lienzo del recuadro de una pieza (como los de la plantilla) con el diseño
-// ubicado en su molde. Devuelve también cómo se ubicó.
+// Lienzos del recuadro de una pieza (como los de la plantilla) con el
+// diseño ubicado en su molde: lo estampado y, aparte, el escudo y las marcas
+// si las tiene (ver splitKinds). Devuelve también cómo se ubicó.
 export async function placePiece(key, piece, size) {
   const pc = PIECES.find((p) => p.key === key);
   const [, , fw, fh] = piece.vb;
@@ -409,30 +417,213 @@ export async function placePiece(key, piece, size) {
   const w = fw * s;
   const h = fh * s;
   const k = Math.min(PX_PER_MM, MAX_PX / Math.max(pc.w, pc.h));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(pc.w * k);
-  canvas.height = Math.round(pc.h * k);
-  const doc = new DOMParser().parseFromString(piece.svg, 'image/svg+xml');
-  const root = doc.documentElement;
   const pw = Math.max(1, Math.round(w * k));
   const ph = Math.max(1, Math.round(h * k));
-  root.setAttribute('viewBox', piece.vb.join(' '));
-  root.setAttribute('width', pw);
-  root.setAttribute('height', ph);
-  root.setAttribute('preserveAspectRatio', 'none');
-  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(doc)], { type: 'image/svg+xml' }));
-  try {
-    const img = new Image();
-    img.src = url;
-    await img.decode();
-    const ctx = canvas.getContext('2d');
-    const x = (pc.ax - w / 2) * k;
-    const y = (pc.ay + size.top) * k;
-    ctx.drawImage(img, x, y, pw, ph);
-    // El cuello da la vuelta: lo que pasa de una punta sigue en la otra.
-    if (size.wrap) for (const d of [-1, 1]) ctx.drawImage(img, x + d * size.wrap * k, y, pw, ph);
-  } finally {
-    URL.revokeObjectURL(url);
+  const x = (pc.ax - w / 2) * k;
+  const y = (pc.ay + size.top) * k;
+  const out = { real, w, h, k, rect: [x, y, pw, ph] };
+  for (const [part, text] of Object.entries(splitKinds(piece.svg))) {
+    if (!text) continue;
+    const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+    const root = doc.documentElement;
+    root.setAttribute('viewBox', piece.vb.join(' '));
+    root.setAttribute('width', pw);
+    root.setAttribute('height', ph);
+    root.setAttribute('preserveAspectRatio', 'none');
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(pc.w * k);
+    canvas.height = Math.round(pc.h * k);
+    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(doc)], { type: 'image/svg+xml' }));
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, x, y, pw, ph);
+      // El cuello da la vuelta: lo que pasa de una punta sigue en la otra.
+      if (size.wrap) for (const d of [-1, 1]) ctx.drawImage(img, x + d * size.wrap * k, y, pw, ph);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+    out[part] = canvas;
   }
-  return { canvas, real, w, h, rect: [(pc.ax - w / 2) * k, (pc.ay + size.top) * k, pw, ph] };
+  return out;
+}
+
+// ---------- escudo y marcas ----------
+
+// Dentro de un diseño, los grupos (o capas) llamados "escudo" van aparte
+// (bordados, de entrada) y los llamados "marca", "logo" o "sponsor" también
+// (en vinilo): cada uno se puede bordar, poner en vinilo o estampar.
+const KINDS = [
+  ['crest', /escudo|crest|badge|emblema|insignia|bordado/i],
+  ['marks', /marca|logo|sponsor|brand|patrocin|vinilo/i],
+];
+export function kindOf(el) {
+  const n = `${el.getAttribute('id') || ''} ${el.getAttribute('data-name') || ''}`.normalize('NFC');
+  for (const [k, re] of KINDS) if (re.test(n)) return k;
+  return null;
+}
+const KEEP_DEFS = /^(defs|style|lineargradient|radialgradient|clippath|mask|pattern|symbol|filter|title)$/i;
+// Un SVG en tres: `print` (sin escudo ni marcas), `crest` y `marks` (sólo
+// eso, null si no hay).
+export function splitKinds(text) {
+  const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+  const root = doc.documentElement;
+  const tagged = [...root.querySelectorAll('[id], [data-name]')].filter((el) => {
+    if (!kindOf(el)) return false;
+    for (let p = el.parentElement; p && p !== root; p = p.parentElement) if (kindOf(p)) return false;
+    return true;
+  });
+  if (!tagged.length) return { print: text, crest: null, marks: null };
+  const ser = new XMLSerializer();
+  const only = (kind) => {
+    const mine = tagged.filter((el) => kindOf(el) === kind);
+    if (!mine.length) return null;
+    const d = doc.cloneNode(true);
+    const all = [...d.documentElement.querySelectorAll('*')];
+    const orig = [...root.querySelectorAll('*')];
+    const keep = new Set();
+    const inside = new Set();
+    for (const el of mine) {
+      const c = all[orig.indexOf(el)];
+      inside.add(c);
+      for (let p = c.parentElement; p; p = p.parentElement) keep.add(p);
+    }
+    const prune = (el) => {
+      for (const ch of [...el.children]) {
+        if (inside.has(ch)) continue;
+        if (keep.has(ch)) prune(ch);
+        else if (!KEEP_DEFS.test(ch.nodeName)) ch.remove();
+      }
+    };
+    prune(d.documentElement);
+    return ser.serializeToString(d);
+  };
+  const crest = only('crest');
+  const marks = only('marks');
+  for (const el of tagged) el.remove();
+  return { print: ser.serializeToString(doc), crest, marks };
+}
+
+// Relieve de las aplicaciones de una pieza, a partir de lo bordado (`emb`)
+// y lo que va en vinilo (`vin`), lienzos del recuadro a `k` px/mm. Para no
+// ocupar todo el recuadro se recorta a lo que ocupan (con margen).
+// Devuelve las texturas (color con su opacidad; forma: normal del borde en
+// RG, sombra alrededor del bordado en B, tipo en A: 1 bordado, 0,5 vinilo) y
+// la matriz que lleva las coordenadas de estampado (m) a ellas.
+const EMB_BEVEL = 1.4; // mm: cuánto tarda el bordado en llegar a su alto
+const EMB_HEIGHT = 1.1; // mm de alto del bordado
+const VIN_BEVEL = 0.35;
+const VIN_HEIGHT = 0.15;
+const AO_RADIUS = 2.4; // mm de sombra alrededor del bordado
+function boxBlur(src, w, h, r, passes) {
+  let a = Float32Array.from(src);
+  let b = new Float32Array(a.length);
+  const n = 2 * r + 1;
+  for (let p = 0; p < passes; p++) {
+    for (let y = 0; y < h; y++) {
+      let acc = 0;
+      const row = y * w;
+      for (let x = -r; x <= r; x++) acc += a[row + Math.min(w - 1, Math.max(0, x))];
+      for (let x = 0; x < w; x++) {
+        b[row + x] = acc / n;
+        acc += a[row + Math.min(w - 1, x + r + 1)] - a[row + Math.max(0, x - r)];
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      let acc = 0;
+      for (let y = -r; y <= r; y++) acc += b[Math.min(h - 1, Math.max(0, y)) * w + x];
+      for (let y = 0; y < h; y++) {
+        a[y * w + x] = acc / n;
+        acc += b[Math.min(h - 1, y + r + 1) * w + x] - b[Math.max(0, y - r) * w + x];
+      }
+    }
+  }
+  return a;
+}
+export function buildApplique(key, emb, vin, k) {
+  const pc = PIECES.find((p) => p.key === key);
+  const layers = [emb, vin].filter(Boolean);
+  if (!layers.length) return null;
+  const W = layers[0].width;
+  const H = layers[0].height;
+  const alpha = layers.map((c) => c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data);
+  // Recorte.
+  let x0 = W;
+  let y0 = H;
+  let x1 = -1;
+  let y1 = -1;
+  for (const a of alpha)
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        if (a[(y * W + x) * 4 + 3] > 4) {
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+  if (x1 < 0) return null;
+  const m = Math.ceil(AO_RADIUS * 2 * k) + 4;
+  x0 = Math.max(0, x0 - m);
+  y0 = Math.max(0, y0 - m);
+  x1 = Math.min(W - 1, x1 + m);
+  y1 = Math.min(H - 1, y1 + m);
+  const w = x1 - x0 + 1;
+  const h = y1 - y0 + 1;
+  const mask = (a) => Float32Array.from({ length: w * h }, (_, i) => a[((y0 + Math.floor(i / w)) * W + x0 + (i % w)) * 4 + 3] / 255);
+  const embM = emb ? mask(alpha[0]) : new Float32Array(w * h);
+  const vinM = vin ? mask(alpha[layers.length - 1]) : new Float32Array(w * h);
+  // Alto: sube desde el borde en EMB_BEVEL (o VIN_BEVEL) mm.
+  const smooth = (e0, e1, v) => {
+    const t = Math.min(1, Math.max(0, (v - e0) / (e1 - e0)));
+    return t * t * (3 - 2 * t);
+  };
+  const height = new Float32Array(w * h);
+  if (emb) {
+    const b = boxBlur(embM, w, h, Math.max(1, Math.round((EMB_BEVEL * k) / 2)), 3);
+    for (let i = 0; i < height.length; i++) height[i] += EMB_HEIGHT * embM[i] * smooth(0.5, 1, b[i]);
+  }
+  if (vin) {
+    const b = boxBlur(vinM, w, h, Math.max(1, Math.round((VIN_BEVEL * k) / 2)), 3);
+    for (let i = 0; i < height.length; i++) height[i] += VIN_HEIGHT * vinM[i] * smooth(0.5, 1, b[i]);
+  }
+  const ao = emb ? boxBlur(embM, w, h, Math.max(1, Math.round((AO_RADIUS * k) / 2)), 2) : null;
+  // Forma (filas de abajo hacia arriba, como la lee la textura).
+  const data = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const hx = (height[y * w + Math.min(w - 1, x + 1)] - height[y * w + Math.max(0, x - 1)]) * (k / 2);
+      const hy = (height[Math.min(h - 1, y + 1) * w + x] - height[Math.max(0, y - 1) * w + x]) * (k / 2);
+      // Normal en el plano de estampado mirado de afuera (x a la derecha, y
+      // hacia arriba; en el lienzo y va hacia abajo).
+      const nx = Math.max(-1, Math.min(1, -hx));
+      const ny = Math.max(-1, Math.min(1, hy));
+      const o = ((h - 1 - y) * w + x) * 4;
+      data[o] = Math.round((nx * 0.5 + 0.5) * 255);
+      data[o + 1] = Math.round((ny * 0.5 + 0.5) * 255);
+      data[o + 2] = ao ? Math.round(Math.min(1, ao[i]) * 255) : 0;
+      data[o + 3] = embM[i] > 0.02 || (ao && ao[i] > 0.02) ? 255 : vinM[i] > 0.02 ? 128 : 0;
+    }
+  const shape = new THREE.DataTexture(data, w, h, THREE.RGBAFormat);
+  shape.magFilter = THREE.LinearFilter;
+  shape.minFilter = THREE.LinearMipmapLinearFilter;
+  shape.generateMipmaps = true;
+  shape.needsUpdate = true;
+  const cc = document.createElement('canvas');
+  cc.width = w;
+  cc.height = h;
+  const ctx = cc.getContext('2d');
+  for (const c of layers) ctx.drawImage(c, x0, y0, w, h, 0, 0, w, h);
+  const color = new THREE.CanvasTexture(cc);
+  color.colorSpace = THREE.SRGBColorSpace;
+  // Coordenadas de estampado (m, y hacia abajo) → textura recortada (v hacia
+  // arriba).
+  const mmX0 = x0 / k - pc.ax;
+  const mmY0 = y0 / k - pc.ay;
+  const wm = w / k;
+  const hm = h / k;
+  const matrix = new THREE.Matrix3().set(1000 / wm, 0, -mmX0 / wm, 0, -1000 / hm, 1 + mmY0 / hm, 0, 0, 1);
+  return { color, shape, matrix };
 }

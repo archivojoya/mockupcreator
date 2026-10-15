@@ -5,7 +5,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS, flattenPrint } from './shirt.js';
 import { makeHanger, makeClipHanger, HangingShirt, RAIL_R } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
-import { templateSVG, readDesign, printTexture, readPieces, isolateLayer, placePiece, pieceSizes } from './print.js';
+import { templateSVG, readDesign, printTexture, readPieces, isolateLayer, placePiece, pieceSizes, buildApplique } from './print.js';
 import './style.css';
 
 const COLORS = { body: '#c81e3a', sleeves: '#c81e3a', collar: '#17191d', cuffs: '#17191d' };
@@ -125,6 +125,8 @@ function applyLights(name) {
 // la calidad y el jaspeado. Los valores compartidos están en `shared`: al
 // cambiar la tela se cambian una vez para todas las piezas.
 const flatDetail = makeFlatDetail();
+const blankTex = new THREE.DataTexture(new Uint8Array([128, 128, 0, 0]), 1, 1);
+blankTex.needsUpdate = true;
 const ribNormal = makeRibNormalMap();
 const shared = {
   macroMap: { value: makeMacroMap() },
@@ -153,13 +155,23 @@ function fabricMaterial(rib) {
     side: THREE.DoubleSide,
   });
   // Tono y aspereza punto a punto del tejido (el cuello acanalado no tiene).
-  const own = { detailMap: { value: flatDetail }, detailTile: { value: new THREE.Vector2(1, 1) }, insideColor: { value: new THREE.Color() } };
+  const own = {
+    detailMap: { value: flatDetail },
+    detailTile: { value: new THREE.Vector2(1, 1) },
+    insideColor: { value: new THREE.Color() },
+    // Aplicaciones (bordado y vinilo): color, forma y cómo se llega a ellas
+    // desde las coordenadas de estampado.
+    appOn: { value: 0 },
+    appColor: { value: blankTex },
+    appShape: { value: blankTex },
+    appTransform: { value: new THREE.Matrix3() },
+  };
   m.userData = { rib, own };
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, shared, own);
     shader.vertexShader = shader.vertexShader.replace(
       'void main() {',
-      'attribute vec2 seam;\nattribute float zone;\nvarying vec2 vSeam;\nvarying vec2 vCloth;\nvarying float vZone;\nvoid main() {\n vSeam = seam;\n vCloth = uv;\n vZone = zone;',
+      '#ifndef USE_UV1\nattribute vec2 uv1;\n#endif\nattribute vec2 seam;\nattribute float zone;\nuniform mat3 appTransform;\nvarying vec2 vSeam;\nvarying vec2 vCloth;\nvarying float vZone;\nvarying vec2 vAppUv;\nvarying vec2 vPrint;\nvoid main() {\n vSeam = seam;\n vCloth = uv;\n vZone = zone;\n vPrint = uv1;\n vAppUv = (appTransform * vec3(uv1, 1.0)).xy;',
     );
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -171,6 +183,10 @@ uniform sampler2D detailMap, macroMap, zoneNormal, zoneDetail;
 uniform vec2 detailTile, zoneTile;
 uniform float macroTile, feature, roughAdd, irregular, pills, pucker, heather, zoneOn;
 uniform vec3 insideColor;
+uniform sampler2D appColor, appShape;
+uniform float appOn;
+varying vec2 vAppUv;
+varying vec2 vPrint;
 void main() {
   // De lejos el relieve es más chico que un píxel: se pasa a aspereza (así
   // la tela no se ve plástica).
@@ -184,7 +200,31 @@ void main() {
   vec4 det = texture2D(detailMap, vCloth / detailTile);
   float inZone = zoneOn * vZone;
   if (inZone > 0.001) det = mix(det, texture2D(zoneDetail, vCloth / zoneTile), inZone);
-  float pill = smoothstep(0.35, 0.8, macro.g) * pills;`,
+  float pill = smoothstep(0.35, 0.8, macro.g) * pills;
+  // Aplicaciones de esta pieza (sólo por fuera): bordado (tipo 1) o vinilo
+  // (tipo 0,5), y la sombra que deja el bordado alrededor.
+  vec4 appC = texture2D(appColor, vAppUv);
+  vec4 appS = texture2D(appShape, vAppUv);
+  float isEmb = step(0.75, appS.a);
+  float appA = gl_FrontFacing ? appC.a * appOn : 0.0;
+  float embW = appA * isEmb;
+  float vinW = appA - embW;
+  float aoEmb = gl_FrontFacing ? appS.b * appOn * isEmb : 0.0;
+  // Puntadas del bordado: relleno a 45° en filas de 1,2 mm, puntadas de
+  // 4 mm con las filas corridas, cada una con su brillo; el hilo es redondo
+  // a lo ancho de la fila. De lejos (más chicas que un píxel) se apagan.
+  vec2 sDir = vec2(0.7071, 0.7071);
+  vec2 sAcross = vec2(-0.7071, 0.7071);
+  float sRowPh = dot(vPrint, sAcross) / 0.0012;
+  float sRow = floor(sRowPh);
+  float sAlong = dot(vPrint, sDir) / 0.004 + fract(sRow * 0.618);
+  float sPx = length(fwidth(vPrint));
+  float sFade = 1.0 - smoothstep(0.3, 0.7, sPx / 0.0012);
+  float sGap = smoothstep(0.0, 0.06, fract(sAlong)) * smoothstep(1.0, 0.94, fract(sAlong));
+  float sHash = fract(sin(dot(vec2(sRow, floor(sAlong)), vec2(12.9898, 78.233))) * 43758.5453);
+  float sBump = sin(3.1416 * fract(sRowPh)) * sGap;
+  float sRidge = cos(3.1416 * fract(sRowPh)) * sGap * sFade;
+  pill *= 1.0 - appA;`,
       )
       .replace(
         '#include <map_fragment>',
@@ -194,14 +234,17 @@ void main() {
   // en el diseño de la pieza.
   vec4 sampledDiffuseColor = texture2D(map, vMapUv);
   diffuseColor.rgb = gl_FrontFacing ? mix(diffuseColor.rgb, sampledDiffuseColor.rgb, sampledDiffuseColor.a) : insideColor;
-#endif`,
+#endif
+  diffuseColor.rgb = mix(diffuseColor.rgb, appC.rgb, appA);
+  diffuseColor.rgb *= 1.0 - 0.3 * aoEmb * (1.0 - appA);
+  diffuseColor.rgb *= 1.0 + embW * sFade * (0.16 * (sBump - 0.64) + 0.08 * (sHash - 0.5));`,
       )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
   // Tono del tejido, hilos jaspeados, irregularidad del teñido y bolitas.
-  diffuseColor.rgb *= 0.5 + det.r;
-  diffuseColor.rgb = mix(diffuseColor.rgb, mix(diffuseColor.rgb, vec3(0.78), 0.55), heather * macro.b);
+  diffuseColor.rgb *= mix(0.5 + det.r, 1.0, appA);
+  diffuseColor.rgb = mix(diffuseColor.rgb, mix(diffuseColor.rgb, vec3(0.78), 0.55), heather * macro.b * (1.0 - appA));
   diffuseColor.rgb *= 1.0 + (macro.r - 0.5) * (0.05 + 0.12 * irregular);
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.15 + 0.025, pill * 0.7);
   // Costuras: un hundido fino y la tela apenas levantada al lado (fruncida
@@ -221,14 +264,30 @@ void main() {
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-  roughnessFactor = clamp(roughnessFactor + (det.g - 0.5) * 0.5 + roughAdd * fabricBlur + pill * 0.15, 0.04, 1.0);`,
+  roughnessFactor = clamp(roughnessFactor + (det.g - 0.5) * 0.5 + roughAdd * fabricBlur + pill * 0.15, 0.04, 1.0);
+  // El hilo del bordado tiene brillo; el vinilo es liso y semimate.
+  roughnessFactor = mix(roughnessFactor, 0.5, embW);
+  roughnessFactor = mix(roughnessFactor, 0.34, vinW);`,
       )
       .replace(
         '#include <normal_fragment_maps>',
         `vec3 mapN = texture2D(normalMap, vNormalMapUv).xyz * 2.0 - 1.0;
   if (inZone > 0.001) mapN = mix(mapN, texture2D(zoneNormal, vCloth / zoneTile).xyz * 2.0 - 1.0, inZone);
-  mapN.xy *= normalScale * (1.0 + (macro.r - 0.5) * 1.2 * irregular) * (1.0 - 0.5 * fabricBlur);
-  normal = normalize(tbn * mapN);`,
+  mapN.xy *= normalScale * (1.0 + (macro.r - 0.5) * 1.2 * irregular) * (1.0 - 0.5 * fabricBlur) * (1.0 - 0.7 * vinW - embW);
+  // Relieve de las aplicaciones: el borde (que sube) y los hilos del bordado,
+  // en el plano de estampado mirado de afuera.
+  mat3 tbnApp = getTangentFrame(-vViewPosition, normal, vec2(vPrint.x, -vPrint.y));
+  vec3 appN = vec3(appS.rg * 2.0 - 1.0, 1.0);
+  appN.xy += vec2(sAcross.x, -sAcross.y) * sRidge * 0.7 * isEmb;
+  normal = normalize(mix(normalize(tbn * mapN), normalize(tbnApp * appN), appA));`,
+      )
+      .replace(
+        '#include <lights_physical_fragment>',
+        `#include <lights_physical_fragment>
+  // El vinilo refleja más que la tela; el hilo del bordado, algo más.
+  material.specularColor *= 1.0 + 5.0 * vinW + 2.0 * embW;
+  material.specularColorBlended = mix(material.specularColor, diffuseColor.rgb, metalnessFactor);
+  material.specularF90 = mix(material.specularF90, 1.0, appA);`,
       )
       .replace(
         '#include <lights_fragment_end>',
@@ -345,7 +404,9 @@ const uvMaps = {};
 // Diseño cargado: una textura de estampado por pieza.
 // `mode`: 'template' (la plantilla completa) o 'pieces' (un diseño por
 // pieza, ubicado por la página).
-const design = { textures: {}, found: [], inside: {}, pieces: {}, mode: null };
+// `parts`: por pieza, los lienzos de lo estampado, el escudo y las marcas;
+// `kinds`: cómo va el escudo y cómo las marcas (bordado, vinilo o estampado).
+const design = { textures: {}, found: [], inside: {}, pieces: {}, mode: null, parts: {}, app: {}, kinds: { crest: 'emb', marks: 'vin' } };
 // Color que más hay en el diseño de una pieza (lo transparente cuenta como
 // el color de la pieza: null). Es el color del revés de la tela.
 function dominantColor(canvas, rect = [0, 0, canvas.width, canvas.height]) {
@@ -511,6 +572,11 @@ function applyLook() {
   for (const [k, mesh] of Object.entries(meshes)) {
     const def = PARTS[k];
     const m = mesh.material;
+    const app = !view.uvmap && design.app[k];
+    m.userData.own.appOn.value = app ? 1 : 0;
+    m.userData.own.appColor.value = app ? app.color : blankTex;
+    m.userData.own.appShape.value = app ? app.shape : blankTex;
+    if (app) m.userData.own.appTransform.value.copy(app.matrix);
     if (!view.uvmap && design.textures[k]) {
       m.map = design.textures[k];
       m.color.set(colors[def.color]);
@@ -819,6 +885,13 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 const designNote = document.getElementById('design-note');
 const designClear = document.getElementById('design-clear');
 const sizesBox = document.getElementById('design-sizes');
+const kindsBox = document.getElementById('design-kinds');
+kindsBox.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-as]');
+  if (!b) return;
+  design.kinds[b.closest('[data-kind]').dataset.kind] = b.dataset.as;
+  compose();
+});
 sizesBox.addEventListener('toggle', () => {
   if (!sizesBox.open) return;
   ensureFlat();
@@ -852,12 +925,61 @@ document.getElementById('template').addEventListener('click', () => {
 });
 function clearDesign() {
   for (const t of Object.values(design.textures)) t.dispose();
+  for (const a of Object.values(design.app)) a.color.dispose(), a.shape.dispose();
   design.textures = {};
   design.found = [];
   design.inside = {};
   design.pieces = {};
+  design.parts = {};
+  design.app = {};
   design.mode = null;
   designClear.hidden = true;
+  kindsBox.hidden = true;
+}
+// Arma las texturas de cada pieza: lo estampado (más el escudo o las marcas
+// si van estampados) y las aplicaciones (bordado y vinilo) con su relieve.
+function compose() {
+  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  for (const t of Object.values(design.textures)) t.dispose();
+  for (const a of Object.values(design.app)) a.color.dispose(), a.shape.dispose();
+  design.textures = {};
+  design.app = {};
+  const has = { crest: false, marks: false };
+  for (const [k, p] of Object.entries(design.parts)) {
+    let print = p.print;
+    const by = { emb: [], vin: [], print: [] };
+    for (const kind of ['crest', 'marks'])
+      if (p[kind]) {
+        has[kind] = true;
+        by[design.kinds[kind]].push(p[kind]);
+      }
+    if (by.print.length) {
+      print = document.createElement('canvas');
+      print.width = p.print.width;
+      print.height = p.print.height;
+      const ctx = print.getContext('2d');
+      ctx.drawImage(p.print, 0, 0);
+      for (const c of by.print) ctx.drawImage(c, 0, 0);
+    }
+    design.textures[k] = printTexture(k, print, aniso);
+    design.inside[k] = dominantColor(print, p.rect);
+    const merge = (list) => {
+      if (list.length < 2) return list[0] || null;
+      const c = document.createElement('canvas');
+      c.width = list[0].width;
+      c.height = list[0].height;
+      for (const x of list) c.getContext('2d').drawImage(x, 0, 0);
+      return c;
+    };
+    const app = buildApplique(k, merge(by.emb), merge(by.vin), p.k);
+    if (app) design.app[k] = app;
+  }
+  for (const kind of ['crest', 'marks']) {
+    kindsBox.querySelector(`[data-kind="${kind}"]`).hidden = !has[kind];
+    kindsBox.querySelectorAll(`[data-kind="${kind}"] button`).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.as === design.kinds[kind])));
+  }
+  kindsBox.hidden = !has.crest && !has.marks;
+  applyLook();
 }
 // Medidas de cada pieza para diseñar (para la camiseta tal como está).
 const SIZE_ROWS = [
@@ -883,7 +1005,6 @@ async function layoutPieces() {
   const gen = ++layoutGen;
   ensureFlat();
   const sz = pieceSizes(built);
-  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   const notes = [];
   const placed = {};
   for (const [k, p] of Object.entries(design.pieces)) {
@@ -894,11 +1015,8 @@ async function layoutPieces() {
     }
     if (gen !== layoutGen) return;
   }
-  for (const [k, r] of Object.entries(placed)) {
-    design.textures[k]?.dispose();
-    design.textures[k] = printTexture(k, r.canvas, aniso);
-    design.inside[k] = dominantColor(r.canvas, r.rect);
-  }
+  design.parts = Object.fromEntries(Object.entries(placed).map(([k, r]) => [k, r]));
+  compose();
   const seen = new Set();
   for (const [k, p] of Object.entries(design.pieces)) {
     if (seen.has(p) || !placed[k]) continue;
@@ -940,15 +1058,13 @@ async function loadFiles(files) {
 async function loadDesign(text, name = 'diseño') {
   designNote.textContent = `Leyendo ${name}…`;
   try {
-    const { canvases, found } = await readDesign(text);
+    const r = await readDesign(text);
+    const found = r.found;
     clearDesign();
     ensureFlat();
-    const aniso = renderer.capabilities.getMaxAnisotropy();
     design.mode = 'template';
-    for (const [k, c] of Object.entries(canvases)) {
-      design.textures[k] = printTexture(k, c, Math.min(8, aniso));
-      design.inside[k] = dominantColor(c);
-    }
+    for (const [k, c] of Object.entries(r.canvases)) design.parts[k] = { print: c, crest: r.crest[k], marks: r.marks[k], k: r.k[k] };
+    compose();
     design.found = found;
     designClear.hidden = !found.length;
     designNote.textContent = found.length ? `Diseño en: ${found.join(', ')}.` : 'El SVG no tiene nada dentro de los recuadros de la plantilla.';
@@ -1111,4 +1227,4 @@ resize();
 if (typeof CONFIG.design === 'string' && CONFIG.design.includes('<svg')) loadFiles([{ name: 'diseño', text: CONFIG.design }]);
 else if (Array.isArray(CONFIG.design)) loadFiles(CONFIG.design.filter((d) => typeof d?.text === 'string'));
 
-window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, setMode, loadDesign, loadFiles, templateSVG: () => (ensureFlat(), templateSVG(built, params, colors)), design, drape: () => drape };
+window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, setMode, loadDesign, loadFiles, setKinds: (k) => (Object.assign(design.kinds, k), compose()), templateSVG: () => (ensureFlat(), templateSVG(built, params, colors)), design, drape: () => drape };

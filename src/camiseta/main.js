@@ -5,7 +5,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS, flattenPrint } from './shirt.js';
 import { makeHanger, makeClipHanger, HangingShirt, RAIL_R } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
-import { templateSVG, readDesign, printTexture } from './print.js';
+import { templateSVG, readDesign, printTexture, readPieces, isolateLayer, placePiece, pieceSizes } from './print.js';
 import './style.css';
 
 const COLORS = { body: '#c81e3a', sleeves: '#c81e3a', collar: '#17191d', cuffs: '#17191d' };
@@ -343,15 +343,17 @@ for (const [k, def] of Object.entries(PARTS)) {
 const clothMeshes = [...Object.values(meshes), ...Object.values(twins)];
 const uvMaps = {};
 // Diseño cargado: una textura de estampado por pieza.
-const design = { textures: {}, found: [], inside: {} };
+// `mode`: 'template' (la plantilla completa) o 'pieces' (un diseño por
+// pieza, ubicado por la página).
+const design = { textures: {}, found: [], inside: {}, pieces: {}, mode: null };
 // Color que más hay en el diseño de una pieza (lo transparente cuenta como
 // el color de la pieza: null). Es el color del revés de la tela.
-function dominantColor(canvas) {
+function dominantColor(canvas, rect = [0, 0, canvas.width, canvas.height]) {
   const N = 48;
   const c = document.createElement('canvas');
   c.width = c.height = N;
   const g = c.getContext('2d', { willReadFrequently: true });
-  g.drawImage(canvas, 0, 0, N, N);
+  g.drawImage(canvas, ...rect, 0, 0, N, N);
   const px = g.getImageData(0, 0, N, N).data;
   const bins = new Map();
   let base = 0;
@@ -385,11 +387,13 @@ function ensureFlat() {
   lastFlat = built;
 }
 function followFlat() {
-  if (!lastFlat || !Object.keys(design.textures).length) return;
-  for (const k of ['front', 'back']) built.geos[k].attributes.uv1.array.set(lastFlat.geos[k].attributes.uv1.array);
+  if (!Object.keys(design.textures).length && !sizesBox.open) return;
+  if (lastFlat) for (const k of ['front', 'back']) built.geos[k].attributes.uv1.array.set(lastFlat.geos[k].attributes.uv1.array);
   clearTimeout(flatTimer);
   flatTimer = setTimeout(() => {
     ensureFlat();
+    if (design.mode === 'pieces') layoutPieces();
+    fillSizes();
     requestRender();
   }, 180);
 }
@@ -814,6 +818,12 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 // carga del SVG diseñado sobre ella (botón o arrastrando el archivo).
 const designNote = document.getElementById('design-note');
 const designClear = document.getElementById('design-clear');
+const sizesBox = document.getElementById('design-sizes');
+sizesBox.addEventListener('toggle', () => {
+  if (!sizesBox.open) return;
+  ensureFlat();
+  fillSizes();
+});
 // Publicada en claude.ai, la descarga pasa por la capacidad `downloads` (la
 // persona confirma); sola o en desarrollo, un enlace de descarga común.
 const downloadsP = window.claude?.use ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
@@ -845,7 +855,87 @@ function clearDesign() {
   design.textures = {};
   design.found = [];
   design.inside = {};
+  design.pieces = {};
+  design.mode = null;
   designClear.hidden = true;
+}
+// Medidas de cada pieza para diseñar (para la camiseta tal como está).
+const SIZE_ROWS = [
+  ['front', 'Frente'],
+  ['back', 'Espalda'],
+  ['sleeveR', 'Manga (cada una)'],
+  ['cuffR', 'Puño (cada uno)'],
+  ['collar', 'Cuello (vuelta entera)'],
+];
+const cmUp = (mm, d = 0) => (Math.ceil(mm / 10 ** (1 - d)) / 10 ** d).toFixed(d).replace('.', ',');
+function fillSizes() {
+  if (!sizesBox.open) return;
+  const sz = pieceSizes(built);
+  sizesBox.querySelector('dl').innerHTML = SIZE_ROWS.map(([k, label]) => {
+    const d = sz[k].h < 50 ? 1 : 0;
+    return `<div><dt>${label}</dt><dd>${cmUp(sz[k].w)} × ${cmUp(sz[k].h, d)} cm</dd></div>`;
+  }).join('');
+}
+// Diseños por pieza: cada uno a su lugar en el molde. Si mientras tanto se
+// rehízo la camiseta, se descarta (lo hace la vuelta siguiente).
+let layoutGen = 0;
+async function layoutPieces() {
+  const gen = ++layoutGen;
+  ensureFlat();
+  const sz = pieceSizes(built);
+  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  const notes = [];
+  const placed = {};
+  for (const [k, p] of Object.entries(design.pieces)) {
+    try {
+      placed[k] = await placePiece(k, p, sz[k]);
+    } catch {
+      notes.push(`${p.name}: no se pudo dibujar`);
+    }
+    if (gen !== layoutGen) return;
+  }
+  for (const [k, r] of Object.entries(placed)) {
+    design.textures[k]?.dispose();
+    design.textures[k] = printTexture(k, r.canvas, aniso);
+    design.inside[k] = dominantColor(r.canvas, r.rect);
+  }
+  const seen = new Set();
+  for (const [k, p] of Object.entries(design.pieces)) {
+    if (seen.has(p) || !placed[k]) continue;
+    seen.add(p);
+    const r = placed[k];
+    notes.push(`${p.keys.map((x) => PIECE_NAMES[x]).join(' y ')}: ${cmUp(r.w)} × ${cmUp(r.h, r.h < 50 ? 1 : 0)} cm${r.real ? '' : ' (ajustado a la pieza)'}`);
+  }
+  design.found = Object.keys(placed);
+  designClear.hidden = !design.found.length;
+  designNote.textContent = notes.length ? `${notes.join(' · ')}.` : '';
+  applyLook();
+}
+const PIECE_NAMES = { front: 'frente', back: 'espalda', sleeveL: 'manga izquierda', sleeveR: 'manga derecha', cuffL: 'puño izquierdo', cuffR: 'puño derecho', collar: 'cuello' };
+async function loadFiles(files) {
+  designNote.textContent = 'Leyendo…';
+  const { pieces, template, unknown } = readPieces(files);
+  if (template) return loadDesign(template, 'la plantilla');
+  if (!pieces.length) {
+    designNote.textContent = `No sé a qué pieza va ${unknown.join(', ')}: poné en el nombre del archivo (o de la capa) frente, espalda, manga, puño o cuello.`;
+    return;
+  }
+  if (design.mode !== 'pieces') clearDesign();
+  design.mode = 'pieces';
+  for (const p of pieces) {
+    if (p.layer) {
+      const iso = isolateLayer(p);
+      if (!iso) continue;
+      Object.assign(p, iso, { doc: null, layer: null });
+    }
+    for (const k of p.keys) design.pieces[k] = p;
+  }
+  if (view.uvmap) {
+    view.uvmap = false;
+    document.getElementById('uvmap').checked = false;
+  }
+  await layoutPieces();
+  if (unknown.length) designNote.textContent += ` No sé a qué pieza va ${unknown.join(', ')}.`;
 }
 async function loadDesign(text, name = 'diseño') {
   designNote.textContent = `Leyendo ${name}…`;
@@ -854,6 +944,7 @@ async function loadDesign(text, name = 'diseño') {
     clearDesign();
     ensureFlat();
     const aniso = renderer.capabilities.getMaxAnisotropy();
+    design.mode = 'template';
     for (const [k, c] of Object.entries(canvases)) {
       design.textures[k] = printTexture(k, c, Math.min(8, aniso));
       design.inside[k] = dominantColor(c);
@@ -872,9 +963,10 @@ async function loadDesign(text, name = 'diseño') {
 }
 const designFile = document.getElementById('design-file');
 document.getElementById('design-load').addEventListener('click', () => designFile.click());
+const readFiles = async (list) => Promise.all([...list].filter((f) => /\.svg$/i.test(f.name) || f.type === 'image/svg+xml').map(async (f) => ({ name: f.name, text: await f.text() })));
 designFile.addEventListener('change', async () => {
-  const f = designFile.files[0];
-  if (f) await loadDesign(await f.text(), f.name);
+  const files = await readFiles(designFile.files);
+  if (files.length) await loadFiles(files);
   designFile.value = '';
 });
 designClear.addEventListener('click', () => {
@@ -891,8 +983,8 @@ stage.addEventListener('dragleave', () => stage.classList.remove('dropping'));
 stage.addEventListener('drop', async (e) => {
   e.preventDefault();
   stage.classList.remove('dropping');
-  const f = [...e.dataTransfer.files].find((x) => /\.svg$/i.test(x.name) || x.type === 'image/svg+xml');
-  if (f) await loadDesign(await f.text(), f.name);
+  const files = await readFiles(e.dataTransfer.files);
+  if (files.length) await loadFiles(files);
 });
 
 document.getElementById('reset').addEventListener('click', () => {
@@ -1016,6 +1108,7 @@ document.getElementById('uvmap').checked = view.uvmap;
 if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
 else rebuild();
 resize();
-if (typeof CONFIG.design === 'string' && CONFIG.design.includes('<svg')) loadDesign(CONFIG.design);
+if (typeof CONFIG.design === 'string' && CONFIG.design.includes('<svg')) loadFiles([{ name: 'diseño', text: CONFIG.design }]);
+else if (Array.isArray(CONFIG.design)) loadFiles(CONFIG.design.filter((d) => typeof d?.text === 'string'));
 
-window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, setMode, loadDesign, templateSVG: () => (ensureFlat(), templateSVG(built, params, colors)), design, drape: () => drape };
+window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, setMode, loadDesign, loadFiles, templateSVG: () => (ensureFlat(), templateSVG(built, params, colors)), design, drape: () => drape };

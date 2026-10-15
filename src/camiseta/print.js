@@ -242,3 +242,197 @@ export function printTexture(key, canvas, anisotropy = 4) {
   t.offset.set(pc.ax / pc.w, 1 - pc.ay / pc.h);
   return t;
 }
+
+// ---------- diseño por pieza ----------
+
+// Otra forma, más simple: un SVG por pieza (o uno con una capa por pieza)
+// con sólo su diseño. La pieza sale del nombre del archivo o de la capa; la
+// página lo ubica en el molde: centrado en la pieza y arriba contra su borde
+// de arriba (el cuello, centrado en el medio de atrás y dando la vuelta). Si
+// el SVG dice su tamaño en unidades reales (mm, cm, in, pt) va a ese tamaño;
+// si no, se agranda o achica hasta cubrir la pieza.
+const NAMES = [
+  ['front', /frente|front|delanter/i],
+  ['back', /espalda|(^|[^a-z])back([^a-z]|$)|dorso|trasera/i],
+  ['sleeve', /manga|sleeve/i],
+  ['cuff', /pu[ñn]o|cuff/i],
+  ['collar', /cuello|collar/i],
+];
+export const PIECE_LABELS = { front: 'Frente', back: 'Espalda', sleeveL: 'Manga izquierda', sleeveR: 'Manga derecha', cuffL: 'Puño izquierdo', cuffR: 'Puño derecho', collar: 'Cuello' };
+export function pieceKeys(name) {
+  name = name.normalize('NFC');
+  for (const [base, re] of NAMES) {
+    if (!re.test(name)) continue;
+    if (base !== 'sleeve' && base !== 'cuff') return [base];
+    const side = /(^|[^a-zñ])(izq|left)/i.test(name) ? 'L' : /(^|[^a-zñ])(der|right)/i.test(name) ? 'R' : '';
+    return side ? [base + side] : [base + 'L', base + 'R'];
+  }
+  return [];
+}
+
+// Medidas de cada pieza para diseñar (mm): ancho (simétrico respecto del
+// centro de la pieza), alto y dónde queda su borde de arriba respecto del
+// anclaje. El cuello: largo de la vuelta y alto de la cara de afuera.
+export function pieceSizes(built) {
+  const out = {};
+  for (const pc of PIECES) {
+    const a = built.geos[pc.key].attributes.uv1.array;
+    let n = a.length / 2;
+    if (pc.key === 'collar') n = (built.layout.rings.collar.length + 1) * (COLLAR_FOLD + 1);
+    let u0 = Infinity;
+    let u1 = -Infinity;
+    let v0 = Infinity;
+    let v1 = -Infinity;
+    for (let i = 0; i < n; i++) {
+      u0 = Math.min(u0, a[i * 2]);
+      u1 = Math.max(u1, a[i * 2]);
+      v0 = Math.min(v0, a[i * 2 + 1]);
+      v1 = Math.max(v1, a[i * 2 + 1]);
+    }
+    const wrap = pc.key === 'collar' ? (u1 - u0) * 1000 : 0;
+    out[pc.key] = { w: wrap || 2 * Math.max(-u0, u1) * 1000, h: (v1 - v0) * 1000, top: v0 * 1000, wrap };
+  }
+  return out;
+}
+
+const UNIT_MM = { mm: 1, cm: 10, in: 25.4, pt: 25.4 / 72, pc: 25.4 / 6 };
+function viewBoxOf(root) {
+  let vb = (root.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+  if (vb.length !== 4 || vb.some((v) => !Number.isFinite(v)) || !(vb[2] > 0 && vb[3] > 0)) {
+    const w = parseFloat(root.getAttribute('width'));
+    const h = parseFloat(root.getAttribute('height'));
+    if (!(w > 0 && h > 0)) return null;
+    vb = [0, 0, w, h];
+  }
+  return vb;
+}
+// Milímetros por unidad del SVG, si dice su tamaño en unidades reales.
+function mmPerUnit(root, vb) {
+  const m = /^\s*([\d.]+)\s*(mm|cm|in|pt|pc)\s*$/i.exec(root.getAttribute('width') || '');
+  return m ? (parseFloat(m[1]) * UNIT_MM[m[2].toLowerCase()]) / vb[2] : null;
+}
+const isTemplate = (root, vb) => Math.abs(vb[3] / vb[2] / (SHEET.h / SHEET.w) - 1) < 0.02 && !!root.querySelector('[id^="guias"], [data-name^="GUIAS"]');
+
+// Lee SVGs sueltos ({ name, text }): devuelve los diseños por pieza
+// ({ keys, svg (texto, sólo esa pieza), vb, mm, name }), `template` si alguno
+// es la plantilla completa, y los que no se reconocieron.
+export function readPieces(files) {
+  const pieces = [];
+  const unknown = [];
+  let template = null;
+  for (const { name, text } of files) {
+    const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+    const root = doc.documentElement;
+    const vb = root && root.nodeName.toLowerCase() === 'svg' && !doc.querySelector('parsererror') ? viewBoxOf(root) : null;
+    if (!vb) {
+      unknown.push(`${name} (no es un SVG válido)`);
+      continue;
+    }
+    if (isTemplate(root, vb)) {
+      template = text;
+      continue;
+    }
+    const mm = mmPerUnit(root, vb);
+    // Capas con nombre de pieza (las de más arriba).
+    const named = [...root.querySelectorAll('[id], [data-name]')].filter((el) => {
+      if (el.nodeName.toLowerCase() === 'svg' || !pieceKeys(`${el.getAttribute('id') || ''} ${el.getAttribute('data-name') || ''}`).length) return false;
+      for (let p = el.parentElement; p && p !== root; p = p.parentElement) if (pieceKeys(`${p.getAttribute('id') || ''} ${p.getAttribute('data-name') || ''}`).length) return false;
+      return true;
+    });
+    const keys = pieceKeys(`${name} ${root.getAttribute('id') || ''} ${doc.querySelector('title')?.textContent || ''}`);
+    // Si el archivo ya dice su pieza y las capas son de esa misma, es un
+    // diseño de esa pieza (su mesa de trabajo es el recuadro).
+    const layerKeys = (el) => pieceKeys(`${el.getAttribute('id') || ''} ${el.getAttribute('data-name') || ''}`).join();
+    if (named.length && !(keys.length && named.every((el) => layerKeys(el) === keys.join()))) {
+      for (const el of named) pieces.push({ keys: pieceKeys(`${el.getAttribute('id') || ''} ${el.getAttribute('data-name') || ''}`), layer: el, doc, vb, mm, name: el.getAttribute('data-name') || el.getAttribute('id') });
+      continue;
+    }
+    if (keys.length) pieces.push({ keys, svg: text, vb, mm, name });
+    else unknown.push(name);
+  }
+  return { pieces, template, unknown };
+}
+
+// Una capa sola de un SVG con varias: su contenido (con los estilos y
+// definiciones del archivo) y su recuadro (un rectángulo llamado "mesa" o
+// "marco" dentro de la capa, o lo que ocupa lo dibujado).
+export function isolateLayer(piece) {
+  const { doc, layer } = piece;
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:1000px;height:1000px;visibility:hidden';
+  const svg = document.importNode(doc.documentElement, true);
+  svg.setAttribute('width', 1000);
+  svg.setAttribute('height', 1000);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  host.append(svg);
+  document.body.append(host);
+  try {
+    // El mismo elemento en la copia.
+    const path = [];
+    for (let el = layer; el !== doc.documentElement; el = el.parentElement) path.unshift([...el.parentElement.children].indexOf(el));
+    let mine = svg;
+    for (const i of path) mine = mine.children[i];
+    const frameEl = [...mine.querySelectorAll('rect')].find((r) => /mesa|marco|frame|artboard|area/i.test(`${r.id} ${r.getAttribute('data-name') || ''}`));
+    const box = (frameEl || mine).getBoundingClientRect();
+    const sb = svg.getBoundingClientRect();
+    const vb = piece.vb;
+    const ux = vb[2] / sb.width;
+    const uy = vb[3] / sb.height;
+    const rect = [vb[0] + (box.left - sb.left) * ux, vb[1] + (box.top - sb.top) * uy, box.width * ux, box.height * uy];
+    if (frameEl) frameEl.remove();
+    // Fuera todo lo que no es la capa, sus antepasados o definiciones.
+    const keep = new Set([mine]);
+    for (let p = mine.parentElement; p; p = p.parentElement) keep.add(p);
+    const prune = (el) => {
+      for (const ch of [...el.children]) {
+        if (keep.has(ch)) {
+          if (ch !== mine) prune(ch);
+        } else if (!/^(defs|style|lineargradient|radialgradient|clippath|mask|pattern|symbol|filter)$/i.test(ch.nodeName)) ch.remove();
+      }
+    };
+    prune(svg);
+    if (!(rect[2] > 0 && rect[3] > 0)) return null;
+    return { svg: new XMLSerializer().serializeToString(svg), vb: rect };
+  } finally {
+    host.remove();
+  }
+}
+
+// Lienzo del recuadro de una pieza (como los de la plantilla) con el diseño
+// ubicado en su molde. Devuelve también cómo se ubicó.
+export async function placePiece(key, piece, size) {
+  const pc = PIECES.find((p) => p.key === key);
+  const [, , fw, fh] = piece.vb;
+  const real = piece.mm && Math.abs((fw * piece.mm) / size.w - 1) < 0.6;
+  // Sin tamaño real: cubre la pieza (lo que sobra queda a los costados o abajo).
+  const s = real ? piece.mm : Math.max(size.w / fw, size.wrap ? 0 : size.h / fh); // mm por unidad
+  const w = fw * s;
+  const h = fh * s;
+  const k = Math.min(PX_PER_MM, MAX_PX / Math.max(pc.w, pc.h));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(pc.w * k);
+  canvas.height = Math.round(pc.h * k);
+  const doc = new DOMParser().parseFromString(piece.svg, 'image/svg+xml');
+  const root = doc.documentElement;
+  const pw = Math.max(1, Math.round(w * k));
+  const ph = Math.max(1, Math.round(h * k));
+  root.setAttribute('viewBox', piece.vb.join(' '));
+  root.setAttribute('width', pw);
+  root.setAttribute('height', ph);
+  root.setAttribute('preserveAspectRatio', 'none');
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(doc)], { type: 'image/svg+xml' }));
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const ctx = canvas.getContext('2d');
+    const x = (pc.ax - w / 2) * k;
+    const y = (pc.ay + size.top) * k;
+    ctx.drawImage(img, x, y, pw, ph);
+    // El cuello da la vuelta: lo que pasa de una punta sigue en la otra.
+    if (size.wrap) for (const d of [-1, 1]) ctx.drawImage(img, x + d * size.wrap * k, y, pw, ph);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  return { canvas, real, w, h, rect: [(pc.ax - w / 2) * k, (pc.ay + size.top) * k, pw, ph] };
+}

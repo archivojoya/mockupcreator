@@ -99,12 +99,16 @@
 
         <section class="group" aria-labelledby="g-diseno">
           <h2 id="g-diseno">Diseño</h2>
-          <p class="note">Bajá la plantilla con todas las piezas a escala 1:1, diseñá en Illustrator dentro de cada recuadro y cargá el SVG.</p>
+          <p class="note">Un SVG por pieza con sólo su diseño, a la medida de abajo; el nombre del archivo (o de la capa) dice cuál es: frente, espalda, manga, puño o cuello. La página lo ubica centrado y arriba en la pieza.</p>
+          <details class="sizes" id="design-sizes">
+            <summary>Medidas para diseñar</summary>
+            <dl></dl>
+          </details>
           <div class="actions">
-            <button id="template" type="button" class="reset">Descargar plantilla</button>
-            <button id="design-load" type="button" class="reset">Cargar diseño</button>
+            <button id="design-load" type="button" class="reset">Cargar diseños</button>
             <button id="design-clear" type="button" class="reset" hidden>Quitar diseño</button>
-            <input id="design-file" type="file" accept=".svg,image/svg+xml" hidden />
+            <button id="template" type="button" class="reset">Plantilla completa</button>
+            <input id="design-file" type="file" accept=".svg,image/svg+xml" multiple hidden />
           </div>
           <p class="note" id="design-note" aria-live="polite"></p>
         </section>

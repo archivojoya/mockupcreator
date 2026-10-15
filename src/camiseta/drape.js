@@ -18,7 +18,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { armholeLoopIJ } from './shirt.js';
+import { armholeLoopIJ, flattenPanel } from './shirt.js';
 
 const SUBSTEPS = 4;
 const ITERATIONS = 5;
@@ -71,14 +71,23 @@ const BAND_ROW = 2;
 const BAND_SPAN = 6;
 // La costura de la tira es más firme que la tela: no la deja darse vuelta.
 const SEAM_K = 0.5;
-// En V la tira acanalada se cose estirada: las patas (de cada hombro a la
-// punta) tienen este largo de reposo respecto del puesto. Puestas vienen
-// curvas por el pecho; colgada la camiseta queda plana y, sin esto, la V se
-// hacía mucho más honda que puesta (9 cm → 16; el redondo, 8,5 → 11,5).
-const V_EASE = 0.7;
+// En V la tira acanalada se cose estirada y frunce un poco el escote: al
+// aplanar el molde del frente para colgarla, las patas (de cada hombro a la
+// punta) apuntan a este largo respecto del puesto (la tela de alrededor no
+// las deja llegar: quedan en ≈ 0,7). Puestas vienen curvas por el pecho;
+// colgada la camiseta queda plana y, sin esto, la V se hacía mucho más honda
+// que puesta (9 cm → 17; con esto, 12; el redondo, 8,5 → 11,8).
+const V_EASE = 0.4;
 // La tira acanalada es más firme que la tela: sus uniones se resuelven
 // estas veces más en cada iteración (casi no se estira con el peso del pecho).
 const BAND_PASSES = 4;
+// Aplanado del molde para el largo de reposo colgada (grilla de la
+// simulación): [cada cuántos puntos, iteraciones].
+const FLAT_REST = [
+  [4, 300],
+  [2, 150],
+  [1, 60],
+];
 
 // ---------- percha ----------
 
@@ -557,22 +566,70 @@ export class HangingShirt {
       for (const key of ['front', 'back'])
         for (let j = 0; j <= C; j++) if (map[key][NC * WC + j] === ring[k]) link(band[k], map[key][(NC - 1) * WC + j], 7);
     }
-    if (built.measures.vNeck) {
-      const ringK = new Map(ring.map((id, k) => [id, k]));
-      const bandK = new Map(band.map((id, k) => [id, k]));
-      for (const c of pairs.values()) {
-        const [a, b, r, kd] = c;
-        if (kd !== 5 && kd !== 6) continue;
-        const ka = ringK.get(a) ?? bandK.get(a);
-        const kb = ringK.get(b) ?? bandK.get(b);
-        if (ka === undefined || kb === undefined || ka > C || kb > C) continue;
-        // A lo largo (bordes y saltos): más cortas. Diagonales: sólo su parte
-        // a lo largo. Travesaños: igual (la tira no se angosta).
-        if (ringK.has(a) === ringK.has(b)) c[2] = r * V_EASE;
-        else if (ka !== kb) {
-          const seg = dist(ring[Math.min(ka, kb)], ring[Math.min(ka, kb) + 1]);
-          c[2] = Math.sqrt(Math.max(r * r * 0.5, r * r - (1 - V_EASE * V_EASE) * seg * seg));
+    // Colgada, la tela tiende a su molde (frente y espalda planos, como se
+    // cortan) y no a la forma puesta: si no, recuerda la curva de hombros,
+    // pecho y espalda y al quedar plana se arruga. Cada unión dentro de una
+    // pieza toma su largo en la pieza aplanada (las de la costura, el
+    // promedio de las dos). En V, el escote del frente se acorta como la
+    // tira (V_EASE) en el mismo aplanado: la tela de alrededor se acomoda
+    // plana, sin fruncirse bajo la V.
+    const flatSum = new Map();
+    for (const key of ['front', 'back']) {
+      const m = map[key];
+      const base = built.printBase[key];
+      const pos3 = new Float64Array(m.length * 3);
+      const X0 = new Float64Array(m.length * 2);
+      m.forEach((id, v) => {
+        if (id < 0) return;
+        const f = 2 * Math.floor(v / WC) * W + 2 * (v % WC);
+        pos3.set(P.subarray(id * 3, id * 3 + 3), v * 3);
+        X0[v * 2] = base[f * 2];
+        X0[v * 2 + 1] = base[f * 2 + 1];
+      });
+      const tri = [];
+      for (let i = 0; i < NC; i++)
+        for (let j = 0; j < C; j++) {
+          const a = i * WC + j;
+          if (cellOk(i, j)) tri.push(a, a + 1, a + WC, a + 1, a + WC + 1, a + WC);
         }
+      const top = NC * WC;
+      const ease = key === 'front' && built.measures.vNeck ? (p, q) => (p >= top && q >= top ? V_EASE : 1) : null;
+      const X = flattenPanel(pos3, tri, WC, NC + 1, X0, FLAT_REST, ease);
+      const cellOf = new Map();
+      m.forEach((id, v) => id >= 0 && cellOf.set(id, v));
+      for (const [k, c] of pairs) {
+        const va = cellOf.get(c[0]);
+        const vb = cellOf.get(c[1]);
+        if (va === undefined || vb === undefined) continue;
+        const s = flatSum.get(k) || [0, 0];
+        s[0] += Math.hypot(X[va * 2] - X[vb * 2], X[va * 2 + 1] - X[vb * 2 + 1]);
+        s[1]++;
+        flatSum.set(k, s);
+      }
+    }
+    for (const [k, s] of flatSum) pairs.get(k)[2] = s[0] / s[1];
+    // La tira sigue al escote: a lo largo, cada tramo se acorta o alarga como
+    // el escote aplanado (las diagonales, sólo en su parte a lo largo; los
+    // travesaños quedan iguales: la tira no se angosta).
+    const pairOf = (a, b) => pairs.get(a < b ? a * n + b : b * n + a);
+    const flatRatio = Float64Array.from(ring, (id, k) => {
+      const d0 = dist(id, ring[(k + 1) % K]);
+      return d0 > 1e-6 ? pairOf(id, ring[(k + 1) % K])[2] / d0 : 1;
+    });
+    for (let k = 0; k < K; k++) {
+      const k1 = (k + 1) % K;
+      const k2 = (k + 2) % K;
+      const f = flatRatio[k];
+      pairOf(band[k], band[k1])[2] = dist(band[k], band[k1]) * f;
+      const s0 = dist(ring[k], ring[k1]);
+      const s1 = dist(ring[k1], ring[k2]);
+      pairOf(band[k], band[k2])[2] = dist(band[k], band[k2]) * ((s0 * f + s1 * flatRatio[k1]) / (s0 + s1));
+      for (const [a, b] of [
+        [ring[k], band[k1]],
+        [ring[k1], band[k]],
+      ]) {
+        const r = dist(a, b);
+        pairOf(a, b)[2] = Math.sqrt(Math.max(r * r * 0.5, r * r - (1 - f * f) * s0 * s0));
       }
     }
     const list = [...pairs.values()];

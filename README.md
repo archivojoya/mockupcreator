@@ -77,7 +77,11 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   SVG a escala 1:1 (mm) con todas las piezas de la camiseta tal como está
   (frente, espalda, mangas, puños y cuello, con nombres claros), cada una en su
   recuadro con el contorno, el centro, la grilla de 5 cm y una cruz de
-  anclaje. Se diseña en Illustrator dentro de cada recuadro (pasarse del
+  anclaje. Frente y espalda son un molde común: la tela de la camiseta
+  aplanada como se corta (hombros rectos, sin la curva del cuerpo), así lo que
+  se dibuja recto en la plantilla queda recto en la camiseta. Se calcula sólo
+  al bajar la plantilla o cargar un diseño (tarda un poco) y se rehace cuando
+  se deja de mover un control. Se diseña en Illustrator dentro de cada recuadro (pasarse del
   contorno no molesta: es el sangrado) y **Cargar diseño** (o arrastrar el SVG
   a la camiseta) lo estampa en las dos camisetas, en las tres presentaciones.
   Lo que hay dentro de cada recuadro va a esa pieza, sin importar las capas.
@@ -103,7 +107,9 @@ Cómo se arma (`src/camiseta/shirt.js`):
   escote cada columna se curva hacia el contorno del cuello; a los costados esa
   curva es la línea del hombro. Visto desde arriba, el contorno del cuello es
   una D: adelante baja 8 cm por delante de los hombros y atrás es casi plano
-  (3,5 cm), como un escote real.
+  (3,5 cm), como un escote real. La espalda sube de la axila al cuello con una
+  pendiente pareja: sin escalón bajo el cuello, así lo que se estampa ahí (un
+  logo, un nombre) mira hacia atrás y no hacia arriba.
 - **Sisas**: un hueco en la grilla del torso a cada lado, deformado hasta
   quedar ovalado. La manga arranca exactamente de ese borde, así la costura
   queda cerrada.
@@ -130,15 +136,21 @@ veces por paso), no se dobla de canto y no se da vuelta sobre la costura, pero
 se achata libre: en la percha la abertura queda como un óvalo finito, el frente
 cae en U delante de la barra y la espalda apoya contra ella, como una camiseta
 colgada de verdad (si la tira recordara la vuelta alrededor del cuello, armaría
-un aro que empuja el frente y arruga los hombros). En V la tira se cose estirada (sus
-patas tienen un largo de reposo 30 % más corto): colgada, la V se hace unos
-3 cm más honda que puesta, como el cuello redondo. Con broches nada sostiene el
+un aro que empuja el frente y arruga los hombros). En V la tira se cose estirada y
+frunce apenas el escote: en el molde plano del frente las patas de la V quedan
+un 30 % más cortas que puestas (repartido en la tela de alrededor, que queda
+plana, sin burbujas bajo la punta) y la tira sigue al escote. Colgada, la V se
+hace unos 3 cm más honda que puesta, como el cuello redondo. Con broches nada sostiene el
 cuello atrás (entre los broches) ni el hombro de afuera del broche: ahí cada
 tramo de unos 10 cm de la tira guarda algo de su forma puesta (si no, la
 espalda del cuello cae y se embolsa), se guarda menos volumen arriba y la copa
 de la manga cede más. Frente, espalda y mangas guardan algo del volumen que
 tenían puestas (más arriba, casi nada en el ruedo), y la copa de la manga
-conserva algo de cuerpo.
+conserva algo de cuerpo. La tela tiende a su molde plano (frente y espalda
+aplanados como se cortan, cada unión con su largo en la pieza plana) y no a la
+forma puesta: si recordara la curva de hombros, pecho y espalda, al quedar
+plana se arrugaría (pliegues junto al cuello y bajo los hombros) y deformaría
+el diseño; así un diseño recto cuelga recto.
 
 Ninguna parte de la tela atraviesa a otra: cada punto de la simulación tiene un
 grosor de 1,1 cm y ningún punto que en la tela esté lejos puede acercarse más

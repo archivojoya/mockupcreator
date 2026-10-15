@@ -113,6 +113,17 @@ export function measures(p) {
   const ys = rows.map((r) => r[0]);
   M.sa = monotone(ys, rows.map((r) => r[1]));
   M.sb = monotone(ys, rows.map((r) => r[2]));
+  // La espalda, de la axila al cuello, sube con una pendiente pareja hasta el
+  // escote (casi plano atrás): si siguiera redonda como el frente, justo
+  // abajo del cuello haría un escalón casi horizontal y lo que se estampa ahí
+  // miraría hacia arriba.
+  const pit = rows[3];
+  const zPit = pit[3] - pit[2];
+  const zNeck = M.neck.c - M.neck.bB;
+  M.sbB = monotone(
+    ys,
+    rows.map((r) => (r[0] <= pit[0] ? r[2] : r[3] - lerp(zPit, zNeck, (r[0] - pit[0]) / -pit[0]))),
+  );
   M.sc = monotone(ys, rows.map((r) => r[3]));
   M.shA = shA;
   M.sleeve = {
@@ -175,7 +186,7 @@ function torsoPoint(M, th, t, out) {
   const cs = Math.cos(th);
   const e = 2 / M.n;
   let x = M.sa(y) * spow(sn, e);
-  let z = M.sc(y) + M.sb(y) * spow(cs, e);
+  let z = M.sc(y) + (cs >= 0 ? M.sb(y) : M.sbB(y)) * spow(cs, e);
   let yy = y;
   // Cerca del escote la columna se curva hacia el contorno del cuello. A los
   // costados eso recorre la línea del hombro; al frente, la subida del pecho.
@@ -647,7 +658,7 @@ export function buildShirt(params) {
       cuffRLip: Array.from({ length: sleeveSW - 1 }, (_, i) => ['cuffR', CUFF_ROWS * sleeveSW + i, (CUFF_ROWS - 1) * sleeveSW + i]),
     },
   };
-  return { geos, measures: M, layout };
+  return { geos, measures: M, layout, printBase: { front: parts.front.printBase, back: parts.back.printBase } };
 }
 
 // ---------- coordenadas de estampado ----------
@@ -667,12 +678,21 @@ function printUV(parts, N, W) {
     for (const [a, b] of ids) s += (uv[b * 2] - uv[a * 2]) * ((pos[b * 3] - pos[a * 3]) * right[0] + (pos[b * 3 + 2] - pos[a * 3 + 2]) * right[2]);
     return s >= 0 ? 1 : -1;
   };
+  // Frente y espalda: de entrada, el ancho a lo largo de cada fila y la
+  // altura. El molde de verdad (la tela aplanada) lo calcula flattenPrint,
+  // sólo cuando hace falta (tarda).
   for (const [key, right] of [['front', [1, 0, 0]], ['back', [-1, 0, 0]]]) {
     const { pos, uv } = parts[key];
     const r = Math.round(N / 3);
     const sx = facing(pos, uv, [[r * W, r * W + COLS]], right);
-    const vA = uv[(N * W + C) * 2 + 1];
-    parts[key].uv1 = uv.map((x, i) => (i % 2 ? vA - x : sx * x));
+    const uv1 = new Float32Array(W * (N + 1) * 2);
+    for (let v = 0; v < W * (N + 1); v++) {
+      uv1[v * 2] = sx * uv[v * 2];
+      uv1[v * 2 + 1] = -pos[v * 3 + 1];
+    }
+    const A = (N * W + C) * 2;
+    parts[key].uv1 = uv1.map((x, i) => x - uv1[A + (i % 2)]);
+    parts[key].printBase = Float32Array.from(parts[key].uv1);
   }
   for (const [key, cuffKey, side] of [['sleeveL', 'cuffL', 1], ['sleeveR', 'cuffR', -1]]) {
     const sl = parts[key];
@@ -718,6 +738,210 @@ function printUV(parts, N, W) {
       col.uv1[k + 1] = out ? -col.uv[k + 1] : top + col.uv[k + 1] - v(COLLAR_FOLD + 1);
     }
 }
+// Molde de frente y espalda para el estampado: la tela aplanada (ver
+// flattenPanel), con el origen en el centro del escote. `prev` es una
+// camiseta anterior ya aplanada (la grilla es la misma para cualquier
+// medida): se parte de su molde y alcanza con menos vueltas.
+const FLAT_LEVELS = [
+  [4, 1500],
+  [2, 250],
+  [1, 50],
+];
+const FLAT_WARM = [
+  [2, 120],
+  [1, 40],
+];
+export function flattenPrint(built, prev = null) {
+  if (built.flatPrint) return;
+  const L = built.layout;
+  const W = L.cols + 1;
+  const H = L.rows + 1;
+  const A = (L.rows * W + L.cols / 2) * 2;
+  const warm = prev && prev.flatPrint && prev.measures.vNeck === built.measures.vNeck;
+  for (const key of ['front', 'back']) {
+    const g = built.geos[key];
+    // Arranque: la forma de entrada de esta camiseta y, si hay una anterior
+    // aplanada, lo que el aplanado le corrigió a aquella.
+    const base = built.printBase[key];
+    const X0 = Float64Array.from(base);
+    if (warm) {
+      const pf = prev.geos[key].attributes.uv1.array;
+      const pb = prev.printBase[key];
+      for (let i = 0; i < X0.length; i++) X0[i] += pf[i] - pb[i];
+    }
+    const X = flattenPanel(g.attributes.position.array, g.index.array, W, H, X0, warm ? FLAT_WARM : FLAT_LEVELS);
+    const uv1 = g.attributes.uv1.array;
+    for (let i = 0; i < uv1.length; i++) uv1[i] = X[i] - X[A + (i % 2)];
+    g.attributes.uv1.needsUpdate = true;
+  }
+  built.flatPrint = true;
+}
+
+// Molde de una pieza del torso (grilla W×H, simétrica respecto de la columna
+// del medio): la tela aplanada, con cada arista de su largo en la tela, como
+// al sacar un molde. Resortes en las aristas y diagonales de cada celda,
+// resueltos primero en grillas más gruesas (cada `s` puntos) y llevados a la
+// fina. `ease(p, q)`, si está, multiplica el largo de la arista p–q.
+const AREA_MIN = 0.3;
+const EASE_PASSES = 4;
+export function flattenPanel(pos, idx, W, H, X0, levels, ease = null) {
+  const C = (W - 1) / 2;
+  // Celdas con tela (las de la sisa no tienen).
+  const cell = new Uint8Array(W * H);
+  for (let t = 0; t < idx.length; t += 3) {
+    const r = Math.min(Math.floor(idx[t] / W), Math.floor(idx[t + 1] / W), Math.floor(idx[t + 2] / W));
+    const j = Math.min(idx[t] % W, idx[t + 1] % W, idx[t + 2] % W);
+    cell[r * W + j] = 1;
+  }
+  const d3 = (a, b) => Math.hypot(pos[a * 3] - pos[b * 3], pos[a * 3 + 1] - pos[b * 3 + 1], pos[a * 3 + 2] - pos[b * 3 + 2]);
+  const X = Float64Array.from(X0);
+  let prev = null;
+  for (const [s, iters] of levels) {
+    const ok = (r, j) => {
+      for (let a = r; a < r + s; a++) for (let b = j; b < j + s; b++) if (!cell[a * W + b]) return false;
+      return true;
+    };
+    const list = [];
+    const tris = [];
+    const used = new Uint8Array(W * H);
+    for (let r = 0; r + s < H; r += s)
+      for (let j = 0; j + s < W; j += s) {
+        if (!ok(r, j)) continue;
+        const a = r * W + j;
+        const b = a + s;
+        const c = a + s * W;
+        const d = c + s;
+        for (const [p, q] of [
+          [a, b],
+          [a, c],
+          [b, d],
+          [c, d],
+          [a, d],
+          [b, c],
+        ]) {
+          // Las aristas con otro largo son más firmes: se resuelven
+          // EASE_PASSES veces por vuelta.
+          const k = ease ? ease(p, q) : 1;
+          for (let n = k === 1 ? 1 : EASE_PASSES; n > 0; n--) list.push(p, q, d3(p, q) * k);
+        }
+        tris.push(a, b, d, a, d, c);
+        used[a] = used[b] = used[c] = used[d] = 1;
+      }
+    const ne = list.length / 3;
+    const ea = new Int32Array(ne);
+    const eb = new Int32Array(ne);
+    const el = new Float64Array(ne);
+    for (let e = 0; e < ne; e++) {
+      ea[e] = list[e * 3] * 2;
+      eb[e] = list[e * 3 + 1] * 2;
+      el[e] = list[e * 3 + 2];
+    }
+    // Arranque: lo que se movió en la grilla anterior, llevado a esta.
+    if (prev) {
+      const [ps, D] = prev;
+      for (let r = 0; r < H; r += s)
+        for (let j = 0; j < W; j += s) {
+          const v = r * W + j;
+          if (!used[v] || (r % ps === 0 && j % ps === 0)) continue;
+          const r0 = Math.floor(r / ps) * ps;
+          const j0 = Math.floor(j / ps) * ps;
+          let wx = 0;
+          let dx = 0;
+          let dy = 0;
+          for (const [rr, jj] of [
+            [r0, j0],
+            [r0 + ps, j0],
+            [r0, j0 + ps],
+            [r0 + ps, j0 + ps],
+          ]) {
+            if (rr >= H || jj >= W || !D.has(rr * W + jj)) continue;
+            const w = (1 - Math.abs(r - rr) / ps) * (1 - Math.abs(j - jj) / ps) + 1e-6;
+            const [ddx, ddy] = D.get(rr * W + jj);
+            dx += ddx * w;
+            dy += ddy * w;
+            wx += w;
+          }
+          if (wx > 0) {
+            X[v * 2] = X0[v * 2] + dx / wx;
+            X[v * 2 + 1] = X0[v * 2 + 1] + dy / wx;
+          }
+        }
+    }
+    // Ningún triángulo se da vuelta ni se aplasta (donde la tela puesta
+    // tiene mucha curva, como el hombro de la espalda junto a la sisa, los
+    // resortes solos la doblarían sobre sí misma): cada uno conserva al
+    // menos AREA_MIN de su área, con el sentido de la mayoría.
+    const nt = tris.length / 3;
+    const ta = new Int32Array(tris.length);
+    const tArea = new Float64Array(nt);
+    let orient = 0;
+    for (let t = 0; t < nt; t++) {
+      const [a, b, c] = [tris[t * 3], tris[t * 3 + 1], tris[t * 3 + 2]];
+      ta[t * 3] = a * 2;
+      ta[t * 3 + 1] = b * 2;
+      ta[t * 3 + 2] = c * 2;
+      const u = [0, 1, 2].map((k) => pos[b * 3 + k] - pos[a * 3 + k]);
+      const v = [0, 1, 2].map((k) => pos[c * 3 + k] - pos[a * 3 + k]);
+      tArea[t] = 0.5 * Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]);
+      orient += (X[b * 2] - X[a * 2]) * (X[c * 2 + 1] - X[a * 2 + 1]) - (X[c * 2] - X[a * 2]) * (X[b * 2 + 1] - X[a * 2 + 1]);
+    }
+    const sg = orient >= 0 ? 0.5 : -0.5;
+    for (let it = 0; it < iters; it++) {
+      for (let t = 0; t < nt; t++) {
+        const a = ta[t * 3];
+        const b = ta[t * 3 + 1];
+        const c = ta[t * 3 + 2];
+        const area = sg * ((X[b] - X[a]) * (X[c + 1] - X[a + 1]) - (X[c] - X[a]) * (X[b + 1] - X[a + 1]));
+        const goal = AREA_MIN * tArea[t];
+        if (area >= goal) continue;
+        // Gradiente del área respecto de cada vértice (perpendicular al lado opuesto).
+        const gax = sg * (X[b + 1] - X[c + 1]);
+        const gay = sg * (X[c] - X[b]);
+        const gbx = sg * (X[c + 1] - X[a + 1]);
+        const gby = sg * (X[a] - X[c]);
+        const gcx = sg * (X[a + 1] - X[b + 1]);
+        const gcy = sg * (X[b] - X[a]);
+        const l = (goal - area) / (gax * gax + gay * gay + gbx * gbx + gby * gby + gcx * gcx + gcy * gcy + 1e-18);
+        X[a] += l * gax;
+        X[a + 1] += l * gay;
+        X[b] += l * gbx;
+        X[b + 1] += l * gby;
+        X[c] += l * gcx;
+        X[c + 1] += l * gcy;
+      }
+      for (let e = 0; e < ne; e++) {
+        const a = ea[e];
+        const b = eb[e];
+        const dx = X[b] - X[a];
+        const dy = X[b + 1] - X[a + 1];
+        const len = Math.sqrt(dx * dx + dy * dy) || 1e-9;
+        const f = ((len - el[e]) / len) * 0.5;
+        X[a] += dx * f;
+        X[a + 1] += dy * f;
+        X[b] -= dx * f;
+        X[b + 1] -= dy * f;
+      }
+      // Simétrica: cada columna con su espejo, la del medio en x = 0.
+      for (let r = 0; r < H; r += s) {
+        for (let j = 0; j < C; j += s) {
+          const a = (r * W + j) * 2;
+          const m = (r * W + W - 1 - j) * 2;
+          const x = (X[a] - X[m]) / 2;
+          const y = (X[a + 1] + X[m + 1]) / 2;
+          X[a] = x;
+          X[m] = -x;
+          X[a + 1] = X[m + 1] = y;
+        }
+        X[(r * W + C) * 2] = 0;
+      }
+    }
+    const D = new Map();
+    for (let v = 0; v < W * H; v++) if (used[v]) D.set(v, [X[v * 2] - X0[v * 2], X[v * 2 + 1] - X0[v * 2 + 1]]);
+    prev = [s, D];
+  }
+  return X;
+}
+
 // Fila del perfil de la tira en la mitad del doblez, y separación (m) entre
 // las dos caras en la plantilla.
 export const COLLAR_FOLD = 5;

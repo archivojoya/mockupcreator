@@ -10,8 +10,8 @@ import { COLLAR_FOLD } from './shirt.js';
 const MARGIN = 40;
 const TOP = 110; // lugar para el título y las instrucciones
 export const PIECES = [
-  { key: 'front', id: 'frente', label: 'FRENTE', anchor: 'centro del escote', x: MARGIN, y: TOP, w: 760, h: 1080, ax: 380, ay: 280 },
-  { key: 'back', id: 'espalda', label: 'ESPALDA', anchor: 'centro del escote', x: 2 * MARGIN + 760, y: TOP, w: 760, h: 1080, ax: 380, ay: 280 },
+  { key: 'front', id: 'frente', label: 'FRENTE', anchor: 'centro del escote', x: MARGIN, y: TOP, w: 760, h: 1080, ax: 380, ay: 230 },
+  { key: 'back', id: 'espalda', label: 'ESPALDA', anchor: 'centro del escote', x: 2 * MARGIN + 760, y: TOP, w: 760, h: 1080, ax: 380, ay: 230 },
   { key: 'sleeveR', id: 'manga-derecha', label: 'MANGA DERECHA', anchor: 'punta del hombro', x: MARGIN, y: TOP + 1080 + 60, w: 580, h: 320, ax: 290, ay: 20 },
   { key: 'sleeveL', id: 'manga-izquierda', label: 'MANGA IZQUIERDA', anchor: 'punta del hombro', x: 2 * MARGIN + 760, y: TOP + 1080 + 60, w: 580, h: 320, ax: 290, ay: 20 },
   { key: 'cuffR', id: 'puno-derecho', label: 'PUÑO DERECHO', anchor: 'centro de arriba', x: MARGIN, y: TOP + 1460 + 60, w: 500, h: 50, ax: 250, ay: 10 },

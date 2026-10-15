@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { buildShirt, girth, DEFAULTS } from './shirt.js';
+import { buildShirt, girth, DEFAULTS, flattenPrint } from './shirt.js';
 import { makeHanger, makeClipHanger, HangingShirt } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
 import { templateSVG, readDesign, printTexture } from './print.js';
@@ -323,6 +323,26 @@ const clothMeshes = [...Object.values(meshes), ...Object.values(twins)];
 const uvMaps = {};
 // Diseño cargado: una textura de estampado por pieza.
 const design = { textures: {}, found: [] };
+// Molde del frente y la espalda para el estampado: se calcula sólo con un
+// diseño cargado o al bajar la plantilla (tarda). Al cambiar una medida se
+// usa enseguida el molde anterior (la grilla es la misma) y, cuando el
+// control queda quieto, se recalcula partiendo de él.
+let lastFlat = null;
+let flatTimer = 0;
+function ensureFlat() {
+  clearTimeout(flatTimer);
+  flattenPrint(built, lastFlat);
+  lastFlat = built;
+}
+function followFlat() {
+  if (!lastFlat || !Object.keys(design.textures).length) return;
+  for (const k of ['front', 'back']) built.geos[k].attributes.uv1.array.set(lastFlat.geos[k].attributes.uv1.array);
+  clearTimeout(flatTimer);
+  flatTimer = setTimeout(() => {
+    ensureFlat();
+    requestRender();
+  }, 180);
+}
 
 // Percha o broches (sólo en la versión colgada), uno por camiseta.
 const supportMaterials = {
@@ -352,6 +372,7 @@ function rebuild() {
     mesh.geometry.dispose();
     mesh.geometry = twins[k].geometry = built.geos[k];
   }
+  followFlat();
   // Colgada: la tela arranca con la forma puesta y cae (sobre la percha, o
   // sostenida por los broches).
   drape = null;
@@ -646,6 +667,7 @@ async function download(name, text, type) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 document.getElementById('template').addEventListener('click', () => {
+  ensureFlat();
   download('plantilla-camiseta.svg', templateSVG(built, params, colors), 'image/svg+xml');
 });
 function clearDesign() {
@@ -659,6 +681,7 @@ async function loadDesign(text, name = 'diseño') {
   try {
     const { canvases, found } = await readDesign(text);
     clearDesign();
+    ensureFlat();
     const aniso = renderer.capabilities.getMaxAnisotropy();
     for (const [k, c] of Object.entries(canvases)) design.textures[k] = printTexture(k, c, Math.min(8, aniso));
     design.found = found;
@@ -806,4 +829,4 @@ else rebuild();
 resize();
 if (typeof CONFIG.design === 'string' && CONFIG.design.includes('<svg')) loadDesign(CONFIG.design);
 
-window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, setMode, loadDesign, templateSVG: () => templateSVG(built, params, colors), design, drape: () => drape };
+window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, setMode, loadDesign, templateSVG: () => (ensureFlat(), templateSVG(built, params, colors)), design, drape: () => drape };

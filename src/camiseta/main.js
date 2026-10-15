@@ -345,7 +345,9 @@ function applyFabric() {
 // Configuración opcional escrita en la página (así se adapta la camiseta sin
 // tocar el código): <script type="application/json" id="camiseta-config">
 // { "params": {...}, "colors": {...}, "fabric": {...}, "light": "studio",
-//   "mode": "hanger", "spin": false, "uvmap": false, "design": "<svg…>" }
+//   "mode": "hanger", "spin": false, "uvmap": false,
+//   "design": [{ "name": "frente.svg", "text": "<svg…>" }, …] (o la plantilla
+//   completa como texto), "kinds": { "crest": "emb", "marks": "vin" } }
 const CONFIG = (() => {
   try {
     return JSON.parse(document.getElementById('camiseta-config')?.textContent || '{}');
@@ -1224,6 +1226,7 @@ document.getElementById('uvmap').checked = view.uvmap;
 if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
 else rebuild();
 resize();
+for (const k of ['crest', 'marks']) if (['emb', 'vin', 'print'].includes(CONFIG.kinds?.[k])) design.kinds[k] = CONFIG.kinds[k];
 if (typeof CONFIG.design === 'string' && CONFIG.design.includes('<svg')) loadFiles([{ name: 'diseño', text: CONFIG.design }]);
 else if (Array.isArray(CONFIG.design)) loadFiles(CONFIG.design.filter((d) => typeof d?.text === 'string'));
 

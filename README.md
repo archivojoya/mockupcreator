@@ -38,16 +38,20 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
 
 - **Frente y espalda a la vez**: hay dos camisetas lado a lado (la misma, con
   la misma simulación): la de la izquierda muestra el frente y la de la
-  derecha la espalda. **Perfiles** las gira para mostrar los dos costados,
-  mirándose; **Frente y espalda** vuelve. Se puede girar y acercar la cámara
-  libremente, y el mouse empuja la tela de cualquiera de las dos.
+  derecha la espalda, tan cerca como permite su ancho. **Perfiles** las gira
+  para mostrar los dos costados, mirándose; **Frente y espalda** vuelve.
+  Arrastrar sobre una camiseta la gira sólo a ella, sobre su eje (arriba y
+  abajo inclina la cámara); la rueda o el pellizco acercan. **Girar solas**
+  gira cada una sobre su eje. El mouse empuja la tela de cualquiera de las dos.
 
 - **Presentación**: con cuerpo (forma fija, como puesta), en percha o con
   broches. La percha es de madera, plana y paralela a la camiseta, con el arco
   de una percha de verdad y bordes definidos; apoya bajo la costura de los
   hombros. Los dos broches cuelgan de una barra y pellizcan la costura de cada
   hombro, como un broche de pinza: la costura arriba, el frente contra la
-  mordaza de adelante y la espalda contra la de atrás. Colgada, la tela se simula en vivo: al pasar el mouse
+  mordaza de adelante y la espalda contra la de atrás. Los ganchos calzan en
+  la barra de un perchero que baja del techo; son giratorios: la curva queda
+  en la barra y la percha gira debajo. Colgada, la tela se simula en vivo: al pasar el mouse
   se empuja y se balancea, y después se acomoda sola (en el celular, con un
   toque).
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
@@ -73,33 +77,42 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   con el color elegido tal cual, para comparar colores), contraste (rasante,
   marca el relieve y los pliegues) y día (sol cálido y cielo azulado).
 - **Colores** por parte: cuerpo, mangas, cuello y puños.
-- **Diseño propio** (`src/camiseta/print.js`): **Descargar plantilla** baja un
-  SVG a escala 1:1 (mm) con todas las piezas de la camiseta tal como está
-  (frente, espalda, mangas, puños y cuello, con nombres claros), cada una en su
-  recuadro con el contorno, el centro, la grilla de 5 cm y una cruz de
-  anclaje. Frente y espalda son un molde común: la tela de la camiseta
-  aplanada como se corta (hombros rectos, sin la curva del cuerpo), así lo que
-  se dibuja recto en la plantilla queda recto en la camiseta. Se calcula sólo
-  al bajar la plantilla o cargar un diseño (tarda un poco) y se rehace cuando
-  se deja de mover un control. Se diseña en Illustrator dentro de cada recuadro (pasarse del
-  contorno no molesta: es el sangrado) y **Cargar diseño** (o arrastrar el SVG
-  a la camiseta) lo estampa en las dos camisetas, en las tres presentaciones.
-  Lo que hay dentro de cada recuadro va a esa pieza, sin importar las capas.
-  Cada pieza está anclada a un punto fijo (centro del escote en frente y
-  espalda, punta del hombro en las mangas, centro de atrás en el cuello), así
-  que el diseño no se mueve al cambiar el largo o el calce. El cuello tiene
-  la cara de afuera y, arriba, la de adentro como se la ve desde adentro (para
-  una etiqueta estampada). Antes de exportar: textos a contornos, imágenes
-  incrustadas, colores RGB, sin cambiar la mesa de trabajo.
+- **Diseño propio** (`src/camiseta/print.js`): se cargan uno o varios SVG
+  con sólo el diseño de cada pieza (frente, espalda, manga, puño o cuello: lo
+  dice el nombre del archivo, o el de cada capa si vienen todas en un
+  archivo; manga y puño van a los dos lados salvo que digan izquierda o
+  derecha). **Medidas para diseñar** da el ancho y el alto de cada pieza para
+  la camiseta tal como está. La página ubica cada diseño en su molde,
+  centrado y arriba (el cuello, centrado en el medio de atrás y dando la
+  vuelta): si el SVG dice su tamaño en unidades reales (mm, cm, in, pt) va a
+  ese tamaño; si no, se agranda o achica hasta cubrir la pieza. Cargar otra
+  pieza la reemplaza sólo a ella, y al cambiar una medida los diseños se
+  vuelven a ubicar. Frente y espalda son un molde común: la tela aplanada
+  como se corta (hombros rectos, sin la curva del cuerpo), así lo que se
+  dibuja recto queda recto en la camiseta, con cuerpo y colgada.
+  - **Escudo y marcas**: dentro del diseño, un grupo (o capa) llamado
+    "escudo" va bordado y uno llamado "marca", "logo" o "sponsor", en vinilo
+    termoadhesivo; desde el panel cada uno puede ir bordado, en vinilo o
+    estampado. El bordado sube 1,1 mm con el borde redondeado, deja una
+    sombra alrededor y tiene puntadas de relleno (se ven al acercar) y hilo
+    con brillo; el vinilo es liso, semimate, con un borde fino y más reflejo.
+  - **Revés**: por dentro no se ve el estampado; la tela es lisa, del color
+    que más hay en el diseño de cada pieza.
+  - **Plantilla completa** (opcional) baja un SVG a escala 1:1 (mm) con
+    todas las piezas en sus recuadros (contorno, centro, grilla de 5 cm y
+    cruz de anclaje); lo que se dibuja dentro de cada recuadro va a esa pieza.
+  Antes de exportar: textos a contornos, imágenes incrustadas, colores RGB.
 - **Mapa de estampado**: muestra una grilla de 5 cm con el nombre de cada pieza.
 - **Ficha**: contorno de pecho, ancho de hombros, largo, boca de manga y tela.
 - **Configuración sin tocar código**: si la página trae un bloque
   `<script type="application/json" id="camiseta-config">` con `params`
   (incluido `neckStyle`: `round` o `v`), `colors`, `fabric` (`weave`,
   `quality`, `weight`, `heather`), `light` (`studio`, `soft`, `contrast` o
-  `day`), `mode` (`body`, `hanger` o `clips`), `spin`, `uvmap` o `design`
-  (el SVG diseñado sobre la plantilla, como texto), arranca con
-  esos valores (y "Restablecer todo" vuelve a ellos).
+  `day`), `mode` (`body`, `hanger` o `clips`), `spin`, `uvmap`, `design`
+  (lista de `{ name, text }` con el SVG de cada pieza, o la plantilla
+  completa como texto) o `kinds` (`{ "crest": "emb", "marks": "vin" }`:
+  bordado, vinilo o estampado), arranca con esos valores (y "Restablecer
+  todo" vuelve a ellos).
 
 Cómo se arma (`src/camiseta/shirt.js`):
 

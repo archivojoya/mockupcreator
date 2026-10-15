@@ -99,6 +99,7 @@ export function templateSVG(built, params, colors) {
   out.push(`</g>`);
   for (const pc of PIECES) {
     const geo = built.geos[pc.key];
+    if (!geo) continue;
     const X = (px) => pc.x + pc.ax + px * 1000;
     const Y = (py) => pc.y + pc.ay + py * 1000;
     const path = (pts, close) => pts.map(([u, v], i) => `${i ? 'L' : 'M'}${f1(X(u))} ${f1(Y(v))}`).join('') + (close ? 'Z' : '');
@@ -284,6 +285,7 @@ export function pieceKeys(name) {
 export function pieceSizes(built) {
   const out = {};
   for (const pc of PIECES) {
+    if (!built.geos[pc.key]) continue;
     const a = built.geos[pc.key].attributes.uv1.array;
     let n = a.length / 2;
     if (pc.key === 'collar') n = (built.layout.rings.collar.length + 1) * (COLLAR_FOLD + 1);

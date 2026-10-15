@@ -22,7 +22,11 @@ const PARTS = {
   cuffLLip: { color: 'cuffs', lining: 'cuffL' },
   cuffRLip: { color: 'cuffs', lining: 'cuffR' },
   collar: { color: 'collar', label: 'CUELLO', rib: true },
+  // Vivos de las sisas (sin mangas): acanalados, del color del cuello.
+  armL: { color: 'collar', rib: true },
+  armR: { color: 'collar', rib: true },
 };
+const NO_GEO = new THREE.BufferGeometry();
 const CENTER = new THREE.Vector3(0, -0.36, 0);
 const HANG_Y = -0.38; // centro de la vista colgada
 const CAM_OFF = new THREE.Vector3(0, 0.08, 2.15); // cámara respecto del centro, de entrada
@@ -633,8 +637,9 @@ function rebuild() {
   built = buildShirt(params);
   fitPair();
   for (const [k, mesh] of Object.entries(meshes)) {
-    mesh.geometry.dispose();
-    mesh.geometry = twins[k].geometry = built.geos[k];
+    if (mesh.geometry !== NO_GEO) mesh.geometry.dispose();
+    mesh.geometry = twins[k].geometry = built.geos[k] || NO_GEO;
+    mesh.visible = twins[k].visible = !!built.geos[k];
   }
   buildTape();
   followFlat();
@@ -740,7 +745,12 @@ const FOUT = {
 // Escote según el tipo de cuello: mínimo, máximo y valor al elegirlo.
 const NECK = { round: [0.055, 0.12, 0.085], v: [0.07, 0.13, 0.09] };
 // Prendas: largo de manga (mínimo, máximo, típico) y apertura típica.
-const GARMENTS = { tee: { sleeve: [0.13, 0.3, 0.21], angle: 40 }, long: { sleeve: [0.5, 0.68, 0.6], angle: 22 } };
+const GARMENTS = {
+  tee: { sleeve: [0.13, 0.3, 0.21], angle: 40 },
+  long: { sleeve: [0.5, 0.68, 0.6], angle: 22 },
+  tank: { sleeve: [0.13, 0.3, 0.21], angle: 40, bare: true },
+  singlet: { sleeve: [0.13, 0.3, 0.21], angle: 40, bare: true },
+};
 const sliders = {};
 const fabricSliders = {};
 function setFill(input) {
@@ -758,6 +768,9 @@ function syncControls() {
   sliders.sleeveLength.max = shi;
   params.sleeveLength = Math.min(shi, Math.max(slo, params.sleeveLength));
   garmentButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.garment === params.garment)));
+  // Sin mangas no hay largo ni apertura de mangas, ni colores de mangas y puños.
+  const bare = !!GARMENTS[params.garment].bare;
+  for (const id of ['sleeveLength', 'sleeveAngle', 'c-sleeves', 'c-cuffs']) document.getElementById(id).closest('.control, .swatch').hidden = bare;
   for (const [k, input] of Object.entries(sliders)) {
     input.value = params[k];
     document.getElementById(`${k}-out`).textContent = OUT[k](params[k]);
@@ -1130,7 +1143,7 @@ const cmUp = (mm, d = 0) => (Math.ceil(mm / 10 ** (1 - d)) / 10 ** d).toFixed(d)
 function fillSizes() {
   if (!sizesBox.open) return;
   const sz = { ...pieceSizes(built), tape: { w: tape.len * 1000, h: TAPE_W * 1000 } };
-  sizesBox.querySelector('dl').innerHTML = SIZE_ROWS.map(([k, label]) => {
+  sizesBox.querySelector('dl').innerHTML = SIZE_ROWS.filter(([k]) => sz[k]).map(([k, label]) => {
     const d = sz[k].h < 50 ? 1 : 0;
     return `<div><dt>${label}</dt><dd>${cmUp(sz[k].w)} × ${cmUp(sz[k].h, d)} cm</dd></div>`;
   }).join('');
@@ -1145,6 +1158,7 @@ async function layoutPieces() {
   const notes = [];
   const placed = {};
   for (const [k, p] of Object.entries(design.pieces)) {
+    if (!sz[k]) continue; // pieza que esta prenda no tiene (mangas en la musculosa)
     try {
       placed[k] = await placePiece(k, p, sz[k]);
     } catch {
@@ -1272,7 +1286,7 @@ function updateSpec() {
   document.getElementById('s-chest').textContent = fmtCm(girth(M, M.pitY - 0.03));
   document.getElementById('s-shoulders').textContent = fmtCm(M.shA * 2);
   document.getElementById('s-length').textContent = fmtCm(M.L);
-  document.getElementById('s-sleeve').textContent = fmtCm(Math.PI * 2 * M.sleeve.rHem);
+  document.getElementById('s-sleeve').textContent = M.sleeveless ? 'sin manga' : fmtCm(Math.PI * 2 * M.sleeve.rHem);
   document.getElementById('s-fabric').textContent = `${(WEAVES[fabric.weave] || WEAVES.mesh).label} · ${FOUT.weight(fabric.weight)}`;
 }
 

@@ -71,6 +71,11 @@ const BAND_ROW = 2;
 const BAND_SPAN = 6;
 // La costura de la tira es más firme que la tela: no la deja darse vuelta.
 const SEAM_K = 0.5;
+// En V la tira acanalada se cose estirada: las patas (de cada hombro a la
+// punta) tienen este largo de reposo respecto del puesto. Puestas vienen
+// curvas por el pecho; colgada la camiseta queda plana y, sin esto, la V se
+// hacía mucho más honda que puesta (9 cm → 16; el redondo, 8,5 → 11,5).
+const V_EASE = 0.7;
 // La tira acanalada es más firme que la tela: sus uniones se resuelven
 // estas veces más en cada iteración (casi no se estira con el peso del pecho).
 const BAND_PASSES = 4;
@@ -551,6 +556,24 @@ export class HangingShirt {
       link(ring[k], ring[k2], 6, true);
       for (const key of ['front', 'back'])
         for (let j = 0; j <= C; j++) if (map[key][NC * WC + j] === ring[k]) link(band[k], map[key][(NC - 1) * WC + j], 7);
+    }
+    if (built.measures.vNeck) {
+      const ringK = new Map(ring.map((id, k) => [id, k]));
+      const bandK = new Map(band.map((id, k) => [id, k]));
+      for (const c of pairs.values()) {
+        const [a, b, r, kd] = c;
+        if (kd !== 5 && kd !== 6) continue;
+        const ka = ringK.get(a) ?? bandK.get(a);
+        const kb = ringK.get(b) ?? bandK.get(b);
+        if (ka === undefined || kb === undefined || ka > C || kb > C) continue;
+        // A lo largo (bordes y saltos): más cortas. Diagonales: sólo su parte
+        // a lo largo. Travesaños: igual (la tira no se angosta).
+        if (ringK.has(a) === ringK.has(b)) c[2] = r * V_EASE;
+        else if (ka !== kb) {
+          const seg = dist(ring[Math.min(ka, kb)], ring[Math.min(ka, kb) + 1]);
+          c[2] = Math.sqrt(Math.max(r * r * 0.5, r * r - (1 - V_EASE * V_EASE) * seg * seg));
+        }
+      }
     }
     const list = [...pairs.values()];
     // Tramos de la cinta para su cuerpo (ver holdBand): puntos del escote y

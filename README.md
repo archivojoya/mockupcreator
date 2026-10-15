@@ -117,9 +117,9 @@ veces por paso), no se dobla de canto y no se da vuelta sobre la costura, pero
 se achata libre: en la percha la abertura queda como un óvalo finito, el frente
 cae en U delante de la barra y la espalda apoya contra ella, como una camiseta
 colgada de verdad (si la tira recordara la vuelta alrededor del cuello, armaría
-un aro que empuja el frente y arruga los hombros). En V el escote colgado se ve
-más hondo que puesto: puesta, la punta apoya en el pecho, unos 12 cm por
-delante de los hombros, y colgada esa tela queda hacia abajo. Con broches nada sostiene el
+un aro que empuja el frente y arruga los hombros). En V la tira se cose estirada (sus
+patas tienen un largo de reposo 30 % más corto): colgada, la V se hace unos
+3 cm más honda que puesta, como el cuello redondo. Con broches nada sostiene el
 cuello atrás (entre los broches) ni el hombro de afuera del broche: ahí cada
 tramo de unos 10 cm de la tira guarda algo de su forma puesta (si no, la
 espalda del cuello cae y se embolsa), se guarda menos volumen arriba y la copa

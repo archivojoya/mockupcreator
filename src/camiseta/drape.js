@@ -198,19 +198,34 @@ export function makeHanger(M) {
   for (let i = 0; i < exact.length; i += 3) if (exact[i] || exact[i + 1] || exact[i + 2]) na.set([exact[i], exact[i + 1], exact[i + 2]], i);
 
   // Gancho de alambre, desde el centro del borde de arriba.
-  const top = new THREE.Vector3(0, topY(0) - 0.004, z0);
-  const hookPts = [
-    [0, 0],
-    [0, 0.035],
-    [0, 0.07],
-    [0.006, 0.098],
-    [0.026, 0.118],
-    [0.05, 0.112],
-    [0.058, 0.09],
-    [0.05, 0.072],
-  ].map(([x, y]) => new THREE.Vector3(top.x + x, top.y + y, top.z));
-  const hook = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hookPts), 48, 0.0026, 10, false);
-  return { kind: 'hanger', wood: bar, metal: hook, segments, minY: Math.min(...segments.map((s) => Math.min(s.a.y, s.b.y) - s.hu)) };
+  const hook = makeHook(topY(0) - 0.004, z0, 0.035);
+  return { kind: 'hanger', wood: bar, metal: hook.stem, hook, segments, minY: Math.min(...segments.map((s) => Math.min(s.a.y, s.b.y) - s.hu)) };
+}
+
+// Gancho giratorio, como en una vidriera: el alambre sube derecho desde la
+// percha (`stem`, gira con ella) hasta un buje, y arriba la curva (`curl`,
+// queda quieta) calza en la barra del perchero, de atrás hacia adelante.
+// El punto de apoyo (arriba de la barra) queda justo sobre el alambre: así
+// cuelga derecho. `rail` dice dónde va el centro de la barra.
+export const RAIL_R = 0.0125; // radio de la barra del perchero
+const WIRE_R = 0.0026;
+function makeHook(y0, z, stemLen) {
+  const yJ = y0 + stemLen;
+  const rc = RAIL_R + WIRE_R + 0.0006;
+  const yb = yJ + 0.02 + rc;
+  const stem = new THREE.CylinderGeometry(WIRE_R, WIRE_R, stemLen + 0.004, 10).translate(0, y0 + stemLen / 2, z);
+  const collar = new THREE.CylinderGeometry(0.0048, 0.0048, 0.009, 16).translate(0, yJ, z);
+  const pts = [
+    [z, yJ - 0.002],
+    [z, yJ + 0.008],
+    [z - 0.5 * rc, yb - 1.25 * rc],
+  ].map(([zz, y]) => new THREE.Vector3(0, y, zz));
+  for (let a = 215; a >= -30; a -= 15) {
+    const t = (a * Math.PI) / 180;
+    pts.push(new THREE.Vector3(0, yb + rc * Math.sin(t), z + rc * Math.cos(t)));
+  }
+  const curl = mergeGeometries([new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 64, WIRE_R, 10, false), new THREE.SphereGeometry(WIRE_R, 10, 8).translate(0, pts.at(-1).y, pts.at(-1).z), collar]);
+  return { stem, curl, rail: { y: yb, z } };
 }
 
 // Barra de metal con gancho y dos broches que cuelgan de ella. Cada broche:
@@ -232,17 +247,8 @@ export function makeClipHanger(clips) {
   const rodR = 0.0032;
   metal.push(along(new THREE.CylinderGeometry(rodR, rodR, 2 * xMax, 16, 1, true), new THREE.Vector3(-xMax, top, z), new THREE.Vector3(xMax, top, z)));
   for (const s of [-1, 1]) metal.push(new THREE.SphereGeometry(rodR * 1.35, 16, 10).translate(s * xMax, top, z));
-  const hookPts = [
-    [0, 0],
-    [0, 0.025],
-    [0, 0.045],
-    [0.005, 0.068],
-    [0.022, 0.085],
-    [0.042, 0.08],
-    [0.049, 0.062],
-    [0.042, 0.047],
-  ].map(([x, y]) => new THREE.Vector3(x, top + y, z));
-  metal.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hookPts), 48, 0.0026, 10, false));
+  const hook = makeHook(top, z, 0.025);
+  metal.push(hook.stem);
   for (const c of clips) {
     const t = 0.0034; // espesor de cada mordaza
     const jawTop = c.y + 0.014;
@@ -262,7 +268,7 @@ export function makeClipHanger(clips) {
     metal.push(along(new THREE.CylinderGeometry(0.0016, 0.0016, top - jawTop - springR, 8), new THREE.Vector3(c.x, jawTop + springR * 0.8, z), new THREE.Vector3(c.x, top - 0.004, z)));
     metal.push(new THREE.TorusGeometry(0.0052, 0.0015, 8, 20).rotateY(Math.PI / 2).translate(c.x, top, z));
   }
-  return { kind: 'clips', metal: mergeGeometries(metal), plastic: mergeGeometries(plastic) };
+  return { kind: 'clips', metal: mergeGeometries(metal), plastic: mergeGeometries(plastic), hook };
 }
 
 // ---------- simulación ----------

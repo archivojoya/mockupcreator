@@ -3,34 +3,41 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS, flattenPrint } from './shirt.js';
-import { makeHanger, makeClipHanger, HangingShirt } from './drape.js';
+import { makeHanger, makeClipHanger, HangingShirt, RAIL_R } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
 import { templateSVG, readDesign, printTexture } from './print.js';
 import './style.css';
 
 const COLORS = { body: '#c81e3a', sleeves: '#c81e3a', collar: '#17191d', cuffs: '#17191d' };
 // Pieza → grupo de color, textura de relieve y nombre en el mapa de estampado.
+// Los dobladillos (`lining`) van del color del revés de su pieza.
 const PARTS = {
   front: { color: 'body', label: 'FRENTE' },
   back: { color: 'body', label: 'ESPALDA' },
-  hem: { color: 'body' },
+  hem: { color: 'body', lining: 'front' },
   sleeveL: { color: 'sleeves', label: 'MANGA IZQ.' },
   sleeveR: { color: 'sleeves', label: 'MANGA DER.' },
   cuffL: { color: 'cuffs', label: 'PUÑO' },
   cuffR: { color: 'cuffs', label: 'PUÑO' },
-  cuffLLip: { color: 'cuffs' },
-  cuffRLip: { color: 'cuffs' },
+  cuffLLip: { color: 'cuffs', lining: 'cuffL' },
+  cuffRLip: { color: 'cuffs', lining: 'cuffR' },
   collar: { color: 'collar', label: 'CUELLO', rib: true },
 };
 const CENTER = new THREE.Vector3(0, -0.36, 0);
 // Dos camisetas lado a lado (la misma, simulada una vez y dibujada dos
 // veces): de entrada una muestra el frente y la otra la espalda; en
 // Perfiles, cada una un costado, mirándose (de costado ocupan menos: se
-// acercan). En cada vista: giro de cada una y distancia de su centro al medio.
+// acercan). En cada vista: giro de cada una y distancia de su centro al medio
+// (se ajusta al ancho de la camiseta: quedan a PAIR_MARGIN de tocarse, aunque
+// una gire).
 const VIEWS = [
-  { turn: [0, Math.PI], gap: 0.43 },
+  { turn: [0, Math.PI], gap: 0.39 },
   { turn: [Math.PI / 2, -Math.PI / 2], gap: 0.22 },
 ];
+const PAIR_MARGIN = 0.025;
+// Giro de cada camiseta con el puntero (radianes por píxel) y sola (rad/s).
+const SPIN_PX = 0.009;
+const SPIN_SPEED = 0.17;
 
 const stage = document.getElementById('stage');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false });
@@ -58,7 +65,9 @@ controls.minDistance = 0.8;
 controls.maxDistance = 3.4;
 controls.minPolarAngle = 0.35;
 controls.maxPolarAngle = 2.35;
-controls.autoRotateSpeed = 1.6;
+// Se arrastra para girar cada camiseta (ver más abajo): los controles sólo
+// acercan (rueda o pellizco).
+controls.enableRotate = false;
 controls.update();
 
 // Luces que acompañan a la cámara: la camiseta siempre se ve bien iluminada
@@ -144,7 +153,7 @@ function fabricMaterial(rib) {
     side: THREE.DoubleSide,
   });
   // Tono y aspereza punto a punto del tejido (el cuello acanalado no tiene).
-  const own = { detailMap: { value: flatDetail }, detailTile: { value: new THREE.Vector2(1, 1) } };
+  const own = { detailMap: { value: flatDetail }, detailTile: { value: new THREE.Vector2(1, 1) }, insideColor: { value: new THREE.Color() } };
   m.userData = { rib, own };
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, shared, own);
@@ -161,6 +170,7 @@ varying float vZone;
 uniform sampler2D detailMap, macroMap, zoneNormal, zoneDetail;
 uniform vec2 detailTile, zoneTile;
 uniform float macroTile, feature, roughAdd, irregular, pills, pucker, heather, zoneOn;
+uniform vec3 insideColor;
 void main() {
   // De lejos el relieve es más chico que un píxel: se pasa a aspereza (así
   // la tela no se ve plástica).
@@ -180,9 +190,10 @@ void main() {
         '#include <map_fragment>',
         `#ifdef USE_MAP
   // Estampado (o mapa de piezas) sobre el color de la pieza, según su
-  // opacidad; por dentro apenas se trasluce.
+  // opacidad. Por dentro no se ve: la tela es lisa, del color que más hay
+  // en el diseño de la pieza.
   vec4 sampledDiffuseColor = texture2D(map, vMapUv);
-  diffuseColor.rgb = mix(diffuseColor.rgb, sampledDiffuseColor.rgb, sampledDiffuseColor.a * (gl_FrontFacing ? 1.0 : 0.3));
+  diffuseColor.rgb = gl_FrontFacing ? mix(diffuseColor.rgb, sampledDiffuseColor.rgb, sampledDiffuseColor.a) : insideColor;
 #endif`,
       )
       .replace(
@@ -293,17 +304,27 @@ const BASE_LIGHT = CONFIG.light in LIGHTS ? CONFIG.light : 'studio';
 const params = { ...BASE_PARAMS };
 const colors = { ...BASE_COLORS };
 const fabric = { ...BASE_FABRIC };
-const view = { spin: !!CONFIG.spin, uvmap: !!CONFIG.uvmap, mode: 'body', light: BASE_LIGHT }; // body: con cuerpo · hanger: en percha · clips: con broches
+const view = { spin: !!CONFIG.spin, uvmap: !!CONFIG.uvmap, mode: 'body', light: BASE_LIGHT, pair: 0 }; // body: con cuerpo · hanger: en percha · clips: con broches
 
 // Cada camiseta (con su percha o sus broches) cuelga de su soporte, que la
-// ubica y la gira; adentro, las coordenadas son las de la simulación.
+// ubica y la gira sobre el eje del gancho; adentro (`inner`), las
+// coordenadas son las de la simulación.
 const rigs = [-1, 1].map((side, i) => {
   const rig = new THREE.Group();
   rig.position.x = side * VIEWS[0].gap;
   rig.rotation.y = VIEWS[0].turn[i];
+  const inner = new THREE.Group();
+  rig.add(inner);
+  rig.userData.inner = inner;
   scene.add(rig);
   return rig;
 });
+function setAxis(z) {
+  for (const rig of rigs) {
+    rig.position.z = z;
+    rig.userData.inner.position.z = -z;
+  }
+}
 // Piezas de la tela: las de la primera camiseta y sus gemelas (misma
 // geometría y material).
 const meshes = {};
@@ -313,8 +334,8 @@ for (const [k, def] of Object.entries(PARTS)) {
   const twin = new THREE.Mesh(mesh.geometry, mesh.material);
   [mesh, twin].forEach((m, i) => {
     m.castShadow = m.receiveShadow = true;
-    m.userData.rig = rigs[i];
-    rigs[i].add(m);
+    m.userData.rig = rigs[i].userData.inner;
+    rigs[i].userData.inner.add(m);
   });
   meshes[k] = mesh;
   twins[k] = twin;
@@ -322,7 +343,36 @@ for (const [k, def] of Object.entries(PARTS)) {
 const clothMeshes = [...Object.values(meshes), ...Object.values(twins)];
 const uvMaps = {};
 // Diseño cargado: una textura de estampado por pieza.
-const design = { textures: {}, found: [] };
+const design = { textures: {}, found: [], inside: {} };
+// Color que más hay en el diseño de una pieza (lo transparente cuenta como
+// el color de la pieza: null). Es el color del revés de la tela.
+function dominantColor(canvas) {
+  const N = 48;
+  const c = document.createElement('canvas');
+  c.width = c.height = N;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(canvas, 0, 0, N, N);
+  const px = g.getImageData(0, 0, N, N).data;
+  const bins = new Map();
+  let base = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] < 128) {
+      base++;
+      continue;
+    }
+    const key = ((px[i] >> 4) << 8) | ((px[i + 1] >> 4) << 4) | (px[i + 2] >> 4);
+    const b = bins.get(key) || [0, 0, 0, 0];
+    b[0] += px[i];
+    b[1] += px[i + 1];
+    b[2] += px[i + 2];
+    b[3]++;
+    bins.set(key, b);
+  }
+  let best = null;
+  for (const b of bins.values()) if (!best || b[3] > best[3]) best = b;
+  if (!best || best[3] < base) return null;
+  return new THREE.Color().setRGB(best[0] / best[3] / 255, best[1] / best[3] / 255, best[2] / best[3] / 255, THREE.SRGBColorSpace);
+}
 // Molde del frente y la espalda para el estampado: se calcula sólo con un
 // diseño cargado o al bajar la plantilla (tarda). Al cambiar una medida se
 // usa enseguida el molde anterior (la grilla es la misma) y, cuando el
@@ -356,18 +406,67 @@ const supports = rigs.map((rig) => {
   for (const [k, mat] of Object.entries(supportMaterials)) {
     const m = new THREE.Mesh(new THREE.BufferGeometry(), mat);
     m.castShadow = m.receiveShadow = true;
+    m.userData.rig = rig.userData.inner;
     group.add(m);
     parts[k] = m;
   }
-  rig.add(group);
-  return { group, parts };
+  rig.userData.inner.add(group);
+  // La curva del gancho no gira: queda calzada en la barra.
+  const curl = new THREE.Mesh(new THREE.BufferGeometry(), supportMaterials.metal);
+  curl.castShadow = true;
+  scene.add(curl);
+  return { group, parts, curl };
 });
+// Perchero: una barra cromada colgada del techo, de donde cuelgan los ganchos
+// (así las camisetas no cuelgan en el aire).
+const RAIL_HALF = 1.6;
+const DROP_X = 1.35;
+const rail = new THREE.Group();
+{
+  const chrome = new THREE.MeshStandardMaterial({ color: 0xc4c7cc, roughness: 0.22, metalness: 0.95 });
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(RAIL_R, RAIL_R, 2 * RAIL_HALF, 32).rotateZ(Math.PI / 2), chrome);
+  rail.add(bar);
+  for (const s of [-1, 1]) {
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(RAIL_R, 24, 12), chrome);
+    cap.position.x = s * RAIL_HALF;
+    // Bajada del techo: una varilla que abraza la barra.
+    const drop = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 3, 16).translate(0, 1.5 + RAIL_R * 0.6, 0), chrome);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(RAIL_R + 0.003, 0.0045, 10, 28).rotateY(Math.PI / 2), chrome);
+    drop.position.x = ring.position.x = s * DROP_X;
+    rail.add(cap, drop, ring);
+  }
+  rail.traverse((o) => (o.castShadow = o.receiveShadow = o.isMesh));
+  rail.visible = false;
+  scene.add(rail);
+}
+function syncCurls() {
+  supports.forEach((sp, i) => (sp.curl.position.x = rigs[i].position.x));
+}
 const hanging = () => view.mode !== 'body';
 
 let built = null;
 let drape = null;
+// Distancia entre las camisetas según su ancho (con cuerpo, mangas abiertas):
+// de frente quedan a PAIR_MARGIN de tocarse; de perfil, según su fondo.
+function fitPair() {
+  let w = 0;
+  let d = 0;
+  for (const g of Object.values(built.geos)) {
+    const a = g.attributes.position.array;
+    for (let i = 0; i < a.length; i += 3) {
+      w = Math.max(w, Math.abs(a[i]));
+      d = Math.max(d, Math.abs(a[i + 2]));
+    }
+  }
+  VIEWS[0].gap = w + PAIR_MARGIN;
+  VIEWS[1].gap = Math.max(0.22, d + 0.06);
+  if (turn) turn.gap[1] = VIEWS[turn.view].gap - turn.gap[0];
+  else rigs.forEach((rig, j) => (rig.position.x = (j ? 1 : -1) * VIEWS[view.pair].gap));
+  syncCurls();
+}
 function rebuild() {
   built = buildShirt(params);
+  fitPair();
   for (const [k, mesh] of Object.entries(meshes)) {
     mesh.geometry.dispose();
     mesh.geometry = twins[k].geometry = built.geos[k];
@@ -376,7 +475,9 @@ function rebuild() {
   // Colgada: la tela arranca con la forma puesta y cae (sobre la percha, o
   // sostenida por los broches).
   drape = null;
-  for (const sp of supports) sp.group.visible = hanging();
+  for (const sp of supports) sp.group.visible = sp.curl.visible = hanging();
+  rail.visible = hanging();
+  setAxis(0);
   if (hanging()) {
     let support;
     if (view.mode === 'hanger') {
@@ -390,6 +491,11 @@ function rebuild() {
       supports[0].parts[k].geometry.dispose();
       supports[0].parts[k].geometry = supports[1].parts[k].geometry = support[k] || new THREE.BufferGeometry();
     }
+    supports[0].curl.geometry.dispose();
+    supports[0].curl.geometry = supports[1].curl.geometry = support.hook.curl;
+    // Cada camiseta gira sobre el eje de su gancho, que cuelga de la barra.
+    setAxis(support.hook.rail.z);
+    rail.position.set(0, support.hook.rail.y, support.hook.rail.z);
   }
   applyLook();
   updateSpec();
@@ -404,6 +510,7 @@ function applyLook() {
     if (!view.uvmap && design.textures[k]) {
       m.map = design.textures[k];
       m.color.set(colors[def.color]);
+      m.userData.own.insideColor.value.copy(design.inside[k] || m.color);
     } else if (view.uvmap && def.label) {
       const uv = mesh.geometry.attributes.uv.array;
       let u0 = Infinity;
@@ -422,9 +529,11 @@ function applyLook() {
       t.offset.set(-u0 / (u1 - u0), -v0 / (v1 - v0));
       m.map = t;
       m.color.set(0xffffff);
+      m.userData.own.insideColor.value.set('#cfcac0');
     } else {
       m.map = null;
       m.color.set(view.uvmap ? '#cfcac0' : colors[def.color]);
+      if (!view.uvmap && design.inside[def.lining]) m.color.copy(design.inside[def.lining]);
     }
     m.needsUpdate = true;
   }
@@ -560,7 +669,6 @@ for (const [k, id] of Object.entries({ body: 'c-body', sleeves: 'c-sleeves', col
 }
 document.getElementById('spin').addEventListener('change', (e) => {
   view.spin = e.target.checked;
-  controls.autoRotate = view.spin;
   requestRender();
 });
 document.getElementById('uvmap').addEventListener('change', (e) => {
@@ -571,9 +679,9 @@ document.getElementById('uvmap').addEventListener('change', (e) => {
 // (tela simulada).
 const modeButtons = [...document.querySelectorAll('.mode button')];
 function setMode(mode) {
-  // La colgada queda más baja (el gancho arriba, la tela estirada por su
-  // peso): la vista se centra un poco más abajo.
-  const dy = (mode === 'body' ? CENTER.y : -0.4) - controls.target.y;
+  // La colgada queda más baja (la barra y el gancho arriba, la tela
+  // estirada por su peso): la vista se centra un poco más abajo.
+  const dy = (mode === 'body' ? CENTER.y : -0.38) - controls.target.y;
   controls.target.y += dy;
   camera.position.y += dy;
   lightTarget.position.y = controls.target.y;
@@ -582,10 +690,10 @@ function setMode(mode) {
   modeButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
   document.querySelector('.hint').textContent =
     mode === 'body'
-      ? 'Arrastrá para girar · rueda o pellizco para acercar'
+      ? 'Arrastrá sobre una camiseta para girarla · rueda o pellizco para acercar'
       : matchMedia('(hover: none)').matches
-        ? 'Tocá la tela para moverla · arrastrá para girar'
-        : 'Pasá el mouse sobre la tela para moverla · arrastrá para girar';
+        ? 'Tocá la tela para moverla · arrastrá para girar cada camiseta'
+        : 'Pasá el mouse sobre la tela para moverla · arrastrá para girar cada camiseta';
   rebuild();
 }
 modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
@@ -604,9 +712,71 @@ function pickCloth(e) {
   if (!hit) return null;
   const rig = hit.object.userData.rig;
   rig.updateMatrixWorld();
-  unturn.copy(rig.quaternion).invert();
+  rig.getWorldQuaternion(unturn).invert();
   return { point: rig.worldToLocal(hit.point.clone()), local: (v) => v.applyQuaternion(unturn) };
 }
+
+// Giro: arrastrar de costado gira sólo la camiseta que está bajo el puntero
+// (o la más cercana), sobre su eje; arriba y abajo inclina la cámara. Al
+// soltar sigue girando un poco y frena.
+const dom = renderer.domElement;
+const spinVel = [0, 0];
+const drag = { id: -1, rig: 0, x: 0, y: 0, t: 0, v: 0 };
+const touches = new Set();
+const sph = new THREE.Spherical();
+const tmpV = new THREE.Vector3();
+function rigAt(e) {
+  const r = dom.getBoundingClientRect();
+  pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const pickable = [...clothMeshes, ...supports.flatMap((sp) => (sp.group.visible ? Object.values(sp.parts) : []))];
+  const hit = raycaster.intersectObjects(pickable, false)[0];
+  if (hit) return rigs.findIndex((rig) => rig.userData.inner === hit.object.userData.rig);
+  let best = 0;
+  let bd = Infinity;
+  rigs.forEach((rig, i) => {
+    const d = Math.abs(rig.getWorldPosition(tmpV).project(camera).x - pointer.x);
+    if (d < bd) [bd, best] = [d, i];
+  });
+  return best;
+}
+function tilt(dy) {
+  const off = tmpV.copy(camera.position).sub(controls.target);
+  sph.setFromVector3(off);
+  sph.phi = Math.min(controls.maxPolarAngle, Math.max(controls.minPolarAngle, sph.phi - dy * 0.006));
+  camera.position.copy(controls.target).add(off.setFromSpherical(sph));
+  camera.lookAt(controls.target);
+}
+dom.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'touch') touches.add(e.pointerId);
+  // Dos dedos: pellizco (lo manejan los controles).
+  if (touches.size > 1 || (e.pointerType === 'mouse' && e.button !== 0)) {
+    drag.id = -1;
+    return;
+  }
+  if (turn) placeRigs(1);
+  turn = null;
+  Object.assign(drag, { id: e.pointerId, rig: rigAt(e), x: e.clientX, y: e.clientY, t: performance.now(), v: 0 });
+  spinVel[drag.rig] = 0;
+});
+dom.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== drag.id) return;
+  const now = performance.now();
+  const a = (e.clientX - drag.x) * SPIN_PX;
+  rigs[drag.rig].rotation.y += a;
+  drag.v = (a / Math.max(now - drag.t, 8)) * 16;
+  tilt(e.clientY - drag.y);
+  Object.assign(drag, { x: e.clientX, y: e.clientY, t: now });
+  requestRender();
+});
+function endDrag(e) {
+  touches.delete(e.pointerId);
+  if (e.pointerId !== drag.id) return;
+  if (performance.now() - drag.t < 80) spinVel[drag.rig] = drag.v;
+  drag.id = -1;
+}
+dom.addEventListener('pointerup', endDrag);
+dom.addEventListener('pointercancel', endDrag);
 let lastMove = null;
 const camRight = new THREE.Vector3();
 const camUp = new THREE.Vector3();
@@ -674,6 +844,7 @@ function clearDesign() {
   for (const t of Object.values(design.textures)) t.dispose();
   design.textures = {};
   design.found = [];
+  design.inside = {};
   designClear.hidden = true;
 }
 async function loadDesign(text, name = 'diseño') {
@@ -683,7 +854,10 @@ async function loadDesign(text, name = 'diseño') {
     clearDesign();
     ensureFlat();
     const aniso = renderer.capabilities.getMaxAnisotropy();
-    for (const [k, c] of Object.entries(canvases)) design.textures[k] = printTexture(k, c, Math.min(8, aniso));
+    for (const [k, c] of Object.entries(canvases)) {
+      design.textures[k] = printTexture(k, c, Math.min(8, aniso));
+      design.inside[k] = dominantColor(c);
+    }
     design.found = found;
     designClear.hidden = !found.length;
     designNote.textContent = found.length ? `Diseño en: ${found.join(', ')}.` : 'El SVG no tiene nada dentro de los recuadros de la plantilla.';
@@ -755,8 +929,11 @@ function goToView(i) {
     y: off.y,
     rigs: rigs.map((rig, j) => [rig.rotation.y, shortest(VIEWS[i].turn[j] - rig.rotation.y)]),
     gap: [Math.abs(rigs[0].position.x), VIEWS[i].gap - Math.abs(rigs[0].position.x)],
+    view: i,
     t0: performance.now(),
   };
+  view.pair = i;
+  spinVel.fill(0);
   viewButtons.forEach((b, j) => b.setAttribute('aria-pressed', String(j === i)));
   requestRender();
 }
@@ -766,6 +943,7 @@ function placeRigs(e) {
     rig.rotation.y = turn.rigs[j][0] + turn.rigs[j][1] * e;
     rig.position.x = (j ? 1 : -1) * gap;
   });
+  syncCurls();
 }
 viewButtons.forEach((b, i) => b.addEventListener('click', () => goToView(i)));
 viewButtons[0].setAttribute('aria-pressed', 'true');
@@ -807,7 +985,19 @@ renderer.setAnimationLoop((now) => {
     if (k >= 1) turn = null;
     needsRender = true;
   }
-  if (controls.update() || controls.autoRotate) needsRender = true;
+  if (controls.update()) needsRender = true;
+  // Inercia del giro y giro solo (cada una sobre su eje).
+  rigs.forEach((rig, j) => {
+    if (drag.id >= 0 && drag.rig === j) return;
+    if (Math.abs(spinVel[j]) > 1e-4) {
+      rig.rotation.y += spinVel[j];
+      spinVel[j] *= 0.92;
+      needsRender = true;
+    } else if (view.spin && !turn) {
+      rig.rotation.y += SPIN_SPEED / 60;
+      needsRender = true;
+    }
+  });
   if (drape && !drape.sleeping) {
     drape.step(1 / 60);
     drape.updateMeshes();
@@ -823,7 +1013,6 @@ applyLights(view.light);
 applyFabric();
 document.getElementById('spin').checked = view.spin;
 document.getElementById('uvmap').checked = view.uvmap;
-controls.autoRotate = view.spin;
 if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
 else rebuild();
 resize();

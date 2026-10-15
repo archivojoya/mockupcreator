@@ -137,17 +137,19 @@ export function girth(M, y) {
 
 // Altura del escote: baja al frente y apenas atrás. Con el exponente la curva
 // llega plana al punto del hombro (sin pico donde se juntan frente y espalda).
-// En V, adelante baja en línea recta (vista de frente) desde cada punto del
-// hombro hasta la punta; sólo el último pedacito junto al hombro se redondea
-// para no hacer pico donde sigue la espalda.
+// En V, adelante la recta (vista de frente) desde cada punto del hombro hasta
+// la punta se mezcla con la curva del cuello redondo: las patas se abomban un
+// poco hacia afuera y la punta queda neta. Junto al hombro se redondea el
+// último pedacito para no hacer pico donde sigue la espalda.
 const VEE_EASE = 0.08; // fracción del ancho que se redondea junto al hombro
+const VEE_ROUND = 0.4; // cuánto de la curva redonda llevan las patas (0 = rectas)
 const neckY = (M, th) => {
   const c = Math.cos(th);
   if (c >= 0 && M.vNeck) {
     const u = 1 - Math.abs(Math.sin(th)); // 0 en el hombro, 1 al medio
     const e = VEE_EASE;
-    const g = u < e ? (u * u) / (2 * e) : u - e / 2;
-    return (-M.dropF * g) / (1 - e / 2);
+    const g = ((u < e ? (u * u) / (2 * e) : u - e / 2) / (1 - e / 2)) * (1 - VEE_ROUND) + c ** 1.6 * VEE_ROUND;
+    return -M.dropF * g;
   }
   return -(c >= 0 ? M.dropF : M.dropB) * Math.abs(c) ** 1.6;
 };

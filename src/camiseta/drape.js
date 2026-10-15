@@ -469,6 +469,12 @@ export class HangingShirt {
       else if (mirror[i] >= 0 && sideX[i] < 0) mpairs.push(i, mirror[i]);
     }
     this.mirrorOf = mirror;
+    // En V, cada lado de la cinta del frente llega hasta el medio (costura en
+    // inglete de la punta) y no pasa al otro: colgada, la V se cierra un poco
+    // y los puntos junto a la punta se cruzarían.
+    const sides = [];
+    if (built.measures.vNeck) band.forEach((id, k) => P[ring[k] * 3 + 2] > 0 && P[ring[k] * 3] && sides.push(id, Math.sign(P[ring[k] * 3])));
+    this.bandSides = Int32Array.from(sides);
     this.mirrorPairs = Int32Array.from(mpairs);
     this.midline = Int32Array.from(mid);
     this.lastPoke = -Infinity;
@@ -594,6 +600,13 @@ export class HangingShirt {
       this.collarLocal[v * 3 + 1] = (ox * F[f + 3] + oy * F[f + 4] + oz * F[f + 5]) / F[f + 9];
       this.collarLocal[v * 3 + 2] = ox * F[f + 6] + oy * F[f + 7] + oz * F[f + 8];
     }
+    // En V, ningún vértice de la tira del frente pasa al otro lado (inglete).
+    this.collarSide = new Int8Array(rest.length / 3);
+    if (built.measures.vNeck)
+      for (let v = 0; v < rest.length / 3; v++) {
+        const e = (v % CSW) % nf;
+        if (collarRing[e][0] === 'front') this.collarSide[v] = Math.sign(seamRest[e * 3]);
+      }
 
     // Broches: pellizcan la costura de cada hombro (en dos puntos), como se
     // cuelga de verdad con un broche de pinza: la costura queda arriba, entre
@@ -1028,6 +1041,7 @@ export class HangingShirt {
         for (let b = 0; b < BAND_PASSES; b++) this.solveLengths(this.bandLinks);
         this.tethers();
         this.holdBand();
+        this.keepSides();
         this.collideSelf();
         this.holdApart(this.volPairs, this.volGap, 0.5);
         this.holdApart(this.layers, this.layerGap, 0.5);
@@ -1245,6 +1259,12 @@ export class HangingShirt {
         const i = id * 3;
         for (let c = 0; c < 3; c++) P[i + c] += (G[i + c] / cnt[id] - P[i + c]) * this.bandStiff;
       }
+  }
+
+  keepSides() {
+    const P = this.p;
+    const S = this.bandSides;
+    for (let c = 0; c < S.length; c += 2) if (P[S[c] * 3] * S[c + 1] < 0) P[S[c] * 3] = 0;
   }
 
   // Restricciones de largo (todas, o sólo las de la lista `only`).
@@ -1759,6 +1779,7 @@ export class HangingShirt {
     const l = this.collarLocal;
     const SW = this.collarSW;
     const nf = this.collarRing.length;
+    const side = this.collarSide;
     const attr = this.geos.collar.attributes.position;
     const a = attr.array;
     for (let v = 0; v < a.length / 3; v++) {
@@ -1767,6 +1788,7 @@ export class HangingShirt {
       const i = v * 3;
       const lu = l[i + 1] * F[f + 9];
       for (let c = 0; c < 3; c++) a[i + c] = seam[e * 3 + c] + F[f + c] * l[i] + F[f + 3 + c] * lu + F[f + 6 + c] * l[i + 2];
+      if (a[i] * side[v] < 0) a[i] = 0;
     }
     attr.needsUpdate = true;
     this.geos.collar.computeVertexNormals();

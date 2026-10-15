@@ -41,8 +41,11 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   derecha la espalda, tan cerca como permite su ancho. **Perfiles** las gira
   para mostrar los dos costados, mirándose; **Frente y espalda** vuelve.
   Arrastrar sobre una camiseta la gira sólo a ella, sobre su eje (arriba y
-  abajo inclina la cámara); la rueda o el pellizco acercan. **Girar solas**
-  gira cada una sobre su eje. El mouse empuja la tela de cualquiera de las dos.
+  abajo inclina la cámara); la rueda o el pellizco acercan, hacia donde está
+  el mouse. **Pecho**, **Espalda alta** y **Cuello** llevan la cámara cerca de
+  la tela (el pecho y el escote de la de la izquierda, la espalda de la de la
+  derecha), aunque estén colgadas o giradas. **Girar solas** gira cada una
+  sobre su eje. El mouse empuja la tela de cualquiera de las dos.
 
 - **Presentación**: con cuerpo (forma fija, como puesta), en percha o con
   broches. La percha es de madera, plana y paralela a la camiseta, con el arco
@@ -90,12 +93,17 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   vuelven a ubicar. Frente y espalda son un molde común: la tela aplanada
   como se corta (hombros rectos, sin la curva del cuerpo), así lo que se
   dibuja recto queda recto en la camiseta, con cuerpo y colgada.
-  - **Escudo y marcas**: dentro del diseño, un grupo (o capa) llamado
-    "escudo" va bordado y uno llamado "marca", "logo" o "sponsor", en vinilo
-    termoadhesivo; desde el panel cada uno puede ir bordado, en vinilo o
-    estampado. El bordado sube 1,1 mm con el borde redondeado, deja una
-    sombra alrededor y tiene puntadas de relleno (se ven al acercar) y hilo
-    con brillo; el vinilo es liso, semimate, con un borde fino y más reflejo.
+  - **Escudo, marca, dorsal y nombre**: dentro del diseño, un grupo (o
+    capa) llamado "escudo" va bordado (o sublimado, desde el panel); los
+    llamados "marca" (o "logo"), "dorsal" (o "número") y "nombre" van
+    sublimados o en vinilo termoadhesivo. El sponsor va con el resto del
+    diseño. El bordado sube 1,1 mm con el borde redondeado, deja una sombra
+    alrededor y tiene puntadas de relleno (se ven al acercar) y hilo con
+    brillo; el vinilo es liso, semimate, con un borde fino y más reflejo.
+  - **Tapacostura**: una tira de 2 cm por dentro de la espalda, sobre la
+    costura del cuello, de hombro a hombro. Un SVG con "tapacostura" en el
+    nombre lleva su diseño (se lee derecho desde adentro); si no, va lisa del
+    color del cuello.
   - **Revés**: por dentro no se ve el estampado; la tela es lisa, del color
     que más hay en el diseño de cada pieza.
   - **Plantilla completa** (opcional) baja un SVG a escala 1:1 (mm) con
@@ -110,9 +118,9 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   `quality`, `weight`, `heather`), `light` (`studio`, `soft`, `contrast` o
   `day`), `mode` (`body`, `hanger` o `clips`), `spin`, `uvmap`, `design`
   (lista de `{ name, text }` con el SVG de cada pieza, o la plantilla
-  completa como texto) o `kinds` (`{ "crest": "emb", "marks": "vin" }`:
-  bordado, vinilo o estampado), arranca con esos valores (y "Restablecer
-  todo" vuelve a ellos).
+  completa como texto) o `kinds` (`{ "crest": "emb", "brand": "vin",
+  "number": "print", "name": "print" }`: bordado, vinilo o estampado),
+  arranca con esos valores (y "Restablecer todo" vuelve a ellos).
 
 Cómo se arma (`src/camiseta/shirt.js`):
 

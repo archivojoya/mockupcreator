@@ -38,6 +38,13 @@
         <section class="group" aria-labelledby="g-forma">
           <h2 id="g-forma">Forma</h2>
           <div class="control">
+            <span class="label" id="garment-label">Prenda</span>
+            <div class="seg" role="group" aria-labelledby="garment-label">
+              <button type="button" data-garment="tee" aria-pressed="true">Manga corta</button>
+              <button type="button" data-garment="long" aria-pressed="false">Manga larga</button>
+            </div>
+          </div>
+          <div class="control">
             <label for="fit">Calce</label>
             <output id="fit-out" for="fit"></output>
             <input id="fit" type="range" min="0" max="1" step="0.01" />
@@ -55,7 +62,7 @@
           <div class="control">
             <label for="sleeveAngle">Apertura de mangas</label>
             <output id="sleeveAngle-out" for="sleeveAngle"></output>
-            <input id="sleeveAngle" type="range" min="30" max="65" step="1" />
+            <input id="sleeveAngle" type="range" min="15" max="65" step="1" />
           </div>
           <div class="control">
             <span class="label" id="neckStyle-label">Cuello</span>

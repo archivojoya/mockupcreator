@@ -57,7 +57,9 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
 const camera = new THREE.PerspectiveCamera(28, 1, 0.02, 20);
 camera.position.copy(CENTER).add(CAM_OFF);
-const PAIR_ASPECT = 1.7; // ancho / alto que ocupan las dos camisetas (con cuerpo, mangas abiertas)
+// Ancho / alto que ocupan las dos camisetas (con cuerpo, mangas abiertas): se
+// ajusta al ancho de la prenda (ver fitPair).
+let pairAspect = 1.7;
 scene.add(camera);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.copy(CENTER);
@@ -618,6 +620,11 @@ function fitPair() {
   }
   VIEWS[0].gap = w + PAIR_MARGIN;
   VIEWS[1].gap = Math.max(0.22, d + 0.06);
+  const aspect = Math.max(1.7, (4 * w + 2 * PAIR_MARGIN + 0.1) / 0.95);
+  if (Math.abs(aspect - pairAspect) > 0.01) {
+    pairAspect = aspect;
+    resize();
+  }
   if (turn) turn.gap[1] = VIEWS[turn.view].gap - turn.gap[0];
   else rigs.forEach((rig, j) => (rig.position.x = (j ? 1 : -1) * VIEWS[view.pair].gap));
   syncCurls();
@@ -732,6 +739,8 @@ const FOUT = {
 };
 // Escote según el tipo de cuello: mínimo, máximo y valor al elegirlo.
 const NECK = { round: [0.055, 0.12, 0.085], v: [0.07, 0.13, 0.09] };
+// Prendas: largo de manga (mínimo, máximo, típico) y apertura típica.
+const GARMENTS = { tee: { sleeve: [0.13, 0.3, 0.21], angle: 40 }, long: { sleeve: [0.5, 0.68, 0.6], angle: 22 } };
 const sliders = {};
 const fabricSliders = {};
 function setFill(input) {
@@ -743,6 +752,12 @@ function syncControls() {
   sliders.neckDepth.min = lo;
   sliders.neckDepth.max = hi;
   params.neckDepth = Math.min(hi, Math.max(lo, params.neckDepth));
+  if (!GARMENTS[params.garment]) params.garment = 'tee';
+  const [slo, shi] = GARMENTS[params.garment].sleeve;
+  sliders.sleeveLength.min = slo;
+  sliders.sleeveLength.max = shi;
+  params.sleeveLength = Math.min(shi, Math.max(slo, params.sleeveLength));
+  garmentButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.garment === params.garment)));
   for (const [k, input] of Object.entries(sliders)) {
     input.value = params[k];
     document.getElementById(`${k}-out`).textContent = OUT[k](params[k]);
@@ -778,6 +793,20 @@ for (const k of Object.keys(OUT)) {
     scheduleRebuild();
   });
 }
+// Prenda: al cambiarla, el largo y la apertura de las mangas vuelven a los
+// típicos de esa prenda y la vista se reencuadra.
+const garmentButtons = [...document.querySelectorAll('[data-garment]')];
+garmentButtons.forEach((b) =>
+  b.addEventListener('click', () => {
+    if (params.garment === b.dataset.garment) return;
+    params.garment = b.dataset.garment;
+    params.sleeveLength = GARMENTS[params.garment].sleeve[2];
+    params.sleeveAngle = GARMENTS[params.garment].angle;
+    syncControls();
+    rebuild();
+    goToView(view.pair);
+  }),
+);
 // Tipo de cuello: al cambiarlo, el escote vuelve al valor típico de ese
 // cuello.
 const neckButtons = [...document.querySelectorAll('[data-neck]')];
@@ -1346,7 +1375,7 @@ function resize() {
   camera.aspect = w / h;
   // Si la pantalla es más angosta que el par de camisetas, se abre el
   // ángulo para que entren las dos.
-  camera.fov = w / h < PAIR_ASPECT ? 28 * (PAIR_ASPECT / Math.max(w / h, 0.45)) ** 0.8 : 28;
+  camera.fov = w / h < pairAspect ? 28 * (pairAspect / Math.max(w / h, 0.45)) ** 0.8 : 28;
   camera.updateProjectionMatrix();
   requestRender();
 }

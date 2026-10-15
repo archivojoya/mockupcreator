@@ -12,13 +12,13 @@ const TOP = 110; // lugar para el título y las instrucciones
 export const PIECES = [
   { key: 'front', id: 'frente', label: 'FRENTE', anchor: 'centro del escote', x: MARGIN, y: TOP, w: 760, h: 1080, ax: 380, ay: 230 },
   { key: 'back', id: 'espalda', label: 'ESPALDA', anchor: 'centro del escote', x: 2 * MARGIN + 760, y: TOP, w: 760, h: 1080, ax: 380, ay: 230 },
-  { key: 'sleeveR', id: 'manga-derecha', label: 'MANGA DERECHA', anchor: 'punta del hombro', x: MARGIN, y: TOP + 1080 + 60, w: 580, h: 320, ax: 290, ay: 20 },
-  { key: 'sleeveL', id: 'manga-izquierda', label: 'MANGA IZQUIERDA', anchor: 'punta del hombro', x: 2 * MARGIN + 760, y: TOP + 1080 + 60, w: 580, h: 320, ax: 290, ay: 20 },
-  { key: 'cuffR', id: 'puno-derecho', label: 'PUÑO DERECHO', anchor: 'centro de arriba', x: MARGIN, y: TOP + 1460 + 60, w: 500, h: 50, ax: 250, ay: 10 },
-  { key: 'cuffL', id: 'puno-izquierdo', label: 'PUÑO IZQUIERDO', anchor: 'centro de arriba', x: 2 * MARGIN + 760, y: TOP + 1460 + 60, w: 500, h: 50, ax: 250, ay: 10 },
-  { key: 'collar', id: 'cuello', label: 'CUELLO', anchor: 'centro de atrás, en la costura', x: MARGIN, y: TOP + 1570 + 80, w: 1240, h: 75, ax: 620, ay: 65 },
+  { key: 'sleeveR', id: 'manga-derecha', label: 'MANGA DERECHA', anchor: 'punta del hombro', x: MARGIN, y: TOP + 1140, w: 600, h: 720, ax: 300, ay: 20 },
+  { key: 'sleeveL', id: 'manga-izquierda', label: 'MANGA IZQUIERDA', anchor: 'punta del hombro', x: 2 * MARGIN + 760, y: TOP + 1140, w: 600, h: 720, ax: 300, ay: 20 },
+  { key: 'cuffR', id: 'puno-derecho', label: 'PUÑO DERECHO', anchor: 'centro de arriba', x: MARGIN, y: TOP + 1920, w: 500, h: 80, ax: 250, ay: 10 },
+  { key: 'cuffL', id: 'puno-izquierdo', label: 'PUÑO IZQUIERDO', anchor: 'centro de arriba', x: 2 * MARGIN + 760, y: TOP + 1920, w: 500, h: 80, ax: 250, ay: 10 },
+  { key: 'collar', id: 'cuello', label: 'CUELLO', anchor: 'centro de atrás, en la costura', x: MARGIN, y: TOP + 2080, w: 1240, h: 75, ax: 620, ay: 65 },
 ];
-export const SHEET = { w: 3 * MARGIN + 2 * 760, h: TOP + 1570 + 80 + 75 + 60 };
+export const SHEET = { w: 3 * MARGIN + 2 * 760, h: TOP + 2080 + 75 + 60 };
 const PX_PER_MM = 2.5;
 const MAX_PX = 4096;
 

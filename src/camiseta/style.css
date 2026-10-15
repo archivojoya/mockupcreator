@@ -148,7 +148,6 @@ body {
   color: var(--muted);
   font-size: 14px;
 }
-.mode,
 [hidden] {
   display: none !important;
 }
@@ -157,6 +156,7 @@ body {
   grid-auto-flow: row;
   grid-template-columns: 1fr 1fr;
 }
+.mode,
 .seg {
   display: grid;
   grid-auto-flow: column;

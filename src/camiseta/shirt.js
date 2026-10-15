@@ -84,7 +84,11 @@ export function measures(p) {
   const M = {
     L,
     fit: f,
-    neck: { a: 0.088, b: 0.08, c: -0.014 }, // contorno del cuello en el hombro
+    // Contorno del cuello en el hombro: medio ancho, fondo hacia adelante y
+    // hacia atrás desde los hombros (atrás es casi plano, como un escote real:
+    // colgada, si no, la espalda del cuello cuelga en U detrás de la percha),
+    // y centro.
+    neck: { a: 0.088, b: 0.08, bB: 0.035, c: -0.014 },
     dropF: p.neckDepth,
     dropB: 0.014,
     vNeck: p.neckStyle === 'v',
@@ -181,7 +185,7 @@ function torsoPoint(M, th, t, out) {
   if (w > 0) {
     x = lerp(x, M.neck.a * sn, w);
     yy = lerp(y, yn, w);
-    z = lerp(z, M.neck.c + M.neck.b * cs, w);
+    z = lerp(z, M.neck.c + (cs >= 0 ? M.neck.b : M.neck.bB) * cs, w);
     // En V el escote baja por el pecho: ahí la tela sigue el pecho y no se
     // hunde hacia el cuello (el contorno del cuello queda más atrás).
     if (M.vNeck && cs > 0) z = Math.max(z, chestZ(M, x, yy));

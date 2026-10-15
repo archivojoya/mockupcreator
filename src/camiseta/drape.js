@@ -32,9 +32,10 @@ const SLACK = 1.01; // lo que se puede estirar la tela con su peso
 const VOLUME_TOP = 0.3;
 // Con broches nada sostiene el cuello atrás (entre los broches) ni el
 // hombro de afuera del broche: la tira guarda algo de su forma puesta (si
-// no, la espalda del cuello cae y se embolsa), arriba se guarda menos
-// volumen y la copa de la manga cede más.
-const CLIPS_BAND = 0.3;
+// no, la espalda del cuello se adelanta y se marca una canaleta en la
+// espalda; con 0,3 un punto junto al cuello no termina de quedarse quieto),
+// arriba se guarda menos volumen y la copa de la manga cede más.
+const CLIPS_BAND = 0.2;
 const CLIPS_VOLUME_TOP = 0.1;
 const CLIPS_CAP = 0.15;
 const VOLUME_HEM = 0.06;
@@ -118,10 +119,10 @@ export function makeHanger(M) {
 
   // Malla: anillos con la sección a lo largo del arco, y en cada punta unos
   // anillos más que se achican en alto (punta redonda vista de frente). La
-  // madera que se ve termina (con su punta) debajo de la tira, en la costura
-  // del cuello: más afuera la tapa siempre la tela del hombro, pero con la
-  // tira acostada, como en la V, la punta asomaría sobre el hombro.
-  const xVis = Math.min(xEnd, M.neck.a - 0.02);
+  // madera que se ve termina (con su punta) en el borde de adentro de la
+  // tira: más afuera la tapa la tela del hombro, pero con la tira acostada,
+  // como en la V, la madera taparía la tira en las esquinas de los hombros.
+  const xVis = Math.min(xEnd, M.neck.a - 0.032);
   const K = 4; // tramos por borde redondeado
   const R = 4 * (K + 1);
   const pos = [];

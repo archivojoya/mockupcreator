@@ -24,6 +24,8 @@ const PARTS = {
   collar: { color: 'collar', label: 'CUELLO', rib: true },
 };
 const CENTER = new THREE.Vector3(0, -0.36, 0);
+const HANG_Y = -0.38; // centro de la vista colgada
+const CAM_OFF = new THREE.Vector3(0, 0.08, 2.15); // cámara respecto del centro, de entrada
 // Dos camisetas lado a lado (la misma, simulada una vez y dibujada dos
 // veces): de entrada una muestra el frente y la otra la espalda; en
 // Perfiles, cada una un costado, mirándose (de costado ocupan menos: se
@@ -53,15 +55,17 @@ const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-const camera = new THREE.PerspectiveCamera(28, 1, 0.05, 20);
-camera.position.set(0, -0.28, 2.15);
+const camera = new THREE.PerspectiveCamera(28, 1, 0.02, 20);
+camera.position.copy(CENTER).add(CAM_OFF);
 const PAIR_ASPECT = 1.7; // ancho / alto que ocupan las dos camisetas (con cuerpo, mangas abiertas)
 scene.add(camera);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.copy(CENTER);
 controls.enableDamping = true;
 controls.enablePan = false;
-controls.minDistance = 0.8;
+controls.minDistance = 0.22;
+// La rueda acerca hacia donde está el mouse (si no, hacia el medio de las dos).
+controls.zoomToCursor = true;
 controls.maxDistance = 3.4;
 controls.minPolarAngle = 0.35;
 controls.maxPolarAngle = 2.35;
@@ -756,7 +760,7 @@ const modeButtons = [...document.querySelectorAll('.mode button')];
 function setMode(mode) {
   // La colgada queda más baja (la barra y el gancho arriba, la tela
   // estirada por su peso): la vista se centra un poco más abajo.
-  const dy = (mode === 'body' ? CENTER.y : -0.38) - controls.target.y;
+  const dy = (mode === 'body' ? CENTER.y : HANG_Y) - controls.target.y;
   controls.target.y += dy;
   camera.position.y += dy;
   lightTarget.position.y = controls.target.y;
@@ -831,6 +835,7 @@ dom.addEventListener('pointerdown', (e) => {
   }
   if (turn) placeRigs(1);
   turn = null;
+  fly = null;
   Object.assign(drag, { id: e.pointerId, rig: rigAt(e), x: e.clientX, y: e.clientY, t: performance.now(), v: 0 });
   spinVel[drag.rig] = 0;
 });
@@ -1129,17 +1134,21 @@ function updateSpec() {
 
 // Vistas: frente y espalda, o los dos perfiles. Giran las camisetas (por el
 // camino más corto) y la cámara vuelve al frente.
-const viewButtons = [...document.querySelectorAll('.views button')];
+const viewButtons = [...document.querySelectorAll('.views [data-view]')];
+const zoomButtons = [...document.querySelectorAll('[data-zoom]')];
 let turn = null;
+// Vuelo de la cámara (vistas y acercamientos).
+let fly = null;
+function flyTo(target, position) {
+  fly = { from: [controls.target.clone(), camera.position.clone()], to: [target, position], t0: performance.now() };
+  requestRender();
+}
 const shortest = (d) => Math.atan2(Math.sin(d), Math.cos(d));
 function goToView(i) {
-  const off = camera.position.clone().sub(controls.target);
-  const from = Math.atan2(off.x, off.z);
+  const c = new THREE.Vector3(0, view.mode === 'body' ? CENTER.y : HANG_Y, 0);
+  flyTo(c, c.clone().add(CAM_OFF));
+  zoomButtons.forEach((b) => b.setAttribute('aria-pressed', 'false'));
   turn = {
-    from,
-    d: shortest(-from),
-    r: Math.hypot(off.x, off.z),
-    y: off.y,
     rigs: rigs.map((rig, j) => [rig.rotation.y, shortest(VIEWS[i].turn[j] - rig.rotation.y)]),
     gap: [Math.abs(rigs[0].position.x), VIEWS[i].gap - Math.abs(rigs[0].position.x)],
     view: i,
@@ -1159,11 +1168,39 @@ function placeRigs(e) {
   syncCurls();
 }
 viewButtons.forEach((b, i) => b.addEventListener('click', () => goToView(i)));
+// Acercamientos: al pecho de la camiseta de la izquierda y a la espalda alta
+// de la de la derecha, sobre la tela tal como está (con cuerpo o colgada, y
+// aunque estén giradas): el punto del medio de la pieza que queda unos
+// centímetros bajo el escote, mirado de frente a la tela.
+const ZOOMS = { chest: { rig: 0, key: 'front', below: 0.13, dist: 0.56 }, back: { rig: 1, key: 'back', below: 0.1, dist: 0.52 } };
+function zoomTo(name) {
+  const z = ZOOMS[name];
+  const mesh = (z.rig ? twins : meshes)[z.key];
+  const g = mesh.geometry;
+  const W = built.layout.cols + 1;
+  const col = built.layout.cols / 2;
+  const pos = g.attributes.position.array;
+  const nor = g.attributes.normal.array;
+  const top = built.layout.rows;
+  const yNeck = pos[(top * W + col) * 3 + 1];
+  let row = top;
+  while (row > 0 && pos[(row * W + col) * 3 + 1] > yNeck - z.below) row--;
+  const v = row * W + col;
+  mesh.updateWorldMatrix(true, false);
+  const p = new THREE.Vector3().fromArray(pos, v * 3).applyMatrix4(mesh.matrixWorld);
+  const n = new THREE.Vector3().fromArray(nor, v * 3).transformDirection(mesh.matrixWorld);
+  n.y = Math.max(n.y, 0) + 0.12;
+  n.normalize();
+  flyTo(p, p.clone().addScaledVector(n, z.dist));
+  zoomButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.zoom === name)));
+}
+zoomButtons.forEach((b) => b.addEventListener('click', () => zoomTo(b.dataset.zoom)));
 viewButtons[0].setAttribute('aria-pressed', 'true');
-// Si se arrastra durante el giro, las camisetas terminan de girar de golpe.
+// Si se arrastra o se acerca durante un giro o un vuelo, terminan de golpe.
 controls.addEventListener('start', () => {
   if (turn) placeRigs(1);
   turn = null;
+  fly = null;
 });
 
 // ---------- dibujo ----------
@@ -1189,13 +1226,19 @@ new ResizeObserver(resize).observe(stage);
 
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 renderer.setAnimationLoop((now) => {
+  const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2);
   if (turn) {
     const k = reduceMotion.matches ? 1 : Math.min(1, (now - turn.t0) / 650);
-    const e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
-    const a = turn.from + turn.d * e;
-    camera.position.set(controls.target.x + Math.sin(a) * turn.r, controls.target.y + turn.y, controls.target.z + Math.cos(a) * turn.r);
-    placeRigs(e);
+    placeRigs(ease(k));
     if (k >= 1) turn = null;
+    needsRender = true;
+  }
+  if (fly) {
+    const k = reduceMotion.matches ? 1 : Math.min(1, (now - fly.t0) / 700);
+    const e = ease(k);
+    controls.target.lerpVectors(fly.from[0], fly.to[0], e);
+    camera.position.lerpVectors(fly.from[1], fly.to[1], e);
+    if (k >= 1) fly = null;
     needsRender = true;
   }
   if (controls.update()) needsRender = true;
@@ -1233,4 +1276,4 @@ for (const k of KIND_NAMES) if (['emb', 'vin', 'print'].includes(CONFIG.kinds?.[
 if (typeof CONFIG.design === 'string' && CONFIG.design.includes('<svg')) loadFiles([{ name: 'diseño', text: CONFIG.design }]);
 else if (Array.isArray(CONFIG.design)) loadFiles(CONFIG.design.filter((d) => typeof d?.text === 'string'));
 
-window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, setMode, loadDesign, loadFiles, setKinds: (k) => (Object.assign(design.kinds, k), compose()), templateSVG: () => (ensureFlat(), templateSVG(built, params, colors)), design, drape: () => drape };
+window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, zoomTo, setMode, loadDesign, loadFiles, setKinds: (k) => (Object.assign(design.kinds, k), compose()), templateSVG: () => (ensureFlat(), templateSVG(built, params, colors)), design, drape: () => drape };

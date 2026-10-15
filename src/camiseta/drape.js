@@ -31,9 +31,9 @@ const SLACK = 1.01; // lo que se puede estirar la tela con su peso
 // tela colgada: algo más arriba, casi nada en el ruedo.
 const VOLUME_TOP = 0.3;
 // Con broches nada sostiene el cuello atrás (entre los broches) ni el
-// hombro de afuera del broche: la tira tiene menos cuerpo, arriba se guarda
-// menos volumen y la copa de la manga cede más. Si no, el cuello y los
-// hombros conservan la forma puesta y se embolsan.
+// hombro de afuera del broche: la tira guarda algo de su forma puesta (si
+// no, la espalda del cuello cae y se embolsa), arriba se guarda menos
+// volumen y la copa de la manga cede más.
 const CLIPS_BAND = 0.3;
 const CLIPS_VOLUME_TOP = 0.1;
 const CLIPS_CAP = 0.15;
@@ -62,12 +62,14 @@ const VMAX = 0.004; // velocidad máxima por subpaso (≈ 1 m/s)
 // Tira del cuello: fila del perfil de la tira que hace de borde de arriba de
 // la cinta (la cara de afuera, justo antes del doblez).
 const BAND_ROW = 2;
-// Cuerpo de la tira: cada tramo de la cinta (BAND_SPAN puntos a cada lado)
-// tiende a su forma puesta, girado como haga falta. Así se dobla de a poco a
-// lo largo del cuello pero no hace quiebres, y sostiene el escote sin fijar
-// la forma de toda la vuelta.
+// Cuerpo de la tira (sólo con broches, CLIPS_BAND): cada tramo de la cinta
+// (BAND_SPAN puntos a cada lado) tiende a su forma puesta, girado como haga
+// falta. En la percha no: recordaría la vuelta alrededor del cuello y
+// colgada armaría un aro que empuja el frente hacia adelante (arrugas en los
+// hombros); ahí la cinta sólo no se estira ni se da vuelta sobre la costura.
 const BAND_SPAN = 6;
-const BAND_STIFF = 1;
+// La costura de la tira es más firme que la tela: no la deja darse vuelta.
+const SEAM_K = 0.5;
 // La tira acanalada es más firme que la tela: sus uniones se resuelven
 // estas veces más en cada iteración (casi no se estira con el peso del pecho).
 const BAND_PASSES = 4;
@@ -116,9 +118,10 @@ export function makeHanger(M) {
 
   // Malla: anillos con la sección a lo largo del arco, y en cada punta unos
   // anillos más que se achican en alto (punta redonda vista de frente). La
-  // madera que se ve llega hasta poco después del cuello: más afuera la tapa
-  // siempre la tela del hombro (que cae y la dejaría asomar en las puntas).
-  const xVis = Math.min(xEnd, M.neck.a + 0.035);
+  // madera que se ve termina (con su punta) debajo de la tira, en la costura
+  // del cuello: más afuera la tapa siempre la tela del hombro, pero con la
+  // tira acostada, como en la V, la punta asomaría sobre el hombro.
+  const xVis = Math.min(xEnd, M.neck.a - 0.02);
   const K = 4; // tramos por borde redondeado
   const R = 4 * (K + 1);
   const pos = [];
@@ -357,7 +360,7 @@ export class HangingShirt {
     this.pushScale = 1 - 0.7 * heavy;
     const clips = support.kind === 'clips';
     const volTop = (clips ? CLIPS_VOLUME_TOP : VOLUME_TOP) + 0.16 * heavy;
-    this.bandStiff = clips ? CLIPS_BAND : BAND_STIFF;
+    this.bandStiff = clips ? CLIPS_BAND : 0;
     this.capK = clips ? CLIPS_CAP : 0.35;
     this.geos = built.geos;
     this.hanger = support.kind === 'hanger' ? support : null;
@@ -529,10 +532,11 @@ export class HangingShirt {
       }
     // Tira del cuello: escote y borde de arriba unidos por travesaños y
     // diagonales (una cinta de triángulos), más uniones que saltan un punto
-    // a lo largo de los dos bordes. La cinta gira libre sobre los
-    // travesaños (se dobla hacia adentro o afuera, se achata), pero no se
-    // estira ni se dobla de canto: el escote conserva su curva sin dar forma
-    // al resto de la camiseta.
+    // a lo largo de los dos bordes y otras que cruzan la costura (del borde
+    // de arriba a la tela justo debajo del escote). La cinta gira libre sobre
+    // los travesaños (se achata al colgar), pero no se estira, no se dobla de
+    // canto y no se da vuelta sobre la costura: el escote conserva su curva
+    // sin dar forma al resto de la camiseta.
     const K = ring.length;
     for (let k = 0; k < K; k++) {
       const k1 = (k + 1) % K;
@@ -544,6 +548,8 @@ export class HangingShirt {
       link(ring[k], ring[k1], 5, true);
       link(band[k], band[k2], 6);
       link(ring[k], ring[k2], 6, true);
+      for (const key of ['front', 'back'])
+        for (let j = 0; j <= C; j++) if (map[key][NC * WC + j] === ring[k]) link(band[k], map[key][(NC - 1) * WC + j], 7);
     }
     const list = [...pairs.values()];
     // Tramos de la cinta para su cuerpo (ver holdBand): puntos del escote y
@@ -566,7 +572,7 @@ export class HangingShirt {
     this.cb = Int32Array.from(list, (c) => c[1]);
     this.rest = Float32Array.from(list, (c) => c[2]);
     this.kind = Uint8Array.from(list, (c) => c[3]);
-    this.bandLinks = Int32Array.from(list.flatMap((c, i) => (c[3] === 5 || c[3] === 6 ? [i] : [])));
+    this.bandLinks = Int32Array.from(list.flatMap((c, i) => (c[3] >= 5 ? [i] : [])));
 
     // Dibujo de la tira: cada vértice guarda su posición en el marco local
     // (a lo largo del escote, subida de la cinta, normal) de su punto del
@@ -1040,7 +1046,7 @@ export class HangingShirt {
         this.solveLengths();
         for (let b = 0; b < BAND_PASSES; b++) this.solveLengths(this.bandLinks);
         this.tethers();
-        this.holdBand();
+        if (this.bandStiff) this.holdBand();
         this.keepSides();
         this.collideSelf();
         this.holdApart(this.volPairs, this.volGap, 0.5);
@@ -1288,7 +1294,7 @@ export class HangingShirt {
       // Estirar cuesta mucho; comprimir, poco (la tela se pliega). La
       // flexión es blanda.
       const kd = kind[c];
-      const k = kd === 2 ? (err > 0 ? bendS : bendC) : kd === 4 ? capK : kd === 6 ? (err > 0 ? 0.6 : 0.45) : err > 0 ? 1 : kd === 1 ? 0.5 : kd === 5 ? 0.9 : 0.7;
+      const k = kd === 7 ? SEAM_K : kd === 2 ? (err > 0 ? bendS : bendC) : kd === 4 ? capK : kd === 6 ? (err > 0 ? 0.6 : 0.45) : err > 0 ? 1 : kd === 1 ? 0.5 : kd === 5 ? 0.9 : 0.7;
       const wa = W[ca[c]];
       const wb = W[cb[c]];
       const ws = wa + wb;

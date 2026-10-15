@@ -104,13 +104,16 @@ puntos que pellizcan quedan fijos: la costura y, a cada lado, el frente y la
 espalda; así la espalda no se escapa hacia abajo y no queda un hueco entre el
 cuello y los hombros). Unas ataduras de largo máximo
 hacia los dos hombros evitan que se estire con su peso. La tira del cuello es una
-cinta simulada, cosida al escote: se dobla y se gira libre, pero no se estira
-(sus uniones se resuelven varias veces por paso) y cada tramo de unos 10 cm
-tiende a su forma puesta, girado como haga falta. Así el escote cae en U, sin
-quebrarse en V, y el contorno y el pecho caen libres. Con broches nada sostiene
-el cuello atrás (entre los broches) ni el hombro de afuera del broche: ahí la
-tira tiene menos cuerpo, se guarda menos volumen arriba y la copa de la manga
-cede más, así el cuello y los hombros no se embolsan. Frente, espalda y mangas guardan algo del volumen que
+cinta simulada, cosida al escote: no se estira (sus uniones se resuelven varias
+veces por paso), no se dobla de canto y no se da vuelta sobre la costura, pero
+se achata libre: en la percha la abertura queda como un óvalo finito, el frente
+cae en U delante de la barra y la espalda apoya contra ella, como una camiseta
+colgada de verdad (si la tira recordara la vuelta alrededor del cuello, armaría
+un aro que empuja el frente y arruga los hombros). Con broches nada sostiene el
+cuello atrás (entre los broches) ni el hombro de afuera del broche: ahí cada
+tramo de unos 10 cm de la tira guarda algo de su forma puesta (si no, la
+espalda del cuello cae y se embolsa), se guarda menos volumen arriba y la copa
+de la manga cede más. Frente, espalda y mangas guardan algo del volumen que
 tenían puestas (más arriba, casi nada en el ruedo), y la copa de la manga
 conserva algo de cuerpo.
 

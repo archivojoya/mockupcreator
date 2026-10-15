@@ -191,7 +191,7 @@ export async function readDesign(text) {
   }
   // Lo estampado, el escudo y las marcas, cada uno en su lienzo.
   const variants = Object.entries(splitKinds(new XMLSerializer().serializeToString(doc))).filter(([, t]) => t);
-  const out = { canvases: {}, crest: {}, marks: {}, found: [] };
+  const out = { canvases: {}, found: [], ...Object.fromEntries(KINDS.map(([kind]) => [kind, {}])) };
   for (const pc of PIECES) {
     const k = Math.min(PX_PER_MM, MAX_PX / Math.max(pc.w, pc.h));
     const pw = Math.round(pc.w * k);
@@ -453,11 +453,14 @@ export async function placePiece(key, piece, size) {
 // ---------- escudo y marcas ----------
 
 // Dentro de un diseño, los grupos (o capas) llamados "escudo" van aparte
-// (bordados, de entrada) y los llamados "marca", "logo" o "sponsor" también
-// (en vinilo): cada uno se puede bordar, poner en vinilo o estampar.
-const KINDS = [
+// (bordados, o sublimados), y los llamados "marca"/"logo", "dorsal"/"número"
+// y "nombre" también (sublimados, o en vinilo). El sponsor va con el resto
+// del diseño.
+export const KINDS = [
   ['crest', /escudo|crest|badge|emblema|insignia|bordado/i],
-  ['marks', /marca|logo|sponsor|brand|patrocin|vinilo/i],
+  ['brand', /marca|logo|brand/i],
+  ['number', /dorsal|n[uú]mero|number/i],
+  ['name', /nombre|(^|[^a-z])name/i],
 ];
 export function kindOf(el) {
   const n = `${el.getAttribute('id') || ''} ${el.getAttribute('data-name') || ''}`.normalize('NFC');
@@ -465,8 +468,8 @@ export function kindOf(el) {
   return null;
 }
 const KEEP_DEFS = /^(defs|style|lineargradient|radialgradient|clippath|mask|pattern|symbol|filter|title)$/i;
-// Un SVG en tres: `print` (sin escudo ni marcas), `crest` y `marks` (sólo
-// eso, null si no hay).
+// Un SVG en partes: `print` (sin escudo ni marcas) y una por cada tipo de
+// KINDS (sólo eso, null si no hay).
 export function splitKinds(text) {
   const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
   const root = doc.documentElement;
@@ -475,7 +478,7 @@ export function splitKinds(text) {
     for (let p = el.parentElement; p && p !== root; p = p.parentElement) if (kindOf(p)) return false;
     return true;
   });
-  if (!tagged.length) return { print: text, crest: null, marks: null };
+  if (!tagged.length) return { print: text };
   const ser = new XMLSerializer();
   const only = (kind) => {
     const mine = tagged.filter((el) => kindOf(el) === kind);
@@ -500,10 +503,9 @@ export function splitKinds(text) {
     prune(d.documentElement);
     return ser.serializeToString(d);
   };
-  const crest = only('crest');
-  const marks = only('marks');
+  const parts = Object.fromEntries(KINDS.map(([kind]) => [kind, only(kind)]));
   for (const el of tagged) el.remove();
-  return { print: ser.serializeToString(doc), crest, marks };
+  return { print: ser.serializeToString(doc), ...parts };
 }
 
 // Relieve de las aplicaciones de una pieza, a partir de lo bordado (`emb`)

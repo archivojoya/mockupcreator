@@ -99,7 +99,7 @@
 
         <section class="group" aria-labelledby="g-diseno">
           <h2 id="g-diseno">Diseño</h2>
-          <p class="note">Un SVG por pieza con sólo su diseño, a la medida de abajo; el nombre del archivo (o de la capa) dice cuál es: frente, espalda, manga, puño o cuello. La página lo ubica centrado y arriba en la pieza. Los grupos llamados "escudo" van bordados y los llamados "marca", "logo" o "sponsor", en vinilo.</p>
+          <p class="note">Un SVG por pieza con sólo su diseño, a la medida de abajo; el nombre del archivo (o de la capa) dice cuál es: frente, espalda, manga, puño o cuello. La página lo ubica centrado y arriba en la pieza. Los grupos llamados "escudo" van bordados; "marca" (o "logo"), "dorsal" y "nombre" pueden ir en vinilo.</p>
           <details class="sizes" id="design-sizes">
             <summary>Medidas para diseñar</summary>
             <dl></dl>
@@ -116,16 +116,28 @@
               <span class="label" id="crest-label">Escudo</span>
               <div class="seg" role="group" aria-labelledby="crest-label">
                 <button type="button" data-as="emb" aria-pressed="true">Bordado</button>
-                <button type="button" data-as="vin" aria-pressed="false">Vinilo</button>
-                <button type="button" data-as="print" aria-pressed="false">Estampado</button>
+                <button type="button" data-as="print" aria-pressed="false">Sublimado</button>
               </div>
             </div>
-            <div class="control" data-kind="marks" hidden>
-              <span class="label" id="marks-label">Marcas</span>
-              <div class="seg" role="group" aria-labelledby="marks-label">
-                <button type="button" data-as="vin" aria-pressed="true">Vinilo</button>
-                <button type="button" data-as="emb" aria-pressed="false">Bordado</button>
-                <button type="button" data-as="print" aria-pressed="false">Estampado</button>
+            <div class="control" data-kind="brand" hidden>
+              <span class="label" id="brand-label">Marca</span>
+              <div class="seg" role="group" aria-labelledby="brand-label">
+                <button type="button" data-as="print" aria-pressed="true">Sublimado</button>
+                <button type="button" data-as="vin" aria-pressed="false">Vinilo</button>
+              </div>
+            </div>
+            <div class="control" data-kind="number" hidden>
+              <span class="label" id="number-label">Dorsal</span>
+              <div class="seg" role="group" aria-labelledby="number-label">
+                <button type="button" data-as="print" aria-pressed="true">Sublimado</button>
+                <button type="button" data-as="vin" aria-pressed="false">Vinilo</button>
+              </div>
+            </div>
+            <div class="control" data-kind="name" hidden>
+              <span class="label" id="name-label">Nombre</span>
+              <div class="seg" role="group" aria-labelledby="name-label">
+                <button type="button" data-as="print" aria-pressed="true">Sublimado</button>
+                <button type="button" data-as="vin" aria-pressed="false">Vinilo</button>
               </div>
             </div>
           </div>

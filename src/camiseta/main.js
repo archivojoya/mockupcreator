@@ -5,7 +5,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS, flattenPrint } from './shirt.js';
 import { makeHanger, makeClipHanger, HangingShirt, RAIL_R } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
-import { templateSVG, readDesign, printTexture, readPieces, isolateLayer, placePiece, pieceSizes, buildApplique } from './print.js';
+import { templateSVG, readDesign, printTexture, readPieces, isolateLayer, placePiece, pieceSizes, buildApplique, KINDS } from './print.js';
 import './style.css';
 
 const COLORS = { body: '#c81e3a', sleeves: '#c81e3a', collar: '#17191d', cuffs: '#17191d' };
@@ -347,7 +347,8 @@ function applyFabric() {
 // { "params": {...}, "colors": {...}, "fabric": {...}, "light": "studio",
 //   "mode": "hanger", "spin": false, "uvmap": false,
 //   "design": [{ "name": "frente.svg", "text": "<svg…>" }, …] (o la plantilla
-//   completa como texto), "kinds": { "crest": "emb", "marks": "vin" } }
+//   completa como texto), "kinds": { "crest": "emb", "brand": "vin",
+//   "number": "print", "name": "print" } }
 const CONFIG = (() => {
   try {
     return JSON.parse(document.getElementById('camiseta-config')?.textContent || '{}');
@@ -406,9 +407,11 @@ const uvMaps = {};
 // Diseño cargado: una textura de estampado por pieza.
 // `mode`: 'template' (la plantilla completa) o 'pieces' (un diseño por
 // pieza, ubicado por la página).
-// `parts`: por pieza, los lienzos de lo estampado, el escudo y las marcas;
-// `kinds`: cómo va el escudo y cómo las marcas (bordado, vinilo o estampado).
-const design = { textures: {}, found: [], inside: {}, pieces: {}, mode: null, parts: {}, app: {}, kinds: { crest: 'emb', marks: 'vin' } };
+// `parts`: por pieza, los lienzos de lo estampado y de cada aplicación
+// (escudo, marca, dorsal, nombre); `kinds`: cómo va cada una (bordado,
+// vinilo o estampado).
+const KIND_NAMES = KINDS.map(([kind]) => kind);
+const design = { textures: {}, found: [], inside: {}, pieces: {}, mode: null, parts: {}, app: {}, kinds: { crest: 'emb', brand: 'print', number: 'print', name: 'print' } };
 // Color que más hay en el diseño de una pieza (lo transparente cuenta como
 // el color de la pieza: null). Es el color del revés de la tela.
 function dominantColor(canvas, rect = [0, 0, canvas.width, canvas.height]) {
@@ -946,11 +949,11 @@ function compose() {
   for (const a of Object.values(design.app)) a.color.dispose(), a.shape.dispose();
   design.textures = {};
   design.app = {};
-  const has = { crest: false, marks: false };
+  const has = {};
   for (const [k, p] of Object.entries(design.parts)) {
     let print = p.print;
     const by = { emb: [], vin: [], print: [] };
-    for (const kind of ['crest', 'marks'])
+    for (const kind of KIND_NAMES)
       if (p[kind]) {
         has[kind] = true;
         by[design.kinds[kind]].push(p[kind]);
@@ -976,11 +979,11 @@ function compose() {
     const app = buildApplique(k, merge(by.emb), merge(by.vin), p.k);
     if (app) design.app[k] = app;
   }
-  for (const kind of ['crest', 'marks']) {
+  for (const kind of KIND_NAMES) {
     kindsBox.querySelector(`[data-kind="${kind}"]`).hidden = !has[kind];
     kindsBox.querySelectorAll(`[data-kind="${kind}"] button`).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.as === design.kinds[kind])));
   }
-  kindsBox.hidden = !has.crest && !has.marks;
+  kindsBox.hidden = !Object.keys(has).length;
   applyLook();
 }
 // Medidas de cada pieza para diseñar (para la camiseta tal como está).
@@ -1065,7 +1068,7 @@ async function loadDesign(text, name = 'diseño') {
     clearDesign();
     ensureFlat();
     design.mode = 'template';
-    for (const [k, c] of Object.entries(r.canvases)) design.parts[k] = { print: c, crest: r.crest[k], marks: r.marks[k], k: r.k[k] };
+    for (const [k, c] of Object.entries(r.canvases)) design.parts[k] = { print: c, k: r.k[k], ...Object.fromEntries(KIND_NAMES.map((kind) => [kind, r[kind][k]])) };
     compose();
     design.found = found;
     designClear.hidden = !found.length;
@@ -1226,7 +1229,7 @@ document.getElementById('uvmap').checked = view.uvmap;
 if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
 else rebuild();
 resize();
-for (const k of ['crest', 'marks']) if (['emb', 'vin', 'print'].includes(CONFIG.kinds?.[k])) design.kinds[k] = CONFIG.kinds[k];
+for (const k of KIND_NAMES) if (['emb', 'vin', 'print'].includes(CONFIG.kinds?.[k])) design.kinds[k] = CONFIG.kinds[k];
 if (typeof CONFIG.design === 'string' && CONFIG.design.includes('<svg')) loadFiles([{ name: 'diseño', text: CONFIG.design }]);
 else if (Array.isArray(CONFIG.design)) loadFiles(CONFIG.design.filter((d) => typeof d?.text === 'string'));
 

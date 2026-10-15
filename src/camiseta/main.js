@@ -22,6 +22,14 @@ const PARTS = {
   collar: { color: 'collar', label: 'CUELLO', rib: true },
 };
 const CENTER = new THREE.Vector3(0, -0.36, 0);
+// Dos camisetas lado a lado (la misma, simulada una vez y dibujada dos
+// veces): de entrada una muestra el frente y la otra la espalda; en
+// Perfiles, cada una un costado, mirándose (de costado ocupan menos: se
+// acercan). En cada vista: giro de cada una y distancia de su centro al medio.
+const VIEWS = [
+  { turn: [0, Math.PI], gap: 0.43 },
+  { turn: [Math.PI / 2, -Math.PI / 2], gap: 0.22 },
+];
 
 const stage = document.getElementById('stage');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false });
@@ -39,6 +47,7 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
 const camera = new THREE.PerspectiveCamera(28, 1, 0.05, 20);
 camera.position.set(0, -0.28, 2.15);
+const PAIR_ASPECT = 1.7; // ancho / alto que ocupan las dos camisetas (con cuerpo, mangas abiertas)
 scene.add(camera);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.copy(CENTER);
@@ -74,7 +83,7 @@ const key = new THREE.DirectionalLight();
 key.target = lightTarget;
 key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
-Object.assign(key.shadow.camera, { left: -0.6, right: 0.6, top: 0.6, bottom: -0.6, near: 0.5, far: 6 });
+Object.assign(key.shadow.camera, { left: -1, right: 1, top: 1, bottom: -1, near: 0.5, far: 6 });
 key.shadow.bias = -0.0003;
 key.shadow.normalBias = 0.006;
 const fill = new THREE.DirectionalLight();
@@ -276,30 +285,51 @@ const colors = { ...BASE_COLORS };
 const fabric = { ...BASE_FABRIC };
 const view = { spin: !!CONFIG.spin, uvmap: !!CONFIG.uvmap, mode: 'body', light: BASE_LIGHT }; // body: con cuerpo · hanger: en percha · clips: con broches
 
-const shirt = new THREE.Group();
-scene.add(shirt);
+// Cada camiseta (con su percha o sus broches) cuelga de su soporte, que la
+// ubica y la gira; adentro, las coordenadas son las de la simulación.
+const rigs = [-1, 1].map((side, i) => {
+  const rig = new THREE.Group();
+  rig.position.x = side * VIEWS[0].gap;
+  rig.rotation.y = VIEWS[0].turn[i];
+  scene.add(rig);
+  return rig;
+});
+// Piezas de la tela: las de la primera camiseta y sus gemelas (misma
+// geometría y material).
 const meshes = {};
+const twins = {};
 for (const [k, def] of Object.entries(PARTS)) {
   const mesh = new THREE.Mesh(new THREE.BufferGeometry(), fabricMaterial(def.rib));
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  shirt.add(mesh);
+  const twin = new THREE.Mesh(mesh.geometry, mesh.material);
+  [mesh, twin].forEach((m, i) => {
+    m.castShadow = m.receiveShadow = true;
+    m.userData.rig = rigs[i];
+    rigs[i].add(m);
+  });
   meshes[k] = mesh;
+  twins[k] = twin;
 }
+const clothMeshes = [...Object.values(meshes), ...Object.values(twins)];
 const uvMaps = {};
 
-// Percha o broches (sólo en la versión colgada).
-const supportGroup = new THREE.Group();
-const supportMeshes = {
-  wood: new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0xb48a60, roughness: 0.62, metalness: 0 })),
-  metal: new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0x9a9da2, roughness: 0.35, metalness: 0.85 })),
-  plastic: new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0x24272c, roughness: 0.55, metalness: 0.1 })),
+// Percha o broches (sólo en la versión colgada), uno por camiseta.
+const supportMaterials = {
+  wood: new THREE.MeshStandardMaterial({ color: 0xb48a60, roughness: 0.62, metalness: 0 }),
+  metal: new THREE.MeshStandardMaterial({ color: 0x9a9da2, roughness: 0.35, metalness: 0.85 }),
+  plastic: new THREE.MeshStandardMaterial({ color: 0x24272c, roughness: 0.55, metalness: 0.1 }),
 };
-for (const m of Object.values(supportMeshes)) {
-  m.castShadow = m.receiveShadow = true;
-  supportGroup.add(m);
-}
-scene.add(supportGroup);
+const supports = rigs.map((rig) => {
+  const group = new THREE.Group();
+  const parts = {};
+  for (const [k, mat] of Object.entries(supportMaterials)) {
+    const m = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+    m.castShadow = m.receiveShadow = true;
+    group.add(m);
+    parts[k] = m;
+  }
+  rig.add(group);
+  return { group, parts };
+});
 const hanging = () => view.mode !== 'body';
 
 let built = null;
@@ -308,12 +338,12 @@ function rebuild() {
   built = buildShirt(params);
   for (const [k, mesh] of Object.entries(meshes)) {
     mesh.geometry.dispose();
-    mesh.geometry = built.geos[k];
+    mesh.geometry = twins[k].geometry = built.geos[k];
   }
   // Colgada: la tela arranca con la forma puesta y cae (sobre la percha, o
   // sostenida por los broches).
   drape = null;
-  supportGroup.visible = hanging();
+  for (const sp of supports) sp.group.visible = hanging();
   if (hanging()) {
     let support;
     if (view.mode === 'hanger') {
@@ -323,9 +353,9 @@ function rebuild() {
       drape = new HangingShirt(built, { kind: 'clips' }, { weight: fabric.weight });
       support = makeClipHanger(drape.clips);
     }
-    for (const [k, m] of Object.entries(supportMeshes)) {
-      m.geometry.dispose();
-      m.geometry = support[k] || new THREE.BufferGeometry();
+    for (const k of Object.keys(supportMaterials)) {
+      supports[0].parts[k].geometry.dispose();
+      supports[0].parts[k].geometry = supports[1].parts[k].geometry = support[k] || new THREE.BufferGeometry();
     }
   }
   applyLook();
@@ -524,9 +554,23 @@ function setMode(mode) {
 }
 modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
 
-// El mouse empuja la tela al pasar y levanta una brisa suave.
+// El mouse empuja la tela al pasar y levanta una brisa suave. Se toca
+// cualquiera de las dos camisetas: el punto y las direcciones pasan a las
+// coordenadas de la simulación (las de adentro de su soporte).
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
+const unturn = new THREE.Quaternion();
+function pickCloth(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects(clothMeshes, false)[0];
+  if (!hit) return null;
+  const rig = hit.object.userData.rig;
+  rig.updateMatrixWorld();
+  unturn.copy(rig.quaternion).invert();
+  return { point: rig.worldToLocal(hit.point.clone()), local: (v) => v.applyQuaternion(unturn) };
+}
 let lastMove = null;
 const camRight = new THREE.Vector3();
 const camUp = new THREE.Vector3();
@@ -536,34 +580,28 @@ renderer.domElement.addEventListener('pointermove', (e) => {
     return;
   }
   const now = performance.now();
-  const r = renderer.domElement.getBoundingClientRect();
   const dx = lastMove ? e.clientX - lastMove.x : 0;
   const dy = lastMove ? e.clientY - lastMove.y : 0;
   const dtm = lastMove ? Math.max(now - lastMove.t, 8) : 16;
   lastMove = { x: e.clientX, y: e.clientY, t: now };
   const speed = Math.hypot(dx, dy) / dtm; // px/ms
   if (speed < 0.02) return;
-  pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-  raycaster.setFromCamera(pointer, camera);
-  const hit = raycaster.intersectObjects(Object.values(meshes), false)[0];
+  const hit = pickCloth(e);
   if (!hit) return;
   camRight.setFromMatrixColumn(camera.matrixWorld, 0);
   camUp.setFromMatrixColumn(camera.matrixWorld, 1);
   const dir = raycaster.ray.direction.clone().multiplyScalar(0.8).addScaledVector(camRight, dx * 0.02).addScaledVector(camUp, -dy * 0.02).normalize();
-  drape.push(hit.point, dir, Math.min(0.004, speed * 0.0016));
-  drape.breeze(camRight.multiplyScalar(dx * 0.008).addScaledVector(camUp, -dy * 0.008).addScaledVector(raycaster.ray.direction, speed * 0.15));
+  drape.push(hit.point, hit.local(dir), Math.min(0.004, speed * 0.0016));
+  drape.breeze(hit.local(camRight.multiplyScalar(dx * 0.008).addScaledVector(camUp, -dy * 0.008).addScaledVector(raycaster.ray.direction, speed * 0.15)));
 });
 renderer.domElement.addEventListener('pointerleave', () => (lastMove = null));
 // En pantallas táctiles, un toque sobre la tela la empuja.
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (!drape || e.pointerType !== 'touch') return;
-  const r = renderer.domElement.getBoundingClientRect();
-  pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-  raycaster.setFromCamera(pointer, camera);
-  const hit = raycaster.intersectObjects(Object.values(meshes), false)[0];
+  const hit = pickCloth(e);
   if (!hit) return;
-  drape.push(hit.point, raycaster.ray.direction, 0.005, 0.09);
-  drape.breeze(raycaster.ray.direction.clone().multiplyScalar(0.6));
+  drape.push(hit.point, hit.local(raycaster.ray.direction.clone()), 0.005, 0.09);
+  drape.breeze(hit.local(raycaster.ray.direction.clone().multiplyScalar(0.6)));
 });
 
 document.getElementById('reset').addEventListener('click', () => {
@@ -585,25 +623,39 @@ function updateSpec() {
   document.getElementById('s-fabric').textContent = `${(WEAVES[fabric.weave] || WEAVES.mesh).label} · ${FOUT.weight(fabric.weight)}`;
 }
 
-// Vistas rápidas: frente, perfil y espalda (giro animado de la cámara).
+// Vistas: frente y espalda, o los dos perfiles. Giran las camisetas (por el
+// camino más corto) y la cámara vuelve al frente.
 const viewButtons = [...document.querySelectorAll('.views button')];
 let turn = null;
+const shortest = (d) => Math.atan2(Math.sin(d), Math.cos(d));
 function goToView(i) {
   const off = camera.position.clone().sub(controls.target);
-  const r = Math.hypot(off.x, off.z);
   const from = Math.atan2(off.x, off.z);
-  let to = [0, Math.PI / 2, Math.PI][i];
-  let d = to - from;
-  d = Math.atan2(Math.sin(d), Math.cos(d));
-  turn = { from, d, r, y: off.y, t0: performance.now() };
+  turn = {
+    from,
+    d: shortest(-from),
+    r: Math.hypot(off.x, off.z),
+    y: off.y,
+    rigs: rigs.map((rig, j) => [rig.rotation.y, shortest(VIEWS[i].turn[j] - rig.rotation.y)]),
+    gap: [Math.abs(rigs[0].position.x), VIEWS[i].gap - Math.abs(rigs[0].position.x)],
+    t0: performance.now(),
+  };
   viewButtons.forEach((b, j) => b.setAttribute('aria-pressed', String(j === i)));
   requestRender();
 }
+function placeRigs(e) {
+  const gap = turn.gap[0] + turn.gap[1] * e;
+  rigs.forEach((rig, j) => {
+    rig.rotation.y = turn.rigs[j][0] + turn.rigs[j][1] * e;
+    rig.position.x = (j ? 1 : -1) * gap;
+  });
+}
 viewButtons.forEach((b, i) => b.addEventListener('click', () => goToView(i)));
 viewButtons[0].setAttribute('aria-pressed', 'true');
+// Si se arrastra durante el giro, las camisetas terminan de girar de golpe.
 controls.addEventListener('start', () => {
+  if (turn) placeRigs(1);
   turn = null;
-  viewButtons.forEach((b) => b.setAttribute('aria-pressed', 'false'));
 });
 
 // ---------- dibujo ----------
@@ -619,8 +671,9 @@ function resize() {
   const h = stage.clientHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
-  // En pantallas angostas, se aleja un poco para que entre entera.
-  camera.fov = w / h < 0.8 ? 28 * (0.8 / Math.max(w / h, 0.45)) ** 0.8 : 28;
+  // Si la pantalla es más angosta que el par de camisetas, se abre el
+  // ángulo para que entren las dos.
+  camera.fov = w / h < PAIR_ASPECT ? 28 * (PAIR_ASPECT / Math.max(w / h, 0.45)) ** 0.8 : 28;
   camera.updateProjectionMatrix();
   requestRender();
 }
@@ -633,6 +686,7 @@ renderer.setAnimationLoop((now) => {
     const e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
     const a = turn.from + turn.d * e;
     camera.position.set(controls.target.x + Math.sin(a) * turn.r, controls.target.y + turn.y, controls.target.z + Math.cos(a) * turn.r);
+    placeRigs(e);
     if (k >= 1) turn = null;
     needsRender = true;
   }
@@ -657,4 +711,4 @@ if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
 else rebuild();
 resize();
 
-window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, view, goToView, setMode, drape: () => drape };
+window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, setMode, drape: () => drape };

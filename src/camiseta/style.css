@@ -95,6 +95,7 @@ body {
   border: 0;
   border-radius: 999px;
   padding: 8px 14px;
+  white-space: nowrap;
   cursor: pointer;
 }
 .views button[aria-pressed='true'] {

@@ -36,6 +36,12 @@ prueba aparte, hecha desde cero: una camiseta deportiva de cuello redondo o en V
 modelada directamente con código, sin moldes, sin Blender y sin simulación. Se
 ve flotando con volumen, como puesta en un cuerpo invisible.
 
+- **Frente y espalda a la vez**: hay dos camisetas lado a lado (la misma, con
+  la misma simulación): la de la izquierda muestra el frente y la de la
+  derecha la espalda. **Perfiles** las gira para mostrar los dos costados,
+  mirándose; **Frente y espalda** vuelve. Se puede girar y acercar la cámara
+  libremente, y el mouse empuja la tela de cualquiera de las dos.
+
 - **Presentación**: con cuerpo (forma fija, como puesta), en percha o con
   broches. La percha es de madera, plana y paralela a la camiseta, con el arco
   de una percha de verdad y bordes definidos; apoya bajo la costura de los

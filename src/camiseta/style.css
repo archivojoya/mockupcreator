@@ -362,6 +362,15 @@ button:focus-visible {
 .reset:hover {
   border-color: var(--muted);
 }
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.stage.dropping {
+  outline: 2px dashed var(--accent);
+  outline-offset: -10px;
+}
 
 .spec dl {
   margin: 0;

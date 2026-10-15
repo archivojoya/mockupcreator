@@ -73,15 +73,28 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   con el color elegido tal cual, para comparar colores), contraste (rasante,
   marca el relieve y los pliegues) y día (sol cálido y cielo azulado).
 - **Colores** por parte: cuerpo, mangas, cuello y puños.
-- **Mapa de estampado**: muestra una grilla de 5 cm con el nombre de cada pieza,
-  para ver cómo caería un diseño. Las coordenadas de textura están en metros
-  sobre la tela, listas para estampar más adelante.
+- **Diseño propio** (`src/camiseta/print.js`): **Descargar plantilla** baja un
+  SVG a escala 1:1 (mm) con todas las piezas de la camiseta tal como está
+  (frente, espalda, mangas, puños y cuello, con nombres claros), cada una en su
+  recuadro con el contorno, el centro, la grilla de 5 cm y una cruz de
+  anclaje. Se diseña en Illustrator dentro de cada recuadro (pasarse del
+  contorno no molesta: es el sangrado) y **Cargar diseño** (o arrastrar el SVG
+  a la camiseta) lo estampa en las dos camisetas, en las tres presentaciones.
+  Lo que hay dentro de cada recuadro va a esa pieza, sin importar las capas.
+  Cada pieza está anclada a un punto fijo (centro del escote en frente y
+  espalda, punta del hombro en las mangas, centro de atrás en el cuello), así
+  que el diseño no se mueve al cambiar el largo o el calce. El cuello tiene
+  la cara de afuera y, arriba, la de adentro como se la ve desde adentro (para
+  una etiqueta estampada). Antes de exportar: textos a contornos, imágenes
+  incrustadas, colores RGB, sin cambiar la mesa de trabajo.
+- **Mapa de estampado**: muestra una grilla de 5 cm con el nombre de cada pieza.
 - **Ficha**: contorno de pecho, ancho de hombros, largo, boca de manga y tela.
 - **Configuración sin tocar código**: si la página trae un bloque
   `<script type="application/json" id="camiseta-config">` con `params`
   (incluido `neckStyle`: `round` o `v`), `colors`, `fabric` (`weave`,
   `quality`, `weight`, `heather`), `light` (`studio`, `soft`, `contrast` o
-  `day`), `mode` (`body`, `hanger` o `clips`), `spin` o `uvmap`, arranca con
+  `day`), `mode` (`body`, `hanger` o `clips`), `spin`, `uvmap` o `design`
+  (el SVG diseñado sobre la plantilla, como texto), arranca con
   esos valores (y "Restablecer todo" vuelve a ellos).
 
 Cómo se arma (`src/camiseta/shirt.js`):

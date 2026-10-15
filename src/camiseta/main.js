@@ -5,6 +5,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS } from './shirt.js';
 import { makeHanger, makeClipHanger, HangingShirt } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
+import { templateSVG, readDesign, printTexture } from './print.js';
 import './style.css';
 
 const COLORS = { body: '#c81e3a', sleeves: '#c81e3a', collar: '#17191d', cuffs: '#17191d' };
@@ -176,6 +177,15 @@ void main() {
   float pill = smoothstep(0.35, 0.8, macro.g) * pills;`,
       )
       .replace(
+        '#include <map_fragment>',
+        `#ifdef USE_MAP
+  // Estampado (o mapa de piezas) sobre el color de la pieza, según su
+  // opacidad; por dentro apenas se trasluce.
+  vec4 sampledDiffuseColor = texture2D(map, vMapUv);
+  diffuseColor.rgb = mix(diffuseColor.rgb, sampledDiffuseColor.rgb, sampledDiffuseColor.a * (gl_FrontFacing ? 1.0 : 0.3));
+#endif`,
+      )
+      .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
   // Tono del tejido, hilos jaspeados, irregularidad del teñido y bolitas.
@@ -265,7 +275,7 @@ function applyFabric() {
 // Configuración opcional escrita en la página (así se adapta la camiseta sin
 // tocar el código): <script type="application/json" id="camiseta-config">
 // { "params": {...}, "colors": {...}, "fabric": {...}, "light": "studio",
-//   "mode": "hanger", "spin": false, "uvmap": false }
+//   "mode": "hanger", "spin": false, "uvmap": false, "design": "<svg…>" }
 const CONFIG = (() => {
   try {
     return JSON.parse(document.getElementById('camiseta-config')?.textContent || '{}');
@@ -311,6 +321,8 @@ for (const [k, def] of Object.entries(PARTS)) {
 }
 const clothMeshes = [...Object.values(meshes), ...Object.values(twins)];
 const uvMaps = {};
+// Diseño cargado: una textura de estampado por pieza.
+const design = { textures: {}, found: [] };
 
 // Percha o broches (sólo en la versión colgada), uno por camiseta.
 const supportMaterials = {
@@ -368,7 +380,10 @@ function applyLook() {
   for (const [k, mesh] of Object.entries(meshes)) {
     const def = PARTS[k];
     const m = mesh.material;
-    if (view.uvmap && def.label) {
+    if (!view.uvmap && design.textures[k]) {
+      m.map = design.textures[k];
+      m.color.set(colors[def.color]);
+    } else if (view.uvmap && def.label) {
       const uv = mesh.geometry.attributes.uv.array;
       let u0 = Infinity;
       let u1 = -Infinity;
@@ -604,6 +619,85 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   drape.breeze(hit.local(raycaster.ray.direction.clone().multiplyScalar(0.6)));
 });
 
+// Diseño: plantilla con todas las piezas (para la camiseta tal como está) y
+// carga del SVG diseñado sobre ella (botón o arrastrando el archivo).
+const designNote = document.getElementById('design-note');
+const designClear = document.getElementById('design-clear');
+// Publicada en claude.ai, la descarga pasa por la capacidad `downloads` (la
+// persona confirma); sola o en desarrollo, un enlace de descarga común.
+const downloadsP = window.claude?.use ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+async function download(name, text, type) {
+  const dl = await downloadsP;
+  if (dl) {
+    try {
+      await dl.save({ filename: name, data: text });
+      return;
+    } catch (e) {
+      if (e?.code === 'declined' || e?.code === 'rate_limited') return;
+    }
+  }
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+document.getElementById('template').addEventListener('click', () => {
+  download('plantilla-camiseta.svg', templateSVG(built, params, colors), 'image/svg+xml');
+});
+function clearDesign() {
+  for (const t of Object.values(design.textures)) t.dispose();
+  design.textures = {};
+  design.found = [];
+  designClear.hidden = true;
+}
+async function loadDesign(text, name = 'diseño') {
+  designNote.textContent = `Leyendo ${name}…`;
+  try {
+    const { canvases, found } = await readDesign(text);
+    clearDesign();
+    const aniso = renderer.capabilities.getMaxAnisotropy();
+    for (const [k, c] of Object.entries(canvases)) design.textures[k] = printTexture(k, c, Math.min(8, aniso));
+    design.found = found;
+    designClear.hidden = !found.length;
+    designNote.textContent = found.length ? `Diseño en: ${found.join(', ')}.` : 'El SVG no tiene nada dentro de los recuadros de la plantilla.';
+    if (view.uvmap) {
+      view.uvmap = false;
+      document.getElementById('uvmap').checked = false;
+    }
+  } catch (e) {
+    designNote.textContent = e.message || 'No se pudo leer el SVG.';
+  }
+  applyLook();
+}
+const designFile = document.getElementById('design-file');
+document.getElementById('design-load').addEventListener('click', () => designFile.click());
+designFile.addEventListener('change', async () => {
+  const f = designFile.files[0];
+  if (f) await loadDesign(await f.text(), f.name);
+  designFile.value = '';
+});
+designClear.addEventListener('click', () => {
+  clearDesign();
+  designNote.textContent = '';
+  applyLook();
+});
+stage.addEventListener('dragover', (e) => {
+  if (![...e.dataTransfer.items].some((i) => i.kind === 'file')) return;
+  e.preventDefault();
+  stage.classList.add('dropping');
+});
+stage.addEventListener('dragleave', () => stage.classList.remove('dropping'));
+stage.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  stage.classList.remove('dropping');
+  const f = [...e.dataTransfer.files].find((x) => /\.svg$/i.test(x.name) || x.type === 'image/svg+xml');
+  if (f) await loadDesign(await f.text(), f.name);
+});
+
 document.getElementById('reset').addEventListener('click', () => {
   Object.assign(params, BASE_PARAMS);
   Object.assign(colors, BASE_COLORS);
@@ -710,5 +804,6 @@ controls.autoRotate = view.spin;
 if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
 else rebuild();
 resize();
+if (typeof CONFIG.design === 'string' && CONFIG.design.includes('<svg')) loadDesign(CONFIG.design);
 
-window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, setMode, drape: () => drape };
+window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, setMode, loadDesign, templateSVG: () => templateSVG(built, params, colors), design, drape: () => drape };

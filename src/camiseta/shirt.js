@@ -608,6 +608,8 @@ export function buildShirt(params) {
     parts[k + 'Lip'] = buildLip(ring, 0.016, true);
   }
 
+  printUV(parts, N, W);
+
   // Normales, costuras soldadas y marcas de costura.
   for (const part of Object.values(parts)) part.nrm = computeNormals(part.pos, part.idx);
   weldNormals([parts.front, parts.back, parts.sleeveL, parts.sleeveR, parts.cuffL, parts.cuffR]);
@@ -620,6 +622,7 @@ export function buildShirt(params) {
     g.setAttribute('position', new THREE.BufferAttribute(part.pos, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(part.nrm, 3));
     g.setAttribute('uv', new THREE.BufferAttribute(part.uv, 2));
+    if (part.uv1) g.setAttribute('uv1', new THREE.BufferAttribute(part.uv1, 2));
     g.setAttribute('seam', new THREE.BufferAttribute(part.seam || new Float32Array((part.pos.length / 3) * 2).fill(1), 2));
     g.setAttribute('zone', new THREE.BufferAttribute(part.zone || new Float32Array(part.pos.length / 3), 1));
     g.setIndex(part.idx);
@@ -646,6 +649,79 @@ export function buildShirt(params) {
   };
   return { geos, measures: M, layout };
 }
+
+// ---------- coordenadas de estampado ----------
+
+// Cada pieza desplegada en metros sobre la tela (las UV de la tela), como se
+// ve desde afuera: x hacia la derecha, y hacia abajo, con el origen en un
+// punto fijo de la pieza (así un diseño no se mueve al cambiar el largo o el
+// calce): frente y espalda, el centro del escote; mangas, la punta del
+// hombro, con el ruedo derecho (como un molde); puños, el centro de arriba;
+// cuello, el centro de atrás en la costura (arriba la cara de afuera y, más
+// arriba, la de adentro).
+function printUV(parts, N, W) {
+  const C = COLS / 2;
+  // Signo de x: que crezca hacia la derecha de quien mira de afuera.
+  const facing = (pos, uv, ids, right) => {
+    let s = 0;
+    for (const [a, b] of ids) s += (uv[b * 2] - uv[a * 2]) * ((pos[b * 3] - pos[a * 3]) * right[0] + (pos[b * 3 + 2] - pos[a * 3 + 2]) * right[2]);
+    return s >= 0 ? 1 : -1;
+  };
+  for (const [key, right] of [['front', [1, 0, 0]], ['back', [-1, 0, 0]]]) {
+    const { pos, uv } = parts[key];
+    const r = Math.round(N / 3);
+    const sx = facing(pos, uv, [[r * W, r * W + COLS]], right);
+    const vA = uv[(N * W + C) * 2 + 1];
+    parts[key].uv1 = uv.map((x, i) => (i % 2 ? vA - x : sx * x));
+  }
+  for (const [key, cuffKey, side] of [['sleeveL', 'cuffL', 1], ['sleeveR', 'cuffR', -1]]) {
+    const sl = parts[key];
+    const cf = parts[cuffKey];
+    const SW = cf.ring.length;
+    const L = SW - 1;
+    const cap = L / 2;
+    const right = [0, 0, -side];
+    const sx = facing(sl.pos, sl.uv, [[cap - 4, cap + 4]], right);
+    const R = SLEEVE_ROWS;
+    const vEnd = (k) => sl.uv[(R * SW + k) * 2 + 1];
+    sl.uv1 = new Float32Array(sl.uv.length);
+    for (let r = 0; r <= R; r++)
+      for (let k = 0; k < SW; k++) {
+        const i = (r * SW + k) * 2;
+        sl.uv1[i] = sx * (sl.uv[i] - sl.uv[(r * SW + cap) * 2]);
+        sl.uv1[i + 1] = sl.uv[i + 1] + vEnd(cap) - vEnd(k);
+      }
+    cf.uv1 = new Float32Array(cf.uv.length);
+    for (let r = 0; r <= CUFF_ROWS; r++)
+      for (let k = 0; k < SW; k++) {
+        const i = (r * SW + k) * 2;
+        cf.uv1[i] = sx * (cf.uv[i] - cf.uv[(r * SW + cap) * 2]);
+        cf.uv1[i + 1] = cf.uv[i + 1] - cf.uv[k * 2 + 1];
+      }
+  }
+  // Cuello: abajo la cara de afuera (vista desde afuera, hasta la mitad del
+  // doblez) y, más arriba, la de adentro como se la ve desde adentro
+  // (derecha, sin espejar), separadas.
+  const col = parts.collar;
+  const bc = COLS + C;
+  const sx = facing(col.pos, col.uv, [[bc - 2, bc + 2]], [-1, 0, 0]);
+  const uA = col.uv[bc * 2];
+  const SW = col.uv.length / 2 / col.P;
+  const v = (j) => col.uv[j * SW * 2 + 1];
+  const top = -(v(COLLAR_FOLD) + COLLAR_GAP + v(col.P - 1) - v(COLLAR_FOLD + 1));
+  col.uv1 = new Float32Array(col.uv.length);
+  for (let j = 0; j < col.P; j++)
+    for (let i = 0; i < SW; i++) {
+      const k = (j * SW + i) * 2;
+      const out = j <= COLLAR_FOLD;
+      col.uv1[k] = (out ? sx : -sx) * (col.uv[k] - uA);
+      col.uv1[k + 1] = out ? -col.uv[k + 1] : top + col.uv[k + 1] - v(COLLAR_FOLD + 1);
+    }
+}
+// Fila del perfil de la tira en la mitad del doblez, y separación (m) entre
+// las dos caras en la plantilla.
+export const COLLAR_FOLD = 5;
+const COLLAR_GAP = 0.006;
 
 // Tira acanalada del cuello sobre el borde del escote (lazo cerrado). En V,
 // la punta del escote es el punto `tip` del lazo.
@@ -756,7 +832,7 @@ function buildCollar(M, neck, tip) {
     }
   }
   const idx = gridIndex(n, P - 1, SW);
-  return { pos, uv, idx: orient(pos, idx, fromVertical, (v) => v < SW * 3) };
+  return { pos, uv, P, idx: orient(pos, idx, fromVertical, (v) => v < SW * 3) };
 }
 
 // Dobladillo: desde el borde, la tela se da vuelta hacia adentro y sube.

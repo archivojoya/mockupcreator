@@ -5,7 +5,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS, flattenPrint } from './shirt.js';
 import { makeHanger, makeClipHanger, HangingShirt, RAIL_R } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
-import { templateSVG, readDesign, printTexture, readPieces, isolateLayer, placePiece, pieceSizes, buildApplique, KINDS } from './print.js';
+import { templateSVG, readDesign, printTexture, readPieces, isolateLayer, placePiece, placeTape, pieceSizes, buildApplique, KINDS } from './print.js';
 import './style.css';
 
 const COLORS = { body: '#c81e3a', sleeves: '#c81e3a', collar: '#17191d', cuffs: '#17191d' };
@@ -415,7 +415,7 @@ const uvMaps = {};
 // (escudo, marca, dorsal, nombre); `kinds`: cómo va cada una (bordado,
 // vinilo o estampado).
 const KIND_NAMES = KINDS.map(([kind]) => kind);
-const design = { textures: {}, found: [], inside: {}, pieces: {}, mode: null, parts: {}, app: {}, kinds: { crest: 'emb', brand: 'print', number: 'print', name: 'print' } };
+const design = { textures: {}, found: [], inside: {}, pieces: {}, tape: null, tapeTex: null, mode: null, parts: {}, app: {}, kinds: { crest: 'emb', brand: 'print', number: 'print', name: 'print' } };
 // Color que más hay en el diseño de una pieza (lo transparente cuenta como
 // el color de la pieza: null). Es el color del revés de la tela.
 function dominantColor(canvas, rect = [0, 0, canvas.width, canvas.height]) {
@@ -520,6 +520,90 @@ const hanging = () => view.mode !== 'body';
 
 let built = null;
 let drape = null;
+
+// Tapacostura: una tira (TAPE_W de ancho) por dentro de la espalda, sobre la
+// costura del cuello, de hombro a hombro. Sigue a la tela de la espalda,
+// puesta o colgada: cada punto sale de la columna de la espalda que baja del
+// escote, hacia adentro: arriba tapa el borde de la cara de adentro del
+// cuello (TAPE_IN[0]) y abajo queda contra la tela (TAPE_IN[1]). Mirada desde
+// adentro (desde el frente, por el escote), su diseño se lee derecho.
+const TAPE_W = 0.02;
+const TAPE_IN = [0.0047, 0.0016];
+const TAPE_ROWS = 4;
+const tapeMat = new THREE.MeshStandardMaterial({ roughness: 0.72, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+const tape = { geo: new THREE.BufferGeometry(), binds: null, len: 0 };
+for (const rig of rigs) {
+  const m = new THREE.Mesh(tape.geo, tapeMat);
+  m.receiveShadow = true;
+  rig.userData.inner.add(m);
+}
+function buildTape() {
+  const pos = built.geos.back.attributes.position.array;
+  const W = built.layout.cols + 1;
+  const N = built.layout.rows;
+  const d3 = (a, b) => Math.hypot(pos[a * 3] - pos[b * 3], pos[a * 3 + 1] - pos[b * 3 + 1], pos[a * 3 + 2] - pos[b * 3 + 2]);
+  const sj = [0];
+  for (let j = 1; j < W; j++) sj.push(sj[j - 1] + d3(N * W + j - 1, N * W + j));
+  tape.len = sj[W - 1];
+  const binds = [];
+  const uv = [];
+  for (let t = 0; t <= TAPE_ROWS; t++) {
+    const d = (TAPE_W * t) / TAPE_ROWS;
+    for (let j = 0; j < W; j++) {
+      let r = N;
+      let acc = 0;
+      for (; r > 1; r--) {
+        const l = d3(r * W + j, (r - 1) * W + j);
+        if (acc + l >= d) break;
+        acc += l;
+      }
+      const l = d3(r * W + j, (r - 1) * W + j) || 1;
+      binds.push(r * W + j, (r - 1) * W + j, Math.min(1, (d - acc) / l), TAPE_IN[0] + ((TAPE_IN[1] - TAPE_IN[0]) * t) / TAPE_ROWS);
+      uv.push(1 - sj[j] / tape.len, 1 - t / TAPE_ROWS);
+    }
+  }
+  const idx = [];
+  for (let t = 0; t < TAPE_ROWS; t++)
+    for (let j = 0; j < W - 1; j++) {
+      const a = t * W + j;
+      idx.push(a, a + W, a + 1, a + 1, a + W, a + W + 1);
+    }
+  const n = binds.length / 4;
+  tape.binds = binds;
+  tape.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+  tape.geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+  tape.geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  tape.geo.setIndex(idx);
+  updateTape();
+}
+function updateTape() {
+  const g = built.geos.back;
+  const pos = g.attributes.position.array;
+  const nor = g.attributes.normal.array;
+  const P = tape.geo.attributes.position.array;
+  const Nn = tape.geo.attributes.normal.array;
+  const b = tape.binds;
+  for (let i = 0; i < b.length / 4; i++) {
+    const [a, c, f, off] = [b[i * 4], b[i * 4 + 1], b[i * 4 + 2], b[i * 4 + 3]];
+    let nx = nor[a * 3] + (nor[c * 3] - nor[a * 3]) * f;
+    let ny = nor[a * 3 + 1] + (nor[c * 3 + 1] - nor[a * 3 + 1]) * f;
+    let nz = nor[a * 3 + 2] + (nor[c * 3 + 2] - nor[a * 3 + 2]) * f;
+    const l = Math.hypot(nx, ny, nz) || 1;
+    nx /= l;
+    ny /= l;
+    nz /= l;
+    for (let k = 0; k < 3; k++) P[i * 3 + k] = pos[a * 3 + k] + (pos[c * 3 + k] - pos[a * 3 + k]) * f;
+    P[i * 3] -= nx * off;
+    P[i * 3 + 1] -= ny * off;
+    P[i * 3 + 2] -= nz * off;
+    Nn[i * 3] = -nx;
+    Nn[i * 3 + 1] = -ny;
+    Nn[i * 3 + 2] = -nz;
+  }
+  tape.geo.attributes.position.needsUpdate = true;
+  tape.geo.attributes.normal.needsUpdate = true;
+  tape.geo.computeBoundingSphere();
+}
 // Distancia entre las camisetas según su ancho (con cuerpo, mangas abiertas):
 // de frente quedan a PAIR_MARGIN de tocarse; de perfil, según su fondo.
 function fitPair() {
@@ -545,6 +629,7 @@ function rebuild() {
     mesh.geometry.dispose();
     mesh.geometry = twins[k].geometry = built.geos[k];
   }
+  buildTape();
   followFlat();
   // Colgada: la tela arranca con la forma puesta y cae (sobre la percha, o
   // sostenida por los broches).
@@ -561,6 +646,12 @@ function rebuild() {
       drape = new HangingShirt(built, { kind: 'clips' }, { weight: fabric.weight });
       support = makeClipHanger(drape.clips);
     }
+    // El tapacostura sigue a la tela cada vez que se actualiza.
+    const update = drape.updateMeshes.bind(drape);
+    drape.updateMeshes = () => {
+      update();
+      updateTape();
+    };
     for (const k of Object.keys(supportMaterials)) {
       supports[0].parts[k].geometry.dispose();
       supports[0].parts[k].geometry = supports[1].parts[k].geometry = support[k] || new THREE.BufferGeometry();
@@ -578,6 +669,9 @@ function rebuild() {
 
 // Colores, o el mapa de estampado (grilla con el nombre de cada pieza).
 function applyLook() {
+  tapeMat.map = view.uvmap ? null : design.tapeTex || null;
+  tapeMat.color.set(tapeMat.map ? '#ffffff' : view.uvmap ? '#cfcac0' : colors.collar);
+  tapeMat.needsUpdate = true;
   for (const [k, mesh] of Object.entries(meshes)) {
     const def = PARTS[k];
     const m = mesh.material;
@@ -943,6 +1037,9 @@ function clearDesign() {
   design.parts = {};
   design.app = {};
   design.mode = null;
+  design.tape = null;
+  design.tapeTex?.dispose();
+  design.tapeTex = null;
   designClear.hidden = true;
   kindsBox.hidden = true;
 }
@@ -998,11 +1095,12 @@ const SIZE_ROWS = [
   ['sleeveR', 'Manga (cada una)'],
   ['cuffR', 'Puño (cada uno)'],
   ['collar', 'Cuello (vuelta entera)'],
+  ['tape', 'Tapacostura (por dentro)'],
 ];
 const cmUp = (mm, d = 0) => (Math.ceil(mm / 10 ** (1 - d)) / 10 ** d).toFixed(d).replace('.', ',');
 function fillSizes() {
   if (!sizesBox.open) return;
-  const sz = pieceSizes(built);
+  const sz = { ...pieceSizes(built), tape: { w: tape.len * 1000, h: TAPE_W * 1000 } };
   sizesBox.querySelector('dl').innerHTML = SIZE_ROWS.map(([k, label]) => {
     const d = sz[k].h < 50 ? 1 : 0;
     return `<div><dt>${label}</dt><dd>${cmUp(sz[k].w)} × ${cmUp(sz[k].h, d)} cm</dd></div>`;
@@ -1034,12 +1132,28 @@ async function layoutPieces() {
     const r = placed[k];
     notes.push(`${p.keys.map((x) => PIECE_NAMES[x]).join(' y ')}: ${cmUp(r.w)} × ${cmUp(r.h, r.h < 50 ? 1 : 0)} cm${r.real ? '' : ' (ajustado a la pieza)'}`);
   }
+  if (design.tape) {
+    const t = design.tape;
+    try {
+      const canvas = await placeTape(t, tape.len * 1000, TAPE_W * 1000);
+      if (gen !== layoutGen) return;
+      design.tapeTex?.dispose();
+      design.tapeTex = new THREE.CanvasTexture(canvas);
+      design.tapeTex.colorSpace = THREE.SRGBColorSpace;
+      design.tapeTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      notes.push(`tapacostura: ${cmUp(tape.len * 1000)} × ${cmUp(TAPE_W * 1000, 1)} cm`);
+      applyLook();
+    } catch {
+      notes.push(`${t.name}: no se pudo dibujar`);
+    }
+  }
   design.found = Object.keys(placed);
+  if (design.tape) design.found.push('tape');
   designClear.hidden = !design.found.length;
   designNote.textContent = notes.length ? `${notes.join(' · ')}.` : '';
   applyLook();
 }
-const PIECE_NAMES = { front: 'frente', back: 'espalda', sleeveL: 'manga izquierda', sleeveR: 'manga derecha', cuffL: 'puño izquierdo', cuffR: 'puño derecho', collar: 'cuello' };
+const PIECE_NAMES = { front: 'frente', back: 'espalda', sleeveL: 'manga izquierda', sleeveR: 'manga derecha', cuffL: 'puño izquierdo', cuffR: 'puño derecho', collar: 'cuello', tape: 'tapacostura' };
 async function loadFiles(files) {
   designNote.textContent = 'Leyendo…';
   const { pieces, template, unknown } = readPieces(files);
@@ -1056,7 +1170,8 @@ async function loadFiles(files) {
       if (!iso) continue;
       Object.assign(p, iso, { doc: null, layer: null });
     }
-    for (const k of p.keys) design.pieces[k] = p;
+    if (p.keys.includes('tape')) design.tape = p;
+    else for (const k of p.keys) design.pieces[k] = p;
   }
   if (view.uvmap) {
     view.uvmap = false;
@@ -1168,11 +1283,17 @@ function placeRigs(e) {
   syncCurls();
 }
 viewButtons.forEach((b, i) => b.addEventListener('click', () => goToView(i)));
-// Acercamientos: al pecho de la camiseta de la izquierda y a la espalda alta
-// de la de la derecha, sobre la tela tal como está (con cuerpo o colgada, y
-// aunque estén giradas): el punto del medio de la pieza que queda unos
-// centímetros bajo el escote, mirado de frente a la tela.
-const ZOOMS = { chest: { rig: 0, key: 'front', below: 0.13, dist: 0.56 }, back: { rig: 1, key: 'back', below: 0.1, dist: 0.52 } };
+// Acercamientos: al pecho de la camiseta de la izquierda, a la espalda alta
+// de la de la derecha y adentro del cuello (el tapacostura) de la de la
+// izquierda, sobre la tela tal como está (con cuerpo o colgada, y aunque
+// estén giradas): el punto del medio de la pieza que queda unos centímetros
+// bajo el escote, mirado de frente a la tela (el cuello, desde arriba y
+// adelante).
+const ZOOMS = {
+  chest: { rig: 0, key: 'front', below: 0.13, dist: 0.56 },
+  back: { rig: 1, key: 'back', below: 0.1, dist: 0.52 },
+  neck: { rig: 0, key: 'back', below: 0.012, dist: 0.34, from: 'front' },
+};
 function zoomTo(name) {
   const z = ZOOMS[name];
   const mesh = (z.rig ? twins : meshes)[z.key];
@@ -1189,7 +1310,14 @@ function zoomTo(name) {
   mesh.updateWorldMatrix(true, false);
   const p = new THREE.Vector3().fromArray(pos, v * 3).applyMatrix4(mesh.matrixWorld);
   const n = new THREE.Vector3().fromArray(nor, v * 3).transformDirection(mesh.matrixWorld);
-  n.y = Math.max(n.y, 0) + 0.12;
+  if (z.from) {
+    // Desde adelante y arriba: la normal del frente en el pecho, levantada.
+    const f = (z.rig ? twins : meshes)[z.from];
+    const fv = (top - 12) * W + col;
+    n.fromArray(f.geometry.attributes.normal.array, fv * 3).transformDirection(f.matrixWorld);
+    n.y = 0;
+    n.normalize().add(new THREE.Vector3(0, 0.3, 0));
+  } else n.y = Math.max(n.y, 0) + 0.12;
   n.normalize();
   flyTo(p, p.clone().addScaledVector(n, z.dist));
   zoomButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.zoom === name)));

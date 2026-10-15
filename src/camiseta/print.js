@@ -263,9 +263,10 @@ const NAMES = [
   ['back', /espalda|(^|[^a-z])back([^a-z]|$)|dorso|trasera/i],
   ['sleeve', /manga|sleeve/i],
   ['cuff', /pu[ñn]o|cuff/i],
+  ['tape', /tapa ?costura|tapa ?cuello|tape|cinta/i],
   ['collar', /cuello|collar/i],
 ];
-export const PIECE_LABELS = { front: 'Frente', back: 'Espalda', sleeveL: 'Manga izquierda', sleeveR: 'Manga derecha', cuffL: 'Puño izquierdo', cuffR: 'Puño derecho', collar: 'Cuello' };
+export const PIECE_LABELS = { front: 'Frente', back: 'Espalda', sleeveL: 'Manga izquierda', sleeveR: 'Manga derecha', cuffL: 'Puño izquierdo', cuffR: 'Puño derecho', collar: 'Cuello', tape: 'Tapacostura' };
 export function pieceKeys(name) {
   name = name.normalize('NFC');
   for (const [base, re] of NAMES) {
@@ -628,4 +629,34 @@ export function buildApplique(key, emb, vin, k) {
   const hm = h / k;
   const matrix = new THREE.Matrix3().set(1000 / wm, 0, -mmX0 / wm, 0, -1000 / hm, 1 + mmY0 / hm, 0, 0, 1);
   return { color, shape, matrix };
+}
+
+// Lienzo del tapacostura (largo × ancho en mm): el diseño la cubre, centrado
+// (a su tamaño real si lo dice); lo que sobra a los costados se corta.
+export async function placeTape(piece, lengthMm, widthMm) {
+  const k = 8; // px/mm
+  const [, , fw, fh] = piece.vb;
+  const real = piece.mm && Math.abs((fh * piece.mm) / widthMm - 1) < 0.6;
+  const s = real ? piece.mm : Math.max(lengthMm / fw, widthMm / fh);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(lengthMm * k);
+  canvas.height = Math.round(widthMm * k);
+  const pw = Math.max(1, Math.round(fw * s * k));
+  const ph = Math.max(1, Math.round(fh * s * k));
+  const doc = new DOMParser().parseFromString(piece.svg, 'image/svg+xml');
+  const root = doc.documentElement;
+  root.setAttribute('viewBox', piece.vb.join(' '));
+  root.setAttribute('width', pw);
+  root.setAttribute('height', ph);
+  root.setAttribute('preserveAspectRatio', 'none');
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(doc)], { type: 'image/svg+xml' }));
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    canvas.getContext('2d').drawImage(img, (canvas.width - pw) / 2, (canvas.height - ph) / 2, pw, ph);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  return canvas;
 }

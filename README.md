@@ -100,8 +100,10 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     diseño. El bordado sube 1,1 mm con el borde redondeado, deja una sombra
     alrededor y tiene puntadas de relleno (se ven al acercar) y hilo con
     brillo; el vinilo es liso, semimate, con un borde fino y más reflejo.
-  - **Tapacostura**: una tira de 2 cm por dentro de la espalda, sobre la
-    costura del cuello, de hombro a hombro. Un SVG con "tapacostura" en el
+  - **Tapacostura**: una tira fina (unos 1,1 cm desplegada) por dentro de la
+    espalda, de hombro a hombro: monta sobre el borde de la cara de adentro
+    del cuello, lo tapa y baja pegada a la tela; de frente se ve como una
+    línea fina bajo el cuello. Un SVG con "tapacostura" en el
     nombre lleva su diseño (se lee derecho desde adentro); si no, va lisa del
     color del cuello.
   - **Revés**: por dentro no se ve el estampado; la tela es lisa, del color

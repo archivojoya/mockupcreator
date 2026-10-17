@@ -521,84 +521,124 @@ const hanging = () => view.mode !== 'body';
 let built = null;
 let drape = null;
 
-// Tapacostura: una tira (TAPE_W de ancho) por dentro de la espalda, sobre la
-// costura del cuello, de hombro a hombro. Sigue a la tela de la espalda,
-// puesta o colgada: cada punto sale de la columna de la espalda que baja del
-// escote, hacia adentro: arriba tapa el borde de la cara de adentro del
-// cuello (TAPE_IN[0]) y abajo queda contra la tela (TAPE_IN[1]). Mirada desde
-// adentro (desde el frente, por el escote), su diseño se lee derecho.
-const TAPE_W = 0.02;
-const TAPE_IN = [0.0047, 0.0016];
-const TAPE_ROWS = 4;
-const tapeMat = new THREE.MeshStandardMaterial({ roughness: 0.72, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-const tape = { geo: new THREE.BufferGeometry(), binds: null, len: 0 };
+// Tapacostura: una tira fina por dentro de la espalda, sobre la costura del
+// cuello, de hombro a hombro, como se cose de verdad: monta TAPE_FACE sobre
+// el borde de la cara de adentro del cuello (lo tapa), lo envuelve y baja
+// hasta quedar pegada a la tela de la espalda (TAPE_IN), TAPE_DOWN por
+// debajo de ese borde. Sigue al cuello y a la tela, puesta o colgada. Mirada
+// desde adentro (desde el frente, por el escote), su diseño se lee derecho;
+// con cuerpo se ve sobre todo la parte que monta sobre el cuello.
+const TAPE_FACE = 0.002;
+const TAPE_OUT = 0.0006; // por delante de la cara de adentro del cuello
+const TAPE_IN = 0.0012; // separación de la tela
+const TAPE_DOWN = [0.001, 0.003];
+const tapeMat = new THREE.MeshStandardMaterial({ roughness: 0.72, side: THREE.DoubleSide });
+const tape = { geo: new THREE.BufferGeometry(), cols: null, W: 0, N: 0, len: 0, w: 0 };
 for (const rig of rigs) {
   const m = new THREE.Mesh(tape.geo, tapeMat);
   m.receiveShadow = true;
   rig.userData.inner.add(m);
 }
+const TAPE_ROWS = 2 + TAPE_DOWN.length;
 function buildTape() {
   const pos = built.geos.back.attributes.position.array;
-  const W = built.layout.cols + 1;
+  const C = built.layout.cols;
+  const W = C + 1;
   const N = built.layout.rows;
-  const d3 = (a, b) => Math.hypot(pos[a * 3] - pos[b * 3], pos[a * 3 + 1] - pos[b * 3 + 1], pos[a * 3 + 2] - pos[b * 3 + 2]);
+  const CSW = 2 * C + 1;
+  const CP = built.geos.collar.attributes.position.count / CSW;
   const sj = [0];
-  for (let j = 1; j < W; j++) sj.push(sj[j - 1] + d3(N * W + j - 1, N * W + j));
+  for (let j = 1; j < W; j++) sj.push(sj[j - 1] + dist3(pos, N * W + j - 1, pos, N * W + j));
   tape.len = sj[W - 1];
-  const binds = [];
+  // Por columna de la espalda: el borde de abajo de la cara de adentro del
+  // cuello y la fila de arriba (la tira monta sobre esa cara).
+  tape.cols = Array.from({ length: W }, (_, j) => ({ bot: (CP - 1) * CSW + C + j, top: (CP - 2) * CSW + C + j }));
+  tape.W = W;
+  tape.N = N;
+  const n = TAPE_ROWS * W;
+  tape.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+  tape.geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+  updateTape();
+  // Ancho de la tira desplegada (en el centro de la espalda): el diseño se
+  // reparte a lo ancho según ese largo.
+  const P = tape.geo.attributes.position.array;
+  const cum = [0];
+  for (let t = 1; t < TAPE_ROWS; t++) cum.push(cum[t - 1] + dist3(P, t * W + C / 2, P, (t - 1) * W + C / 2));
+  tape.w = cum.at(-1);
   const uv = [];
-  for (let t = 0; t <= TAPE_ROWS; t++) {
-    const d = (TAPE_W * t) / TAPE_ROWS;
-    for (let j = 0; j < W; j++) {
-      let r = N;
-      let acc = 0;
-      for (; r > 1; r--) {
-        const l = d3(r * W + j, (r - 1) * W + j);
-        if (acc + l >= d) break;
-        acc += l;
-      }
-      const l = d3(r * W + j, (r - 1) * W + j) || 1;
-      binds.push(r * W + j, (r - 1) * W + j, Math.min(1, (d - acc) / l), TAPE_IN[0] + ((TAPE_IN[1] - TAPE_IN[0]) * t) / TAPE_ROWS);
-      uv.push(1 - sj[j] / tape.len, 1 - t / TAPE_ROWS);
-    }
-  }
+  for (let t = 0; t < TAPE_ROWS; t++) for (let j = 0; j < W; j++) uv.push(1 - sj[j] / tape.len, 1 - cum[t] / tape.w);
   const idx = [];
-  for (let t = 0; t < TAPE_ROWS; t++)
+  for (let t = 0; t < TAPE_ROWS - 1; t++)
     for (let j = 0; j < W - 1; j++) {
       const a = t * W + j;
       idx.push(a, a + W, a + 1, a + 1, a + W, a + W + 1);
     }
-  const n = binds.length / 4;
-  tape.binds = binds;
-  tape.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
-  tape.geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
   tape.geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   tape.geo.setIndex(idx);
-  updateTape();
+}
+function dist3(p, a, q, b) {
+  return Math.hypot(p[a * 3] - q[b * 3], p[a * 3 + 1] - q[b * 3 + 1], p[a * 3 + 2] - q[b * 3 + 2]);
 }
 function updateTape() {
-  const g = built.geos.back;
-  const pos = g.attributes.position.array;
-  const nor = g.attributes.normal.array;
+  const pos = built.geos.back.attributes.position.array;
+  const nor = built.geos.back.attributes.normal.array;
+  const cpos = built.geos.collar.attributes.position.array;
   const P = tape.geo.attributes.position.array;
   const Nn = tape.geo.attributes.normal.array;
-  const b = tape.binds;
-  for (let i = 0; i < b.length / 4; i++) {
-    const [a, c, f, off] = [b[i * 4], b[i * 4 + 1], b[i * 4 + 2], b[i * 4 + 3]];
-    let nx = nor[a * 3] + (nor[c * 3] - nor[a * 3]) * f;
-    let ny = nor[a * 3 + 1] + (nor[c * 3 + 1] - nor[a * 3 + 1]) * f;
-    let nz = nor[a * 3 + 2] + (nor[c * 3 + 2] - nor[a * 3 + 2]) * f;
-    const l = Math.hypot(nx, ny, nz) || 1;
-    nx /= l;
-    ny /= l;
-    nz /= l;
-    for (let k = 0; k < 3; k++) P[i * 3 + k] = pos[a * 3 + k] + (pos[c * 3 + k] - pos[a * 3 + k]) * f;
-    P[i * 3] -= nx * off;
-    P[i * 3 + 1] -= ny * off;
-    P[i * 3 + 2] -= nz * off;
-    Nn[i * 3] = -nx;
-    Nn[i * 3 + 1] = -ny;
-    Nn[i * 3 + 2] = -nz;
+  const { W, N } = tape;
+  const n = [0, 0, 0];
+  const q = [0, 0, 0];
+  // Punto de la columna j a una distancia d de la costura, separado de la
+  // tela hacia adentro.
+  const onBack = (i, j, d, off) => {
+    let r = N;
+    let acc = 0;
+    for (; r > 1; r--) {
+      const l = dist3(pos, r * W + j, pos, (r - 1) * W + j);
+      if (acc + l >= d) break;
+      acc += l;
+    }
+    const a = r * W + j;
+    const c = a - W;
+    const f = Math.min(1, (d - acc) / (dist3(pos, a, pos, c) || 1));
+    for (let k = 0; k < 3; k++) n[k] = nor[a * 3 + k] + (nor[c * 3 + k] - nor[a * 3 + k]) * f;
+    const l = Math.hypot(...n) || 1;
+    for (let k = 0; k < 3; k++) {
+      P[i * 3 + k] = pos[a * 3 + k] + (pos[c * 3 + k] - pos[a * 3 + k]) * f - (n[k] / l) * off;
+      Nn[i * 3 + k] = -n[k] / l;
+    }
+  };
+  for (let j = 0; j < W; j++) {
+    const { bot, top } = tape.cols[j];
+    // Sobre el cuello: TAPE_FACE arriba del borde y envolviéndolo, por
+    // delante de la cara de adentro (contra la normal de la tela).
+    const face = dist3(cpos, bot, cpos, top) || 1;
+    const s = N * W + j;
+    const l = Math.hypot(nor[s * 3], nor[s * 3 + 1], nor[s * 3 + 2]) || 1;
+    [TAPE_FACE / face, -TAPE_OUT / face].forEach((f, t) => {
+      const i = t * W + j;
+      for (let k = 0; k < 3; k++) {
+        P[i * 3 + k] = cpos[bot * 3 + k] + (cpos[top * 3 + k] - cpos[bot * 3 + k]) * f - (nor[s * 3 + k] / l) * TAPE_OUT;
+        Nn[i * 3 + k] = -nor[s * 3 + k] / l;
+      }
+    });
+    // Sobre la tela: desde el punto de la columna más cercano al borde (puesta
+    // o colgada, el cuello se corre un poco respecto de la tela).
+    let best = Infinity;
+    let de = 0;
+    let acc = 0;
+    for (let r = N; r > N - 12; r--) {
+      const a = r * W + j;
+      const len = dist3(pos, a, pos, a - W);
+      for (let k = 0; k <= 8; k++) {
+        const t = k / 8;
+        for (let c = 0; c < 3; c++) q[c] = pos[a * 3 + c] + (pos[(a - W) * 3 + c] - pos[a * 3 + c]) * t - cpos[bot * 3 + c];
+        const dd = Math.hypot(...q);
+        if (dd < best) [best, de] = [dd, acc + len * t];
+      }
+      acc += len;
+    }
+    TAPE_DOWN.forEach((down, k) => onBack((2 + k) * W + j, j, de + down, TAPE_IN));
   }
   tape.geo.attributes.position.needsUpdate = true;
   tape.geo.attributes.normal.needsUpdate = true;
@@ -1100,7 +1140,7 @@ const SIZE_ROWS = [
 const cmUp = (mm, d = 0) => (Math.ceil(mm / 10 ** (1 - d)) / 10 ** d).toFixed(d).replace('.', ',');
 function fillSizes() {
   if (!sizesBox.open) return;
-  const sz = { ...pieceSizes(built), tape: { w: tape.len * 1000, h: TAPE_W * 1000 } };
+  const sz = { ...pieceSizes(built), tape: { w: tape.len * 1000, h: tape.w * 1000 } };
   sizesBox.querySelector('dl').innerHTML = SIZE_ROWS.map(([k, label]) => {
     const d = sz[k].h < 50 ? 1 : 0;
     return `<div><dt>${label}</dt><dd>${cmUp(sz[k].w)} × ${cmUp(sz[k].h, d)} cm</dd></div>`;
@@ -1135,13 +1175,13 @@ async function layoutPieces() {
   if (design.tape) {
     const t = design.tape;
     try {
-      const canvas = await placeTape(t, tape.len * 1000, TAPE_W * 1000);
+      const canvas = await placeTape(t, tape.len * 1000, tape.w * 1000);
       if (gen !== layoutGen) return;
       design.tapeTex?.dispose();
       design.tapeTex = new THREE.CanvasTexture(canvas);
       design.tapeTex.colorSpace = THREE.SRGBColorSpace;
       design.tapeTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-      notes.push(`tapacostura: ${cmUp(tape.len * 1000)} × ${cmUp(TAPE_W * 1000, 1)} cm`);
+      notes.push(`tapacostura: ${cmUp(tape.len * 1000)} × ${cmUp(tape.w * 1000, 1)} cm`);
       applyLook();
     } catch {
       notes.push(`${t.name}: no se pudo dibujar`);

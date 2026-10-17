@@ -97,8 +97,7 @@ const FLAT_REST = [
 // rectángulo de bordes apenas redondeados (más alto que ancho) y las puntas
 // son redondas vistas de frente.
 export function makeHanger(M) {
-  // Sin mangas, la percha llega hasta cerca de la punta de la tira.
-  const xEnd = M.sleeveless ? M.shA - 0.012 : M.shA - 0.05;
+  const xEnd = M.shA - 0.05;
   const seamY = (x) => {
     const ax = Math.abs(x);
     return ax <= M.neck.a ? 0 : (M.shY * (ax - M.neck.a)) / (M.shA - M.neck.a);
@@ -394,9 +393,8 @@ export class HangingShirt {
     const A = L.armCols / 2;
     const W = L.cols + 1;
     const WC = C + 1;
-    // Sin mangas (musculosa), no hay grilla de manga.
     const SW = L.sleeveSW;
-    const SWC = L.sleeveless ? 0 : (SW - 1) / 2 + 1;
+    const SWC = (SW - 1) / 2 + 1;
     const RC = (L.sleeveRows + L.cuffRows) / 2;
     this.dims = { C, NC, WC, SWC, RC };
 
@@ -424,7 +422,7 @@ export class HangingShirt {
     }
     // Mangas (con el puño): la primera fila es la sisa del torso.
     const sleeveMap = {};
-    for (const [key, side] of L.sleeveless ? [] : [['sleeveL', 1], ['sleeveR', -1]]) {
+    for (const [key, side] of [['sleeveL', 1], ['sleeveR', -1]]) {
       const m = new Int32Array(SWC * (RC + 1)).fill(-1);
       const loop = armholeLoopIJ(C, A, i1, i2, side);
       const cuff = key === 'sleeveL' ? 'cuffL' : 'cuffR';
@@ -474,7 +472,7 @@ export class HangingShirt {
           const m = map[key][i * WC + C - j];
           if (a >= 0 && m >= 0) mirror[a] = m;
         }
-    for (let k = 0; k < (sleeveMap.sleeveL?.length || 0); k++) {
+    for (let k = 0; k < sleeveMap.sleeveL.length; k++) {
       const a = sleeveMap.sleeveL[k];
       const m = sleeveMap.sleeveR[k];
       if (mirror[a] < 0 && mirror[m] < 0) {
@@ -540,7 +538,7 @@ export class HangingShirt {
     const torsoIds = [...new Set([...map.front, ...map.back])].filter((id) => id >= 0 && Math.abs(P[id * 3]) > 0.1 && P[id * 3 + 1] > -0.4);
     // (Se buscan para una manga y la otra copia en espejo: así las dos
     // quedan iguales aunque haya empates de distancia.)
-    for (const r of L.sleeveless ? [] : [2, 4, 6])
+    for (const r of [2, 4, 6])
       for (let k = 0; k < SWC - 1; k++) {
         const a = sleeveMap.sleeveR[r * SWC + k];
         const near = torsoIds
@@ -927,13 +925,13 @@ export class HangingShirt {
       this.binds.push({ key, ids, ws, use });
     };
     for (const key of ['front', 'back']) bindGrid(key, NC, C, (v) => [Math.floor(v / W), v % W, this.map[key], WC, NC]);
-    for (const [key, cuff] of L.sleeveless ? [] : [['sleeveL', 'cuffL'], ['sleeveR', 'cuffR']]) {
+    for (const [key, cuff] of [['sleeveL', 'cuffL'], ['sleeveR', 'cuffR']]) {
       bindGrid(key, RC, SWC, (v) => [Math.floor(v / SW), v % SW, this.sleeveMap[key], SWC, RC]);
       bindGrid(cuff, RC, SWC, (v) => [Math.floor(v / SW) + L.sleeveRows, v % SW, this.sleeveMap[key], SWC, RC]);
     }
     // Normales soldadas en las costuras (puntos que coinciden).
     const groups = new Map();
-    for (const key of ['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR'].filter((k) => this.geos[k])) {
+    for (const key of ['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR']) {
       const g = this.geos[key];
       const a = g.attributes.position.array;
       const used = new Uint8Array(g.attributes.position.count);
@@ -952,9 +950,11 @@ export class HangingShirt {
     // su panel ni atraviesa el de enfrente. (La tira del cuello se arma
     // aparte, con la cinta simulada: ver updateMeshes.)
     this.ribbons = [];
-    // (Sin mangas, los vivos de las sisas se arman igual.)
-    const lips = L.sleeveless ? ['armL', 'armR'] : ['cuffLLip', 'cuffRLip'];
-    for (const [key, ring, sign] of [['hem', L.rings.hem, 1], ...lips.map((k) => [k, L.rings[k], 1])]) {
+    for (const [key, ring, sign] of [
+      ['hem', L.rings.hem, 1],
+      ['cuffLLip', L.rings.cuffLLip, 1],
+      ['cuffRLip', L.rings.cuffRLip, 1],
+    ]) {
       const g = this.geos[key];
       const n = ring.length;
       const SWr = n + 1;

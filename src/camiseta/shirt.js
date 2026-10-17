@@ -25,17 +25,15 @@ export const DEFAULTS = {
   sleeveAngle: 40, // apertura de las mangas, grados desde la vertical
   neckDepth: 0.085, // profundidad del escote delantero
   neckStyle: 'round', // 'round' redondo · 'v' en V
-  garment: 'tee', // 'tee' manga corta · 'long' manga larga · 'tank' musculosa · 'singlet' tank top
 };
 
 // Resolución de las mallas.
 const COLS = 64; // columnas de cada mitad del torso (de costado a costado)
-const ARM_COLS = 10; // columnas de la sisa a cada lado de la costura (con mangas)
+const ARM_COLS = 10; // columnas de la sisa a cada lado de la costura
 const ROWS_LOW = 64; // del ruedo a la axila
 const ROWS_ARM = 24; // de la axila a la punta del hombro
 const ROWS_TOP = 8; // del hombro al cuello
-const SLEEVE_ROWS = 30; // filas de la manga (como mínimo: la larga lleva más)
-const SLEEVE_ROW = 0.008; // largo de cada fila de la manga larga
+const SLEEVE_ROWS = 30;
 const CUFF_ROWS = 4;
 
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -80,18 +78,9 @@ function monotone(xs, ys) {
 }
 
 // Medidas del cuerpo de la prenda según los controles.
-// Sin mangas: hombros (de la punta al cuello), sisa más honda y más ancha.
-// Musculosa: tiras de 7,5 cm; tank top: de 4,5 cm y la sisa todavía más
-// abierta.
-const SLEEVELESS = {
-  tank: { strap: 0.075, pit: -0.245, armCols: 12 },
-  singlet: { strap: 0.045, pit: -0.275, armCols: 16 },
-};
 export function measures(p) {
   const f = p.fit;
   const L = p.length;
-  const garment = ['long', 'tank', 'singlet'].includes(p.garment) ? p.garment : 'tee';
-  const bare = SLEEVELESS[garment];
   const M = {
     L,
     fit: f,
@@ -104,16 +93,10 @@ export function measures(p) {
     dropB: 0.014,
     vNeck: p.neckStyle === 'v',
     shY: -0.046, // altura de la punta del hombro
-    pitY: (bare ? bare.pit : -0.205) - 0.03 * f, // altura de la axila
+    pitY: -0.205 - 0.03 * f, // altura de la axila
     n: 2.35, // exponente de los cortes (2 = elipse)
-    garment,
-    sleeveless: !!bare,
-    armCols: bare ? bare.armCols : ARM_COLS,
   };
-  // Medio ancho de hombros; sin mangas, la punta queda al final de la tira
-  // y el hombro baja con la misma pendiente.
-  const shA = bare ? M.neck.a + bare.strap + 0.004 * f : 0.214 + 0.032 * f;
-  if (bare) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
+  const shA = 0.214 + 0.032 * f; // medio ancho de hombros
   const aC = 0.176 + 0.046 * f; // medio ancho y media profundidad del pecho
   const bC = 0.112 + 0.022 * f;
   const rows = [
@@ -143,16 +126,12 @@ export function measures(p) {
   );
   M.sc = monotone(ys, rows.map((r) => r[3]));
   M.shA = shA;
-  // Manga larga: hasta la muñeca, angosta abajo y con un puño acanalado alto.
-  const long = garment === 'long';
   M.sleeve = {
     len: p.sleeveLength,
     angle: THREE.MathUtils.degToRad(p.sleeveAngle),
-    rHem: long ? 0.041 + 0.008 * f : 0.058 + 0.016 * f,
-    cuff: long ? 0.06 : 0.026,
-    long,
+    rHem: 0.058 + 0.016 * f,
+    cuff: 0.026,
   };
-  M.sleeveRows = Math.max(SLEEVE_ROWS, 2 * Math.round(p.sleeveLength / SLEEVE_ROW / 2));
   return M;
 }
 
@@ -264,8 +243,7 @@ function buildTorso(M) {
   };
   const i1 = ROWS_LOW;
   const i2 = ROWS_LOW + ROWS_ARM;
-  const A = M.armCols;
-  const dTh = (A * Math.PI) / COLS;
+  const dTh = (ARM_COLS * Math.PI) / COLS;
   const tc = (tPit + tSh) / 2;
   const dT = (tSh - tPit) / 2;
   // Las sisas son huecos rectangulares en la grilla; alrededor de cada una
@@ -302,7 +280,7 @@ function buildTorso(M) {
     }
     // Celdas: todas menos las de las sisas.
     const idx = [];
-    const hole = (i, j) => i >= i1 && i < i2 && (j < A || j >= COLS - A);
+    const hole = (i, j) => i >= i1 && i < i2 && (j < ARM_COLS || j >= COLS - ARM_COLS);
     for (let i = 0; i < N; i++)
       for (let j = 0; j < COLS; j++) {
         if (hole(i, j)) continue;
@@ -315,7 +293,7 @@ function buildTorso(M) {
     orient(pos, idx, fromVertical);
     panels[key] = { pos, ang, idx, W, N };
   }
-  return { panels, i1, i2, N, armCols: A };
+  return { panels, i1, i2, N };
 }
 
 // Borde de cada sisa, desde la axila: sube por el frente, cruza el hombro y
@@ -346,7 +324,7 @@ export function armholeLoopIJ(cols, A, i1, i2, side) {
 }
 function armholeLoop(torso, side) {
   const W = COLS + 1;
-  return armholeLoopIJ(COLS, torso.armCols, torso.i1, torso.i2, side).map(([key, i, j]) => [key, i * W + j]);
+  return armholeLoopIJ(COLS, ARM_COLS, torso.i1, torso.i2, side).map(([key, i, j]) => [key, i * W + j]);
 }
 
 // Pliegues del torso: caída suave hacia el ruedo y tensiones que salen de la
@@ -529,7 +507,7 @@ export function buildShirt(params) {
 
   // ---------- mangas ----------
   const S = M.sleeve;
-  for (const side of M.sleeveless ? [] : [1, -1]) {
+  for (const side of [1, -1]) {
     const loop = armholeLoop(torso, side).map(([key, v]) => new THREE.Vector3().fromArray(panels[key].pos, v * 3));
     const L = loop.length;
     const top = loop[L / 2];
@@ -545,12 +523,11 @@ export function buildShirt(params) {
     const cum = [0];
     for (let k = 1; k <= L; k++) cum.push(cum[k - 1] + loop[k % L].distanceTo(loop[k - 1]));
     const per = cum[L];
-    const SR = M.sleeveRows;
-    const rows = SR + CUFF_ROWS;
+    const rows = SLEEVE_ROWS + CUFF_ROWS;
     // Costura del puño: un anillo paralelo al ruedo, así el puño es una
     // banda recta del mismo ancho todo alrededor.
     const cuffC = hemC.clone().addScaledVector(dir, -S.cuff);
-    const sRow = (r) => Math.min(1, r / SR);
+    const sRow = (r) => Math.min(1, r / SLEEVE_ROWS);
     const SW = L + 1; // columna repetida al final (costura de abajo)
     const pos = new Float32Array(SW * (rows + 1) * 3);
     const P = new THREE.Vector3();
@@ -564,12 +541,12 @@ export function buildShirt(params) {
       H.copy(hemC).addScaledVector(up, ou).addScaledVector(fwd, of);
       C.copy(cuffC).addScaledVector(up, ou).addScaledVector(fwd, of);
       const span = Lp.distanceTo(C);
-      for (let r = SR + 1; r <= rows; r++) {
-        P.lerpVectors(C, H, (r - SR) / CUFF_ROWS);
+      for (let r = SLEEVE_ROWS + 1; r <= rows; r++) {
+        P.lerpVectors(C, H, (r - SLEEVE_ROWS) / CUFF_ROWS);
         P.toArray(pos, (r * SW + k) * 3);
       }
-      for (let r = 0; r <= SR; r++) {
-        const s = r / SR;
+      for (let r = 0; r <= SLEEVE_ROWS; r++) {
+        const s = r / SLEEVE_ROWS;
         const s2 = s * s;
         const s3 = s2 * s;
         const h00 = 2 * s3 - 3 * s2 + 1;
@@ -597,7 +574,7 @@ export function buildShirt(params) {
       const b = (r * SW + L) * 3;
       for (let c = 0; c < 3; c++) nrm[a + c] = nrm[b + c] = (nrm[a + c] + nrm[b + c]) / 2;
     }
-    for (let r = 1; r < SR; r++) {
+    for (let r = 1; r < SLEEVE_ROWS; r++) {
       const s = sRow(r);
       for (let k = 0; k <= L; k++) {
         const f = cum[k] / per;
@@ -606,8 +583,6 @@ export function buildShirt(params) {
         const v = (r * SW + k) * 3;
         let d = (0.0026 + 0.002 * M.fit) * under * Math.sin(2 * Math.PI * (s * S.len / 0.045 + f * 4));
         d += 0.0007 * noise3(pos[v] * 20, pos[v + 1] * 20, pos[v + 2] * 20) * smoothstep(0, 0.1, s) * (1 - smoothstep(0.8, 1, s));
-        // Manga larga: la tela se junta en ondas sobre el puño.
-        if (S.long) d += 0.0034 * smoothstep(0.7, 0.96, s) * Math.sin(2 * Math.PI * ((s * S.len) / 0.05) + 1.8 * Math.sin(2 * Math.PI * f));
         pos[v] += nrm[v] * d;
         pos[v + 1] += nrm[v + 1] * d;
         pos[v + 2] += nrm[v + 2] * d;
@@ -617,28 +592,12 @@ export function buildShirt(params) {
     const key = side > 0 ? 'sleeveL' : 'sleeveR';
     const cuffKey = side > 0 ? 'cuffL' : 'cuffR';
     // Manga y puño: las mismas filas, separadas en el anillo del puño.
-    const cut = SR * SW;
+    const cut = SLEEVE_ROWS * SW;
     const sub = (n) => (turned ? flip(gridIndex(L, n, SW)) : gridIndex(L, n, SW));
-    parts[key] = { pos: pos.slice(0, (cut + SW) * 3), idx: sub(SR), uv: uv.slice(0, (cut + SW) * 2), rows: SR };
+    parts[key] = { pos: pos.slice(0, (cut + SW) * 3), idx: sub(SLEEVE_ROWS), uv: uv.slice(0, (cut + SW) * 2) };
     parts[cuffKey] = { pos: pos.slice(cut * 3), idx: sub(CUFF_ROWS), uv: uv.slice(cut * 2), axis: [hemC.clone(), dir.clone()] };
     parts[key].loopLen = per;
     parts[cuffKey].ring = Array.from({ length: SW }, (_, k) => ((CUFF_ROWS) * SW + k));
-  }
-
-  // ---------- vivos de las sisas (sin mangas) ----------
-  // Cada punto del borde con el de la tela que le sigue hacia adentro de la
-  // pieza (para el vivo y para que, colgada, lo siga).
-  const armRings = {};
-  if (M.sleeveless) {
-    for (const key of ['front', 'back']) panels[key].nrm = computeNormals(panels[key].pos, panels[key].idx);
-    for (const [name, side] of [['armL', 1], ['armR', -1]]) {
-      const ring = armholeLoopIJ(COLS, torso.armCols, i1, i2, side).map(([key, i, j]) => {
-        const [ii, jj] = i === i1 ? [i - 1, j] : i === i2 ? [i + 1, j] : [i, j < COLS / 2 ? j + 1 : j - 1];
-        return [key, i * W + j, ii * W + jj];
-      });
-      armRings[name] = ring;
-      parts[name] = buildBinding(ring.map(([key, v, w]) => [panels[key].pos, v, w, panels[key].nrm]), 0.011);
-    }
   }
 
   // ---------- cuello ----------
@@ -654,7 +613,6 @@ export function buildShirt(params) {
   parts.hem = buildLip(hemRing, 0.022, true);
   for (const k of ['cuffL', 'cuffR']) {
     const c = parts[k];
-    if (!c) continue;
     const SW = c.ring.length;
     const ring = [];
     for (let i = 0; i < SW - 1; i++) ring.push([c.pos, c.ring[i], c.ring[i] - SW]);
@@ -665,7 +623,7 @@ export function buildShirt(params) {
 
   // Normales, costuras soldadas y marcas de costura.
   for (const part of Object.values(parts)) part.nrm = computeNormals(part.pos, part.idx);
-  weldNormals(['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR'].filter((k) => parts[k]).map((k) => parts[k]));
+  weldNormals([parts.front, parts.back, parts.sleeveL, parts.sleeveR, parts.cuffL, parts.cuffR]);
   seamMarks(parts, N, W);
   zoneMarks(parts, M, W);
 
@@ -683,26 +641,21 @@ export function buildShirt(params) {
     geos[key] = g;
   }
   // Estructura de las mallas (para la versión colgada, que simula la tela).
-  const sleeveSW = M.sleeveless ? 0 : parts.cuffL.ring.length;
+  const sleeveSW = parts.cuffL.ring.length;
   const layout = {
     cols: COLS,
-    armCols: torso.armCols,
+    armCols: ARM_COLS,
     rows: N,
     i1,
     i2,
-    sleeveless: M.sleeveless,
-    sleeveRows: M.sleeveless ? 0 : M.sleeveRows,
-    cuffRows: M.sleeveless ? 0 : CUFF_ROWS,
+    sleeveRows: SLEEVE_ROWS,
+    cuffRows: CUFF_ROWS,
     sleeveSW,
     rings: {
       collar: neck,
       hem: [...Array.from({ length: COLS + 1 }, (_, j) => ['front', j, W + j]), ...Array.from({ length: COLS - 1 }, (_, j) => ['back', j + 1, W + j + 1])],
-      ...(M.sleeveless
-        ? armRings
-        : {
-            cuffLLip: Array.from({ length: sleeveSW - 1 }, (_, i) => ['cuffL', CUFF_ROWS * sleeveSW + i, (CUFF_ROWS - 1) * sleeveSW + i]),
-            cuffRLip: Array.from({ length: sleeveSW - 1 }, (_, i) => ['cuffR', CUFF_ROWS * sleeveSW + i, (CUFF_ROWS - 1) * sleeveSW + i]),
-          }),
+      cuffLLip: Array.from({ length: sleeveSW - 1 }, (_, i) => ['cuffL', CUFF_ROWS * sleeveSW + i, (CUFF_ROWS - 1) * sleeveSW + i]),
+      cuffRLip: Array.from({ length: sleeveSW - 1 }, (_, i) => ['cuffR', CUFF_ROWS * sleeveSW + i, (CUFF_ROWS - 1) * sleeveSW + i]),
     },
   };
   return { geos, measures: M, layout, printBase: { front: parts.front.printBase, back: parts.back.printBase } };
@@ -744,13 +697,12 @@ function printUV(parts, N, W) {
   for (const [key, cuffKey, side] of [['sleeveL', 'cuffL', 1], ['sleeveR', 'cuffR', -1]]) {
     const sl = parts[key];
     const cf = parts[cuffKey];
-    if (!sl) continue;
     const SW = cf.ring.length;
     const L = SW - 1;
     const cap = L / 2;
     const right = [0, 0, -side];
     const sx = facing(sl.pos, sl.uv, [[cap - 4, cap + 4]], right);
-    const R = sl.rows;
+    const R = SLEEVE_ROWS;
     const vEnd = (k) => sl.uv[(R * SW + k) * 2 + 1];
     sl.uv1 = new Float32Array(sl.uv.length);
     for (let r = 0; r <= R; r++)
@@ -1145,51 +1097,6 @@ function buildLip(ring, height, closed) {
   return { pos, uv, idx: orient(pos, idx, (x, y, z) => [x - center.x, y - center.y, z - center.z]) };
 }
 
-// Vivo (sisas de la musculosa): una tira acanalada que envuelve el borde, de
-// `h` de ancho por fuera y por dentro. `ring`: [posiciones, punto del borde,
-// punto de la tela que le sigue hacia adentro de la pieza, normales].
-function buildBinding(ring, h) {
-  const n = ring.length;
-  const t = 0.0015;
-  const prof = [[h, t], [0.003, t], [0.0002, t * 0.8], [-0.0012, t * 0.35], [-0.0016, 0], [-0.0012, -t * 0.35], [0.0002, -t * 0.8], [0.003, -t], [h, -t]];
-  const P = prof.length;
-  const SW = n + 1;
-  const pos = new Float32Array(SW * P * 3);
-  const uv = new Float32Array(SW * P * 2);
-  const want = new Float32Array(SW * P * 3); // de qué lado mira cada punto
-  const e = new THREE.Vector3();
-  const prev = new THREE.Vector3();
-  const up = new THREE.Vector3();
-  const out = new THREE.Vector3();
-  const q = new THREE.Vector3();
-  let u = 0;
-  for (let i = 0; i < SW; i++) {
-    const [p, v, w, nrm] = ring[i % n];
-    e.fromArray(p, v * 3);
-    up.fromArray(p, w * 3).sub(e).normalize();
-    out.fromArray(nrm, v * 3);
-    out.addScaledVector(up, -out.dot(up)).normalize();
-    if (i > 0) u += e.distanceTo(prev);
-    prev.copy(e);
-    for (let j = 0; j < P; j++) {
-      const [d, o] = prof[j];
-      q.copy(e).addScaledVector(up, d).addScaledVector(out, o);
-      q.toArray(pos, (j * SW + i) * 3);
-      uv[(j * SW + i) * 2] = u;
-      uv[(j * SW + i) * 2 + 1] = j * 0.0028;
-      // Por fuera del vivo: hacia afuera de la prenda (cara de afuera), hacia
-      // adentro (cara de adentro) y hacia el hueco en el borde.
-      q.copy(out).multiplyScalar(Math.sign(o)).addScaledVector(up, d < 0 ? -1 : 0).normalize();
-      q.toArray(want, (j * SW + i) * 3);
-    }
-  }
-  const idx = gridIndex(n, P - 1, SW);
-  const nrm = computeNormals(pos, idx);
-  let s = 0;
-  for (let k = 0; k < nrm.length; k++) s += nrm[k] * want[k];
-  return { pos, uv, idx: s < 0 ? flip(idx) : idx };
-}
-
 // Zonas de tela calada (para los tejidos que las tienen): una franja a cada
 // costado, de la axila al ruedo, y otra bajo el brazo en cada manga. 1 en la
 // zona, 0 afuera, con un borde suave.
@@ -1208,9 +1115,8 @@ function zoneMarks(parts, M, W) {
   }
   for (const key of ['sleeveL', 'sleeveR']) {
     const p = parts[key];
-    if (!p) continue;
     const n = p.pos.length / 3;
-    const SW = p.uv.length / 2 / (p.rows + 1);
+    const SW = p.uv.length / 2 / (SLEEVE_ROWS + 1);
     p.zone = new Float32Array(n);
     for (let v = 0; v < n; v++) {
       const r = Math.floor(v / SW);
@@ -1238,8 +1144,7 @@ function seamMarks(parts, N, W) {
   const loops = [];
   for (const k of ['sleeveL', 'sleeveR']) {
     const s = parts[k];
-    if (!s) continue;
-    const SW = s.uv.length / 2 / (s.rows + 1);
+    const SW = s.uv.length / 2 / (SLEEVE_ROWS + 1);
     const pts = [];
     for (let i = 0; i < SW; i++) pts.push([s.pos[i * 3], s.pos[i * 3 + 1], s.pos[i * 3 + 2]]);
     loops.push(pts);
@@ -1272,20 +1177,18 @@ function seamMarks(parts, N, W) {
   }
   for (const key of ['sleeveL', 'sleeveR']) {
     const p = parts[key];
-    if (!p) continue;
-    const SW = p.uv.length / 2 / (p.rows + 1);
+    const SW = p.uv.length / 2 / (SLEEVE_ROWS + 1);
     set(p, (v) => {
       const k = v % SW;
       const r = Math.floor(v / SW);
       const per = p.uv[(r * SW + SW - 1) * 2];
       const u = p.uv[v * 2];
-      const vEnd = p.uv[(p.rows * SW + k) * 2 + 1];
+      const vEnd = p.uv[(SLEEVE_ROWS * SW + k) * 2 + 1];
       return [Math.min(p.uv[v * 2 + 1], u, per - u, vEnd - p.uv[v * 2 + 1]), 1];
     });
   }
   for (const key of ['cuffL', 'cuffR']) {
     const p = parts[key];
-    if (!p) continue;
     const SW = p.ring.length;
     set(p, (v) => {
       const k = v % SW;

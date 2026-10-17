@@ -57,11 +57,6 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   en la barra y la percha gira debajo. Colgada, la tela se simula en vivo: al pasar el mouse
   se empuja y se balancea, y después se acomoda sola (en el celular, con un
   toque).
-- **Prenda**: manga corta, manga larga (hasta la muñeca, angosta abajo, con
-  puño acanalado alto y ondas sobre el puño), musculosa (sin mangas, tiras de
-  7,5 cm, sisa más honda) o tank top (tiras de 4,5 cm, sisa todavía más
-  abierta). Sin mangas, cada sisa lleva un vivo acanalado del color del cuello
-  que envuelve el borde.
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
   de mangas, cuello (redondo o en V) y profundidad del escote. La malla se rehace
   al instante. El cuello en V tiene el mismo ancho que el redondo; sus patas
@@ -119,8 +114,7 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
 - **Ficha**: contorno de pecho, ancho de hombros, largo, boca de manga y tela.
 - **Configuración sin tocar código**: si la página trae un bloque
   `<script type="application/json" id="camiseta-config">` con `params`
-  (incluidos `neckStyle`: `round` o `v`, y `garment`: `tee`, `long`, `tank` o
-  `singlet`), `colors`, `fabric` (`weave`,
+  (incluido `neckStyle`: `round` o `v`), `colors`, `fabric` (`weave`,
   `quality`, `weight`, `heather`), `light` (`studio`, `soft`, `contrast` o
   `day`), `mode` (`body`, `hanger` o `clips`), `spin`, `uvmap`, `design`
   (lista de `{ name, text }` con el SVG de cada pieza, o la plantilla

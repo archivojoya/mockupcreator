@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Camiseta Deportiva 3D</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" />
+  </head>
+  <body>
+    <main class="studio">
+      <section id="stage" class="stage" aria-label="Camiseta en 3D">
+        <div class="views" role="group" aria-label="Vistas">
+          <button type="button" data-view="0">Frente y espalda</button>
+          <button type="button" data-view="1">Perfiles</button>
+        </div>
+        <div class="views zooms" role="group" aria-label="Acercar">
+          <button type="button" data-zoom="chest" aria-pressed="false">Pecho</button>
+          <button type="button" data-zoom="back" aria-pressed="false">Espalda alta</button>
+          <button type="button" data-zoom="neck" aria-pressed="false">Cuello</button>
+          <button type="button" data-zoom="label" aria-pressed="false" hidden>Etiqueta</button>
+        </div>
+        <p class="hint">Arrastrá sobre una camiseta para girarla · rueda o pellizco para acercar</p>
+      </section>
+
+      <aside class="panel">
+        <header class="title">
+          <h1>Camiseta deportiva</h1>
+          <p>Modelo 3D paramétrico</p>
+        </header>
+
+        <div class="mode" role="group" aria-label="Presentación">
+          <button type="button" data-mode="body" aria-pressed="true">Con cuerpo</button>
+          <button type="button" data-mode="hanger" aria-pressed="false">En percha</button>
+          <button type="button" data-mode="clips" aria-pressed="false">Con broches</button>
+        </div>
+
+        <section class="group" aria-labelledby="g-forma">
+          <h2 id="g-forma">Forma</h2>
+          <div class="control">
+            <label for="fit">Calce</label>
+            <output id="fit-out" for="fit"></output>
+            <input id="fit" type="range" min="0" max="1" step="0.01" />
+          </div>
+          <div class="control">
+            <label for="length">Largo</label>
+            <output id="length-out" for="length"></output>
+            <input id="length" type="range" min="0.62" max="0.82" step="0.005" />
+          </div>
+          <div class="control">
+            <label for="sleeveLength">Largo de manga</label>
+            <output id="sleeveLength-out" for="sleeveLength"></output>
+            <input id="sleeveLength" type="range" min="0.13" max="0.3" step="0.005" />
+          </div>
+          <div class="control">
+            <label for="sleeveAngle">Apertura de mangas</label>
+            <output id="sleeveAngle-out" for="sleeveAngle"></output>
+            <input id="sleeveAngle" type="range" min="30" max="65" step="1" />
+          </div>
+          <div class="control">
+            <span class="label" id="neckStyle-label">Cuello</span>
+            <div class="seg" role="group" aria-labelledby="neckStyle-label">
+              <button type="button" data-neck="round" aria-pressed="true">Redondo</button>
+              <button type="button" data-neck="v" aria-pressed="false">En V</button>
+            </div>
+          </div>
+          <div class="control">
+            <label for="neckDepth">Escote</label>
+            <output id="neckDepth-out" for="neckDepth"></output>
+            <input id="neckDepth" type="range" min="0.055" max="0.12" step="0.001" />
+          </div>
+        </section>
+
+        <section class="group" aria-labelledby="g-tela">
+          <h2 id="g-tela">Tela</h2>
+          <div class="weaves" role="group" aria-label="Tejido"></div>
+          <p id="weave-note" class="note"></p>
+          <div class="control">
+            <label for="quality">Calidad</label>
+            <output id="quality-out" for="quality"></output>
+            <input id="quality" type="range" min="0" max="1" step="0.01" />
+          </div>
+          <div class="control">
+            <label for="weight">Peso</label>
+            <output id="weight-out" for="weight"></output>
+            <input id="weight" type="range" min="0" max="1" step="0.01" />
+          </div>
+          <div class="control">
+            <label for="heather">Jaspeado</label>
+            <output id="heather-out" for="heather"></output>
+            <input id="heather" type="range" min="0" max="1" step="0.01" />
+          </div>
+        </section>
+
+        <section class="group" aria-labelledby="g-colores">
+          <h2 id="g-colores">Colores</h2>
+          <div class="swatches">
+            <label class="swatch"><input id="c-body" type="color" /><span>Cuerpo</span></label>
+            <label class="swatch"><input id="c-sleeves" type="color" /><span>Mangas</span></label>
+            <label class="swatch"><input id="c-collar" type="color" /><span>Cuello</span></label>
+            <label class="swatch"><input id="c-cuffs" type="color" /><span>Puños</span></label>
+          </div>
+        </section>
+
+        <section class="group" aria-labelledby="g-diseno">
+          <h2 id="g-diseno">Diseño</h2>
+          <p class="note">Un SVG (o PNG/JPG) por pieza con sólo su diseño, a la medida de abajo; el nombre del archivo (o de la capa) dice cuál es: frente, espalda, manga, puño, cuello, tapacostura o etiqueta. La página lo ubica centrado y arriba en la pieza. Los grupos llamados "escudo" van bordados; "marca" (o "logo"), "dorsal" y "nombre" pueden ir en vinilo.</p>
+          <details class="sizes" id="design-sizes">
+            <summary>Medidas para diseñar</summary>
+            <dl></dl>
+          </details>
+          <div class="actions">
+            <button id="design-load" type="button" class="reset">Cargar diseños</button>
+            <button id="design-clear" type="button" class="reset" hidden>Quitar diseño</button>
+            <button id="template" type="button" class="reset">Plantilla completa</button>
+            <input id="design-file" type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp" multiple hidden />
+          </div>
+          <p class="note" id="design-note" aria-live="polite"></p>
+          <div id="design-kinds" hidden>
+            <div class="control" data-kind="crest" hidden>
+              <span class="label" id="crest-label">Escudo</span>
+              <div class="seg" role="group" aria-labelledby="crest-label">
+                <button type="button" data-as="emb" aria-pressed="true">Bordado</button>
+                <button type="button" data-as="print" aria-pressed="false">Sublimado</button>
+              </div>
+            </div>
+            <div class="control" data-kind="brand" hidden>
+              <span class="label" id="brand-label">Marca</span>
+              <div class="seg" role="group" aria-labelledby="brand-label">
+                <button type="button" data-as="print" aria-pressed="true">Sublimado</button>
+                <button type="button" data-as="vin" aria-pressed="false">Vinilo</button>
+              </div>
+            </div>
+            <div class="control" data-kind="number" hidden>
+              <span class="label" id="number-label">Dorsal</span>
+              <div class="seg" role="group" aria-labelledby="number-label">
+                <button type="button" data-as="print" aria-pressed="true">Sublimado</button>
+                <button type="button" data-as="vin" aria-pressed="false">Vinilo</button>
+              </div>
+            </div>
+            <div class="control" data-kind="name" hidden>
+              <span class="label" id="name-label">Nombre</span>
+              <div class="seg" role="group" aria-labelledby="name-label">
+                <button type="button" data-as="print" aria-pressed="true">Sublimado</button>
+                <button type="button" data-as="vin" aria-pressed="false">Vinilo</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="group" aria-labelledby="g-vista">
+          <h2 id="g-vista">Vista</h2>
+          <div class="control">
+            <span class="label" id="light-label">Luz</span>
+            <div class="seg" role="group" aria-labelledby="light-label">
+              <button type="button" data-light="studio" aria-pressed="true">Estudio</button>
+              <button type="button" data-light="soft" aria-pressed="false">Pareja</button>
+              <button type="button" data-light="contrast" aria-pressed="false">Contraste</button>
+              <button type="button" data-light="day" aria-pressed="false">Día</button>
+            </div>
+          </div>
+          <label class="toggle"><input id="spin" type="checkbox" /> Girar solas</label>
+          <label class="toggle"><input id="uvmap" type="checkbox" /> Mapa de estampado</label>
+          <button id="reset" type="button" class="reset">Restablecer todo</button>
+        </section>
+
+        <section class="group spec" aria-labelledby="g-ficha">
+          <h2 id="g-ficha">Ficha</h2>
+          <dl>
+            <div><dt>Contorno de pecho</dt><dd id="s-chest"></dd></div>
+            <div><dt>Ancho de hombros</dt><dd id="s-shoulders"></dd></div>
+            <div><dt>Largo total</dt><dd id="s-length"></dd></div>
+            <div><dt>Boca de manga</dt><dd id="s-sleeve"></dd></div>
+            <div><dt>Tela</dt><dd id="s-fabric"></dd></div>
+          </dl>
+        </section>
+      </aside>
+    </main>
+    <script type="module" src="/src/camiseta/main.js"></script>
+  </body>
+</html>

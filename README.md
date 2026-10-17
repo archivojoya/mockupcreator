@@ -44,7 +44,8 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   abajo inclina la cámara); la rueda o el pellizco acercan, hacia donde está
   el mouse. **Pecho**, **Espalda alta** y **Cuello** llevan la cámara cerca de
   la tela (el pecho y el escote de la de la izquierda, la espalda de la de la
-  derecha), aunque estén colgadas o giradas. **Girar solas** gira cada una
+  derecha), aunque estén colgadas o giradas; **Etiqueta** (si hay una) va a
+  la del ruedo. **Girar solas** gira cada una
   sobre su eje. El mouse empuja la tela de cualquiera de las dos.
 
 - **Presentación**: con cuerpo (forma fija, como puesta), en percha o con
@@ -81,7 +82,8 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   marca el relieve y los pliegues) y día (sol cálido y cielo azulado).
 - **Colores** por parte: cuerpo, mangas, cuello y puños.
 - **Diseño propio** (`src/camiseta/print.js`): se cargan uno o varios SVG
-  con sólo el diseño de cada pieza (frente, espalda, manga, puño o cuello: lo
+  (o PNG, JPG o WebP) con sólo el diseño de cada pieza (frente, espalda,
+  manga, puño, cuello, tapacostura o etiqueta: lo
   dice el nombre del archivo, o el de cada capa si vienen todas en un
   archivo; manga y puño van a los dos lados salvo que digan izquierda o
   derecha). **Medidas para diseñar** da el ancho y el alto de cada pieza para
@@ -100,12 +102,20 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     diseño. El bordado sube 1,1 mm con el borde redondeado, deja una sombra
     alrededor y tiene puntadas de relleno (se ven al acercar) y hilo con
     brillo; el vinilo es liso, semimate, con un borde fino y más reflejo.
-  - **Tapacostura**: una tira fina (unos 1,1 cm desplegada) por dentro de la
-    espalda, de hombro a hombro: monta sobre el borde de la cara de adentro
-    del cuello, lo tapa y baja pegada a la tela; de frente se ve como una
-    línea fina bajo el cuello. Un SVG con "tapacostura" en el
-    nombre lleva su diseño (se lee derecho desde adentro); si no, va lisa del
-    color del cuello.
+  - **Tapacostura**: una tira fina por dentro de la espalda, de hombro a
+    hombro: cubre los últimos 7 mm de la cara de adentro del cuello, envuelve
+    su borde y baja pegada a la tela. Un archivo con "tapacostura" en el
+    nombre lleva su diseño (unos 21 × 0,8 cm, se lee derecho desde adentro;
+    se ve entero de frente, por el escote); si no, va lisa del color del
+    cuello.
+  - **Etiqueta**: una etiqueta tejida de 1,6 × 2,1 cm cosida por afuera
+    bajo el pespunte del ruedo, abajo a la derecha del frente (a 6 cm del
+    costado), que envuelve el borde y sigue por dentro, como las de verdad.
+    Aparece al cargar un archivo con "etiqueta" en el nombre: su diseño se
+    teje (los colores principales en una grilla de hilos de 0,25 mm, con
+    bordes escalonados) y la trama marca relieve (hilos horizontales en el
+    fondo, en diagonal en el dibujo). Sigue al ruedo colgada; el
+    acercamiento **Etiqueta** la muestra de cerca.
   - **Revés**: por dentro no se ve el estampado; la tela es lisa, del color
     que más hay en el diseño de cada pieza.
   - **Plantilla completa** (opcional) baja un SVG a escala 1:1 (mm) con

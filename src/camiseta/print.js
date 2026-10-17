@@ -259,6 +259,7 @@ export function printTexture(key, canvas, anisotropy = 4) {
 // el SVG dice su tamaño en unidades reales (mm, cm, in, pt) va a ese tamaño;
 // si no, se agranda o achica hasta cubrir la pieza.
 const NAMES = [
+  ['label', /etiqueta|label/i],
   ['front', /frente|front|delanter/i],
   ['back', /espalda|(^|[^a-z])back([^a-z]|$)|dorso|trasera/i],
   ['sleeve', /manga|sleeve/i],
@@ -266,7 +267,7 @@ const NAMES = [
   ['tape', /tapa ?costura|tapa ?cuello|tape|cinta/i],
   ['collar', /cuello|collar/i],
 ];
-export const PIECE_LABELS = { front: 'Frente', back: 'Espalda', sleeveL: 'Manga izquierda', sleeveR: 'Manga derecha', cuffL: 'Puño izquierdo', cuffR: 'Puño derecho', collar: 'Cuello', tape: 'Tapacostura' };
+export const PIECE_LABELS = { front: 'Frente', back: 'Espalda', sleeveL: 'Manga izquierda', sleeveR: 'Manga derecha', cuffL: 'Puño izquierdo', cuffR: 'Puño derecho', collar: 'Cuello', tape: 'Tapacostura', label: 'Etiqueta' };
 export function pieceKeys(name) {
   name = name.normalize('NFC');
   for (const [base, re] of NAMES) {
@@ -659,4 +660,116 @@ export async function placeTape(piece, lengthMm, widthMm) {
     URL.revokeObjectURL(url);
   }
   return canvas;
+}
+
+// Etiqueta tejida (ancho × alto de la cara de afuera, en mm): el diseño la
+// cubre, centrado (a su tamaño real si lo dice), y se teje: queda en una
+// grilla de hilos de WEAVE mm, con los colores que más hay (bordes
+// escalonados, como una etiqueta de verdad). El relieve (normalMap) marca la
+// trama: hilos horizontales en el fondo y flotes en diagonal en el dibujo.
+const WEAVE = 0.25;
+export async function placeLabel(piece, wMm, hMm) {
+  const k = 24; // px/mm
+  const [, , fw, fh] = piece.vb;
+  const real = piece.mm && Math.abs((fw * piece.mm) / wMm - 1) < 0.6 && Math.abs((fh * piece.mm) / hMm - 1) < 0.6;
+  const s = real ? piece.mm : Math.max(wMm / fw, hMm / fh);
+  const W = Math.round(wMm * k);
+  const H = Math.round(hMm * k);
+  const full = document.createElement('canvas');
+  [full.width, full.height] = [W, H];
+  const pw = Math.max(1, Math.round(fw * s * k));
+  const ph = Math.max(1, Math.round(fh * s * k));
+  const doc = new DOMParser().parseFromString(piece.svg, 'image/svg+xml');
+  const root = doc.documentElement;
+  root.setAttribute('viewBox', piece.vb.join(' '));
+  root.setAttribute('width', pw);
+  root.setAttribute('height', ph);
+  root.setAttribute('preserveAspectRatio', 'none');
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(doc)], { type: 'image/svg+xml' }));
+  const fx = full.getContext('2d');
+  fx.fillStyle = '#ffffff';
+  fx.fillRect(0, 0, W, H);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    fx.drawImage(img, (W - pw) / 2, (H - ph) / 2, pw, ph);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  // Paleta: los colores que cubren al menos el 1 % (agrupados de a 16 por canal).
+  const px = fx.getImageData(0, 0, W, H).data;
+  const bins = new Map();
+  for (let i = 0; i < px.length; i += 4) {
+    const key = ((px[i] >> 4) << 8) | ((px[i + 1] >> 4) << 4) | (px[i + 2] >> 4);
+    const b = bins.get(key) || [0, 0, 0, 0];
+    b[0]++;
+    b[1] += px[i];
+    b[2] += px[i + 1];
+    b[3] += px[i + 2];
+    bins.set(key, b);
+  }
+  const palette = [...bins.values()]
+    .filter((b) => b[0] >= (W * H) / 100)
+    .sort((a, b) => b[0] - a[0])
+    .slice(0, 6)
+    .map((b) => [b[1] / b[0], b[2] / b[0], b[3] / b[0]]);
+  // Grilla de hilos: cada celda toma el color de la paleta más cercano al
+  // promedio de lo que cubre; el primero (el que más hay) es el fondo.
+  const gw = Math.round(wMm / WEAVE);
+  const gh = Math.round(hMm / WEAVE);
+  const grid = document.createElement('canvas');
+  [grid.width, grid.height] = [gw, gh];
+  const gx = grid.getContext('2d');
+  gx.imageSmoothingQuality = 'high';
+  gx.drawImage(full, 0, 0, gw, gh);
+  const g = gx.getImageData(0, 0, gw, gh);
+  const ink = new Uint8Array(gw * gh);
+  for (let c = 0; c < gw * g.height; c++) {
+    let best = 0;
+    let bd = Infinity;
+    palette.forEach((p, n) => {
+      const d = (g.data[c * 4] - p[0]) ** 2 + (g.data[c * 4 + 1] - p[1]) ** 2 + (g.data[c * 4 + 2] - p[2]) ** 2;
+      if (d < bd) [bd, best] = [d, n];
+    });
+    ink[c] = best ? 1 : 0;
+    for (let ch = 0; ch < 3; ch++) g.data[c * 4 + ch] = palette[best][ch];
+    g.data[c * 4 + 3] = 255;
+  }
+  gx.putImageData(g, 0, 0);
+  const color = document.createElement('canvas');
+  [color.width, color.height] = [W, H];
+  const cx = color.getContext('2d');
+  cx.imageSmoothingEnabled = false;
+  cx.drawImage(grid, 0, 0, W, H);
+  // Relieve: altura de los hilos (y el dibujo apenas más alto), a normales.
+  const hgt = new Float32Array(W * H);
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const mx = x / k;
+      const my = y / k;
+      const c = Math.min(gh - 1, Math.floor(my / WEAVE)) * gw + Math.min(gw - 1, Math.floor(mx / WEAVE));
+      const t = ink[c] ? (mx + my) / (WEAVE * 1.6) : my / WEAVE;
+      const thread = Math.sin(Math.PI * (t - Math.floor(t))) ** 0.6;
+      const warp = ink[c] ? 0 : 0.25 * Math.sin(Math.PI * ((mx / (WEAVE * 2)) % 1)) ** 2;
+      hgt[y * W + x] = thread - warp + (ink[c] ? 0.5 : 0);
+    }
+  const normal = document.createElement('canvas');
+  [normal.width, normal.height] = [W, H];
+  const nx = normal.getContext('2d');
+  const nd = nx.createImageData(W, H);
+  const amp = 0.9;
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const dx = (hgt[y * W + Math.min(W - 1, x + 1)] - hgt[y * W + Math.max(0, x - 1)]) * amp;
+      const dy = (hgt[Math.min(H - 1, y + 1) * W + x] - hgt[Math.max(0, y - 1) * W + x]) * amp;
+      const l = Math.hypot(dx, dy, 1);
+      const i = (y * W + x) * 4;
+      nd.data[i] = (0.5 - dx / l / 2) * 255;
+      nd.data[i + 1] = (0.5 + dy / l / 2) * 255;
+      nd.data[i + 2] = (0.5 + 0.5 / l) * 255;
+      nd.data[i + 3] = 255;
+    }
+  nx.putImageData(nd, 0, 0);
+  return { color, normal, real, w: real ? fw * piece.mm : wMm, h: real ? fh * piece.mm : hMm };
 }

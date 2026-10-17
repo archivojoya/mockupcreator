@@ -5,7 +5,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS, flattenPrint } from './shirt.js';
 import { makeHanger, makeClipHanger, HangingShirt, RAIL_R } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
-import { templateSVG, readDesign, printTexture, readPieces, isolateLayer, placePiece, placeTape, pieceSizes, buildApplique, KINDS } from './print.js';
+import { templateSVG, readDesign, printTexture, readPieces, isolateLayer, placePiece, placeTape, placeLabel, pieceSizes, buildApplique, KINDS } from './print.js';
 import './style.css';
 
 const COLORS = { body: '#c81e3a', sleeves: '#c81e3a', collar: '#17191d', cuffs: '#17191d' };
@@ -415,7 +415,7 @@ const uvMaps = {};
 // (escudo, marca, dorsal, nombre); `kinds`: cómo va cada una (bordado,
 // vinilo o estampado).
 const KIND_NAMES = KINDS.map(([kind]) => kind);
-const design = { textures: {}, found: [], inside: {}, pieces: {}, tape: null, tapeTex: null, mode: null, parts: {}, app: {}, kinds: { crest: 'emb', brand: 'print', number: 'print', name: 'print' } };
+const design = { textures: {}, found: [], inside: {}, pieces: {}, tape: null, tapeTex: null, label: null, labelTex: null, mode: null, parts: {}, app: {}, kinds: { crest: 'emb', brand: 'print', number: 'print', name: 'print' } };
 // Color que más hay en el diseño de una pieza (lo transparente cuenta como
 // el color de la pieza: null). Es el color del revés de la tela.
 function dominantColor(canvas, rect = [0, 0, canvas.width, canvas.height]) {
@@ -522,16 +522,17 @@ let built = null;
 let drape = null;
 
 // Tapacostura: una tira fina por dentro de la espalda, sobre la costura del
-// cuello, de hombro a hombro, como se cose de verdad: monta TAPE_FACE sobre
-// el borde de la cara de adentro del cuello (lo tapa), lo envuelve y baja
-// hasta quedar pegada a la tela de la espalda (TAPE_IN), TAPE_DOWN por
-// debajo de ese borde. Sigue al cuello y a la tela, puesta o colgada. Mirada
-// desde adentro (desde el frente, por el escote), su diseño se lee derecho;
-// con cuerpo se ve sobre todo la parte que monta sobre el cuello.
-const TAPE_FACE = 0.002;
+// cuello, de hombro a hombro, como se cose de verdad: cubre TAPE_FACE de la
+// cara de adentro del cuello (por delante de ella, TAPE_OUT), envuelve su
+// borde y baja hasta quedar pegada a la tela de la espalda (TAPE_IN),
+// TAPE_DOWN por debajo de ese borde. El diseño va en la parte que cubre el
+// cuello (la que se ve de frente, por el escote); lo que baja a la tela sigue
+// el color de su borde de abajo. Sigue al cuello y a la tela, puesta o
+// colgada. Mirada desde adentro, su diseño se lee derecho.
+const TAPE_FACE = 0.007;
 const TAPE_OUT = 0.0006; // por delante de la cara de adentro del cuello
 const TAPE_IN = 0.0012; // separación de la tela
-const TAPE_DOWN = [0.001, 0.003];
+const TAPE_DOWN = [0.0005, 0.0015];
 const tapeMat = new THREE.MeshStandardMaterial({ roughness: 0.72, side: THREE.DoubleSide });
 const tape = { geo: new THREE.BufferGeometry(), cols: null, W: 0, N: 0, len: 0, w: 0 };
 for (const rig of rigs) {
@@ -559,14 +560,12 @@ function buildTape() {
   tape.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
   tape.geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
   updateTape();
-  // Ancho de la tira desplegada (en el centro de la espalda): el diseño se
-  // reparte a lo ancho según ese largo.
+  // Ancho del diseño: lo que cubre el cuello, hasta el borde envuelto (en el
+  // centro de la espalda).
   const P = tape.geo.attributes.position.array;
-  const cum = [0];
-  for (let t = 1; t < TAPE_ROWS; t++) cum.push(cum[t - 1] + dist3(P, t * W + C / 2, P, (t - 1) * W + C / 2));
-  tape.w = cum.at(-1);
+  tape.w = dist3(P, C / 2, P, W + C / 2);
   const uv = [];
-  for (let t = 0; t < TAPE_ROWS; t++) for (let j = 0; j < W; j++) uv.push(1 - sj[j] / tape.len, 1 - cum[t] / tape.w);
+  for (let t = 0; t < TAPE_ROWS; t++) for (let j = 0; j < W; j++) uv.push(1 - sj[j] / tape.len, t ? 0 : 1);
   const idx = [];
   for (let t = 0; t < TAPE_ROWS - 1; t++)
     for (let j = 0; j < W - 1; j++) {
@@ -644,6 +643,120 @@ function updateTape() {
   tape.geo.attributes.normal.needsUpdate = true;
   tape.geo.computeBoundingSphere();
 }
+// Etiqueta tejida del ruedo: cosida por afuera bajo el pespunte, abajo a la
+// derecha del frente (LABEL_SIDE de la costura del costado a su centro),
+// envuelve el borde y sigue por dentro. La cara de afuera mide LABEL_W ×
+// LABEL_H (de su doblez de arriba al borde del ruedo). Es rígida: se apoya en
+// un marco que sale del ruedo (borde, a lo largo y hacia arriba por la tela),
+// puesta o colgada.
+const LABEL_W = 0.016;
+const LABEL_H = 0.021;
+const LABEL_SIDE = 0.06;
+const LABEL_OFF = 0.0006; // por fuera de la tela
+const LABEL_IN = -0.003; // por dentro del dobladillo
+const labelMat = new THREE.MeshStandardMaterial({ roughness: 0.6, side: THREE.DoubleSide });
+const label = { geo: null, j: 0, f: 0, sign: 1, meshes: [] };
+// Perfil (alto sobre el borde, separación de la tela) de afuera hacia
+// adentro: doblez de arriba (la punta va metida debajo), cara de afuera,
+// vuelta alrededor del borde del ruedo y cara de adentro.
+function labelGeometry() {
+  const prof = [];
+  const rTop = (LABEL_OFF - 0.0002) / 2;
+  prof.push([LABEL_H - 0.002, 0.0002]);
+  for (let a = 0; a <= 6; a++) {
+    const t = (Math.PI * a) / 6;
+    prof.push([LABEL_H - rTop + Math.sin(t) * rTop, 0.0002 + rTop - Math.cos(t) * rTop]);
+  }
+  const R = (LABEL_OFF - LABEL_IN) / 2;
+  const yb = R - 0.0014;
+  prof.push([LABEL_H * 0.5, LABEL_OFF]);
+  for (let a = 0; a <= 10; a++) {
+    const t = (Math.PI * a) / 10;
+    prof.push([yb - Math.sin(t) * R, LABEL_IN + R + Math.cos(t) * R]);
+  }
+  prof.push([LABEL_H * 0.5, LABEL_IN], [LABEL_H - 0.002, LABEL_IN]);
+  const XS = 8;
+  const P = prof.length;
+  const pos = [];
+  const uv = [];
+  for (let r = 0; r < P; r++)
+    for (let c = 0; c <= XS; c++) {
+      const x = (c / XS - 0.5) * LABEL_W;
+      const [y, z] = prof[r];
+      pos.push(x, y, z);
+      // Las dos caras muestran el diseño derecho (la de adentro, espejada).
+      const out = z > (LABEL_OFF + LABEL_IN) / 2;
+      uv.push(out ? c / XS : 1 - c / XS, Math.min(1, Math.max(0, y / LABEL_H)));
+    }
+  const idx = [];
+  for (let r = 0; r < P - 1; r++)
+    for (let c = 0; c < XS; c++) {
+      const a = r * (XS + 1) + c;
+      idx.push(a, a + XS + 1, a + 1, a + 1, a + XS + 1, a + XS + 2);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+label.geo = labelGeometry();
+for (const rig of rigs) {
+  const m = new THREE.Mesh(label.geo, labelMat);
+  m.matrixAutoUpdate = false;
+  m.visible = false;
+  m.castShadow = true;
+  m.receiveShadow = true;
+  rig.userData.inner.add(m);
+  label.meshes.push(m);
+}
+// Columna del ruedo del frente: desde la costura del costado de la derecha
+// (x > 0, mirando el frente) hasta LABEL_SIDE a lo largo del borde.
+function buildLabel() {
+  const pos = built.geos.front.attributes.position.array;
+  const C = built.layout.cols;
+  const right = pos[C * 3] > pos[0];
+  const step = right ? -1 : 1;
+  let j = right ? C : 0;
+  let acc = 0;
+  label.f = 0;
+  for (; j + step >= 0 && j + step <= C; j += step) {
+    const l = Math.hypot(pos[(j + step) * 3] - pos[j * 3], pos[(j + step) * 3 + 1] - pos[j * 3 + 1], pos[(j + step) * 3 + 2] - pos[j * 3 + 2]);
+    if (acc + l >= LABEL_SIDE) {
+      label.f = (LABEL_SIDE - acc) / l;
+      break;
+    }
+    acc += l;
+  }
+  // Del lado de j hacia j + step: a lo largo apunta a la izquierda de quien
+  // mira; se da vuelta para que apunte a la derecha.
+  label.j = j;
+  label.step = step;
+  updateLabel();
+}
+const _o = new THREE.Vector3();
+const _t = new THREE.Vector3();
+const _u = new THREE.Vector3();
+const _n = new THREE.Vector3();
+function updateLabel() {
+  const pos = built.geos.front.attributes.position.array;
+  const W = built.layout.cols + 1;
+  const { j, step, f } = label;
+  const at = (v, i) => v.fromArray(pos, i * 3);
+  // Borde del ruedo y la fila de unos 2 cm más arriba.
+  at(_o, j).lerp(at(_t, j + step), f);
+  const up = Math.min(built.layout.rows, 3);
+  at(_u, up * W + j).lerp(at(_n, up * W + j + step), f).sub(_o);
+  at(_t, j + step).sub(at(_n, j)).multiplyScalar(-1);
+  _t.normalize();
+  _u.addScaledVector(_t, -_u.dot(_t)).normalize();
+  _n.crossVectors(_t, _u);
+  for (const m of label.meshes) {
+    m.matrix.makeBasis(_t, _u, _n).setPosition(_o);
+    m.matrixWorldNeedsUpdate = true;
+  }
+}
 // Distancia entre las camisetas según su ancho (con cuerpo, mangas abiertas):
 // de frente quedan a PAIR_MARGIN de tocarse; de perfil, según su fondo.
 function fitPair() {
@@ -670,6 +783,7 @@ function rebuild() {
     mesh.geometry = twins[k].geometry = built.geos[k];
   }
   buildTape();
+  buildLabel();
   followFlat();
   // Colgada: la tela arranca con la forma puesta y cae (sobre la percha, o
   // sostenida por los broches).
@@ -691,6 +805,7 @@ function rebuild() {
     drape.updateMeshes = () => {
       update();
       updateTape();
+      updateLabel();
     };
     for (const k of Object.keys(supportMaterials)) {
       supports[0].parts[k].geometry.dispose();
@@ -712,6 +827,12 @@ function applyLook() {
   tapeMat.map = view.uvmap ? null : design.tapeTex || null;
   tapeMat.color.set(tapeMat.map ? '#ffffff' : view.uvmap ? '#cfcac0' : colors.collar);
   tapeMat.needsUpdate = true;
+  const lt = !view.uvmap && design.labelTex;
+  labelMat.map = lt ? lt.color : null;
+  labelMat.normalMap = lt ? lt.normal : null;
+  labelMat.needsUpdate = true;
+  for (const m of label.meshes) m.visible = !!lt;
+  document.querySelector('[data-zoom="label"]').hidden = !design.labelTex;
   for (const [k, mesh] of Object.entries(meshes)) {
     const def = PARTS[k];
     const m = mesh.material;
@@ -1067,6 +1188,11 @@ document.getElementById('template').addEventListener('click', () => {
   ensureFlat();
   download('plantilla-camiseta.svg', templateSVG(built, params, colors), 'image/svg+xml');
 });
+function disposeLabel() {
+  design.labelTex?.color.dispose();
+  design.labelTex?.normal.dispose();
+  design.labelTex = null;
+}
 function clearDesign() {
   for (const t of Object.values(design.textures)) t.dispose();
   for (const a of Object.values(design.app)) a.color.dispose(), a.shape.dispose();
@@ -1080,6 +1206,8 @@ function clearDesign() {
   design.tape = null;
   design.tapeTex?.dispose();
   design.tapeTex = null;
+  design.label = null;
+  disposeLabel();
   designClear.hidden = true;
   kindsBox.hidden = true;
 }
@@ -1136,11 +1264,12 @@ const SIZE_ROWS = [
   ['cuffR', 'Puño (cada uno)'],
   ['collar', 'Cuello (vuelta entera)'],
   ['tape', 'Tapacostura (por dentro)'],
+  ['label', 'Etiqueta (ruedo, cara de afuera)'],
 ];
 const cmUp = (mm, d = 0) => (Math.ceil(mm / 10 ** (1 - d)) / 10 ** d).toFixed(d).replace('.', ',');
 function fillSizes() {
   if (!sizesBox.open) return;
-  const sz = { ...pieceSizes(built), tape: { w: tape.len * 1000, h: tape.w * 1000 } };
+  const sz = { ...pieceSizes(built), tape: { w: tape.len * 1000, h: tape.w * 1000 }, label: { w: LABEL_W * 1000, h: LABEL_H * 1000 } };
   sizesBox.querySelector('dl').innerHTML = SIZE_ROWS.map(([k, label]) => {
     const d = sz[k].h < 50 ? 1 : 0;
     return `<div><dt>${label}</dt><dd>${cmUp(sz[k].w)} × ${cmUp(sz[k].h, d)} cm</dd></div>`;
@@ -1187,19 +1316,38 @@ async function layoutPieces() {
       notes.push(`${t.name}: no se pudo dibujar`);
     }
   }
+  if (design.label) {
+    const l = design.label;
+    try {
+      const r = await placeLabel(l, LABEL_W * 1000, LABEL_H * 1000);
+      if (gen !== layoutGen) return;
+      disposeLabel();
+      const tex = (c, srgb) => {
+        const t = new THREE.CanvasTexture(c);
+        if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+        return t;
+      };
+      design.labelTex = { color: tex(r.color, true), normal: tex(r.normal, false) };
+      notes.push(`etiqueta: ${cmUp(LABEL_W * 1000, 1)} × ${cmUp(LABEL_H * 1000, 1)} cm${r.real ? '' : ' (ajustada)'}`);
+    } catch {
+      notes.push(`${l.name}: no se pudo dibujar`);
+    }
+  }
   design.found = Object.keys(placed);
   if (design.tape) design.found.push('tape');
+  if (design.labelTex) design.found.push('label');
   designClear.hidden = !design.found.length;
   designNote.textContent = notes.length ? `${notes.join(' · ')}.` : '';
   applyLook();
 }
-const PIECE_NAMES = { front: 'frente', back: 'espalda', sleeveL: 'manga izquierda', sleeveR: 'manga derecha', cuffL: 'puño izquierdo', cuffR: 'puño derecho', collar: 'cuello', tape: 'tapacostura' };
+const PIECE_NAMES = { front: 'frente', back: 'espalda', sleeveL: 'manga izquierda', sleeveR: 'manga derecha', cuffL: 'puño izquierdo', cuffR: 'puño derecho', collar: 'cuello', tape: 'tapacostura', label: 'etiqueta' };
 async function loadFiles(files) {
   designNote.textContent = 'Leyendo…';
   const { pieces, template, unknown } = readPieces(files);
   if (template) return loadDesign(template, 'la plantilla');
   if (!pieces.length) {
-    designNote.textContent = `No sé a qué pieza va ${unknown.join(', ')}: poné en el nombre del archivo (o de la capa) frente, espalda, manga, puño o cuello.`;
+    designNote.textContent = `No sé a qué pieza va ${unknown.join(', ')}: poné en el nombre del archivo (o de la capa) frente, espalda, manga, puño, cuello, tapacostura o etiqueta.`;
     return;
   }
   if (design.mode !== 'pieces') clearDesign();
@@ -1211,6 +1359,7 @@ async function loadFiles(files) {
       Object.assign(p, iso, { doc: null, layer: null });
     }
     if (p.keys.includes('tape')) design.tape = p;
+    else if (p.keys.includes('label')) design.label = p;
     else for (const k of p.keys) design.pieces[k] = p;
   }
   if (view.uvmap) {
@@ -1244,7 +1393,28 @@ async function loadDesign(text, name = 'diseño') {
 }
 const designFile = document.getElementById('design-file');
 document.getElementById('design-load').addEventListener('click', () => designFile.click());
-const readFiles = async (list) => Promise.all([...list].filter((f) => /\.svg$/i.test(f.name) || f.type === 'image/svg+xml').map(async (f) => ({ name: f.name, text: await f.text() })));
+// Los SVG se leen tal cual; una imagen (PNG, JPG, WebP) va dentro de un SVG
+// de su tamaño en píxeles.
+const RASTER = /^image\/(png|jpeg|webp)$/;
+async function rasterSVG(file) {
+  const url = await new Promise((ok, fail) => {
+    const r = new FileReader();
+    r.onload = () => ok(r.result);
+    r.onerror = fail;
+    r.readAsDataURL(file);
+  });
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  const [w, h] = [img.naturalWidth, img.naturalHeight];
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><image width="${w}" height="${h}" preserveAspectRatio="none" href="${url}" xlink:href="${url}"/></svg>`;
+}
+const readFiles = async (list) =>
+  Promise.all(
+    [...list]
+      .filter((f) => /\.svg$/i.test(f.name) || f.type === 'image/svg+xml' || RASTER.test(f.type))
+      .map(async (f) => ({ name: f.name, text: RASTER.test(f.type) ? await rasterSVG(f) : await f.text() })),
+  );
 designFile.addEventListener('change', async () => {
   const files = await readFiles(designFile.files);
   if (files.length) await loadFiles(files);
@@ -1335,6 +1505,7 @@ const ZOOMS = {
   neck: { rig: 0, key: 'back', below: 0.012, dist: 0.34, from: 'front' },
 };
 function zoomTo(name) {
+  if (name === 'label') return zoomLabel();
   const z = ZOOMS[name];
   const mesh = (z.rig ? twins : meshes)[z.key];
   const g = mesh.geometry;
@@ -1361,6 +1532,17 @@ function zoomTo(name) {
   n.normalize();
   flyTo(p, p.clone().addScaledVector(n, z.dist));
   zoomButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.zoom === name)));
+}
+// Etiqueta: de frente a su cara de afuera, apenas de arriba.
+function zoomLabel() {
+  const m = label.meshes[0];
+  m.updateWorldMatrix(true, false);
+  const p = new THREE.Vector3(0, LABEL_H * 0.45, LABEL_OFF).applyMatrix4(m.matrixWorld);
+  const n = new THREE.Vector3(0, 0, 1).transformDirection(m.matrixWorld);
+  n.y = Math.max(n.y, 0) + 0.25;
+  n.normalize();
+  flyTo(p, p.clone().addScaledVector(n, 0.2));
+  zoomButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.zoom === 'label')));
 }
 zoomButtons.forEach((b) => b.addEventListener('click', () => zoomTo(b.dataset.zoom)));
 viewButtons[0].setAttribute('aria-pressed', 'true');

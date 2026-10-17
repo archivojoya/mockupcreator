@@ -19,6 +19,7 @@
           <button type="button" data-zoom="chest" aria-pressed="false">Pecho</button>
           <button type="button" data-zoom="back" aria-pressed="false">Espalda alta</button>
           <button type="button" data-zoom="neck" aria-pressed="false">Cuello</button>
+          <button type="button" data-zoom="label" aria-pressed="false" hidden>Etiqueta</button>
         </div>
         <p class="hint">Arrastrá sobre una camiseta para girarla · rueda o pellizco para acercar</p>
       </section>
@@ -104,7 +105,7 @@
 
         <section class="group" aria-labelledby="g-diseno">
           <h2 id="g-diseno">Diseño</h2>
-          <p class="note">Un SVG por pieza con sólo su diseño, a la medida de abajo; el nombre del archivo (o de la capa) dice cuál es: frente, espalda, manga, puño o cuello. La página lo ubica centrado y arriba en la pieza. Los grupos llamados "escudo" van bordados; "marca" (o "logo"), "dorsal" y "nombre" pueden ir en vinilo.</p>
+          <p class="note">Un SVG (o PNG/JPG) por pieza con sólo su diseño, a la medida de abajo; el nombre del archivo (o de la capa) dice cuál es: frente, espalda, manga, puño, cuello, tapacostura o etiqueta. La página lo ubica centrado y arriba en la pieza. Los grupos llamados "escudo" van bordados; "marca" (o "logo"), "dorsal" y "nombre" pueden ir en vinilo.</p>
           <details class="sizes" id="design-sizes">
             <summary>Medidas para diseñar</summary>
             <dl></dl>
@@ -113,7 +114,7 @@
             <button id="design-load" type="button" class="reset">Cargar diseños</button>
             <button id="design-clear" type="button" class="reset" hidden>Quitar diseño</button>
             <button id="template" type="button" class="reset">Plantilla completa</button>
-            <input id="design-file" type="file" accept=".svg,image/svg+xml" multiple hidden />
+            <input id="design-file" type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp" multiple hidden />
           </div>
           <p class="note" id="design-note" aria-live="polite"></p>
           <div id="design-kinds" hidden>

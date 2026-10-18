@@ -27,6 +27,11 @@ const DAMP = 0.991; // amortiguación de la velocidad por subpaso
 const DAMP_CALM = 0.96; // la misma, un rato después del último empujón
 const CALM_AFTER = 2; // segundos
 const SLACK = 1.01; // lo que se puede estirar la tela con su peso
+const smoothstep = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
 // Fracción de la separación entre frente y espalda (puesta) que conserva la
 // tela colgada: algo más arriba, casi nada en el ruedo.
 const VOLUME_TOP = 0.3;
@@ -38,6 +43,13 @@ const VOLUME_TOP = 0.3;
 const CLIPS_BAND = 0.2;
 const CLIPS_VOLUME_TOP = 0.1;
 const CLIPS_CAP = 0.15;
+// En los costados del cuello la tira guarda mucho más su forma puesta: ahí,
+// colgada, dobla del frente a la espalda en una curva cerrada; acostada
+// hacia adentro se comprimía en su plano y levantaba una aleta (el cuello
+// parecía quebrado a cada lado). Parada, como puesta, dobla limpio.
+const CLIPS_BAND_SIDE = 0.9;
+const CLIPS_BAND_SEAM = 0.45;
+const HANGER_SINK = 0.008; // (tank top) cuánto baja la madera que se ve bajo las tiras
 const VOLUME_HEM = 0.06;
 const RACER_PAIR = 0.03; // (tank top) a más de esto, de costado, no se miran
 const VOLUME_SLEEVE = 0.5;
@@ -70,6 +82,9 @@ const BAND_ROW = 2;
 // colgada armaría un aro que empuja el frente hacia adelante (arrugas en los
 // hombros); ahí la cinta sólo no se estira ni se da vuelta sobre la costura.
 const BAND_SPAN = 6;
+// Entre qué fracciones del medio ancho del cuello crece hacia los costados
+// (CLIPS_BAND_SIDE).
+const BAND_SIDE = [0.6, 0.9];
 // La costura de la tira es más firme que la tela: no la deja darse vuelta.
 const SEAM_K = 0.5;
 // En V la tira acanalada se cose estirada y frunce un poco el escote: al
@@ -84,6 +99,10 @@ const V_EASE = 0.4;
 // espalda fruncida desde el cuello, en percha y con broches). Se acorta
 // también, menos, en el mismo aplanado.
 const V_BACK_EASE = 0.7;
+// Columnas desde la costura del hombro en las que ese acortamiento se apaga:
+// tiraba de la punta del hombro y el hombro del frente quedaba más largo que
+// el de la espalda (al coserlos, los dos se arrugaban).
+const V_EASE_SIDE = [1, 4];
 // La tira acanalada es más firme que la tela: sus uniones se resuelven
 // estas veces más en cada iteración (casi no se estira con el peso del pecho).
 const BAND_PASSES = 4;
@@ -104,8 +123,9 @@ const FLAT_REST = [
 // son redondas vistas de frente.
 export function makeHanger(M) {
   // Sin mangas, la percha llega más cerca de la punta del hombro (si no, la
-  // punta cuelga y se dobla junto a la sisa).
-  const xEnd = M.shA - (M.sleeveless ? 0.022 : 0.05);
+  // punta cuelga y se dobla junto a la sisa); con las tiras finas del tank
+  // top, casi hasta su borde de afuera (si no, media tira queda en el aire).
+  const xEnd = M.shA - (M.deepNeck ? 0.008 : M.sleeveless ? 0.022 : 0.05);
   const seamY = (x) => {
     const ax = Math.abs(x);
     return ax <= M.neck.a ? 0 : (M.shY * (ax - M.neck.a)) / (M.shA - M.neck.a);
@@ -144,7 +164,9 @@ export function makeHanger(M) {
   // madera que se ve termina (con su punta) en el borde de adentro de la
   // tira: más afuera la tapa la tela del hombro, pero con la tira acostada,
   // como en la V, la madera taparía la tira en las esquinas de los hombros.
-  const xVis = Math.min(xEnd, M.neck.a - 0.032);
+  // (Con escote hondo y vivo fino, como el del tank top, la madera se ve
+  // entera: cortada ahí quedaba en el aire en medio del escote.)
+  const xVis = M.deepNeck ? xEnd - 0.015 : Math.min(xEnd, M.neck.a - 0.032);
   const K = 4; // tramos por borde redondeado
   const R = 4 * (K + 1);
   const pos = [];
@@ -167,15 +189,20 @@ export function makeHanger(M) {
       }
     }
   };
+  // Bajo las tiras del tank top la madera que se ve baja su borde de arriba:
+  // la tela, de malla gruesa, corta camino sobre la barra y la dejaba asomar.
+  const sink = (x) => (M.deepNeck ? HANGER_SINK * smoothstep(M.neck.a - 0.012, M.neck.a + 0.004, Math.abs(x)) : 0);
+  const visC = (x) => center(x).addScaledVector(upOf(tangent(x)), -sink(x) / 2);
+  const visH = (x) => half(x) - sink(x) / 2;
   const N = 60;
   const TIP = 6;
   const tipRings = (x, sign) => {
     const t = tangent(x).multiplyScalar(sign);
-    const h = half(x);
+    const h = visH(x);
     const list = [];
     for (let k = 1; k <= TIP; k++) {
       const th = ((k / TIP) * Math.PI) / 2;
-      list.push([center(x).addScaledVector(t, h * Math.sin(th)), tangent(x), Math.max(h * Math.cos(th), 0.0004)]);
+      list.push([visC(x).addScaledVector(t, h * Math.sin(th)), tangent(x), Math.max(h * Math.cos(th), 0.0004)]);
     }
     return list;
   };
@@ -183,7 +210,7 @@ export function makeHanger(M) {
     ...tipRings(-xVis, -1).reverse(),
     ...Array.from({ length: N + 1 }, (_, i) => {
       const x = -xVis + (2 * xVis * i) / N;
-      return [center(x), tangent(x), half(x), true];
+      return [visC(x), tangent(x), visH(x), true];
     }),
     ...tipRings(xVis, 1),
   ];
@@ -640,7 +667,9 @@ export class HangingShirt {
         }
       const top = NC * WC;
       const e = built.measures.vNeck ? (key === 'front' ? V_EASE : V_BACK_EASE) : 1;
-      const ease = e !== 1 ? (p, q) => (p >= top && q >= top ? e : 1) : null;
+      // (Se apaga junto a la costura del hombro: ver V_EASE_SIDE.)
+      const side = (p, q) => smoothstep(V_EASE_SIDE[0], V_EASE_SIDE[1], Math.min(p % WC, q % WC, C - (p % WC), C - (q % WC)));
+      const ease = e !== 1 ? (p, q) => (p >= top && q >= top ? 1 + (e - 1) * side(p, q) : 1) : null;
       const X = flattenPanel(pos3, tri, WC, NC + 1, X0, FLAT_REST, ease);
       const cellOf = new Map();
       m.forEach((id, v) => id >= 0 && cellOf.set(id, v));
@@ -691,6 +720,19 @@ export class HangingShirt {
       win.push(...ids);
       winRest.push(...ids.flatMap((id) => [0, 1, 2].map((d) => P[id * 3 + d] - c[d])));
     }
+    // Cuánto guarda cada punto su forma: más el borde de arriba de la tira en
+    // los costados del cuello (la costura no: arrastraría la tela del hombro
+    // y se daría vuelta junto al broche).
+    const half = Math.max(...ring.map((id) => Math.abs(P[id * 3])));
+    this.bandK = new Float32Array(n);
+    for (const [list, side] of [
+      [ring, CLIPS_BAND_SEAM],
+      [band, CLIPS_BAND_SIDE],
+    ])
+      for (const id of list) {
+        const sd = smoothstep(BAND_SIDE[0], BAND_SIDE[1], Math.abs(P[id * 3]) / half);
+        this.bandK[id] = this.bandStiff + (side - this.bandStiff) * sd;
+      }
     this.bandWin = Int32Array.from(win);
     this.bandWinRest = Float32Array.from(winRest);
     this.bandWinQ = Array.from({ length: K }, () => new THREE.Quaternion());
@@ -1407,7 +1449,7 @@ export class HangingShirt {
       for (const id of list) {
         if (!W[id] || !cnt[id]) continue;
         const i = id * 3;
-        for (let c = 0; c < 3; c++) P[i + c] += (G[i + c] / cnt[id] - P[i + c]) * this.bandStiff;
+        for (let c = 0; c < 3; c++) P[i + c] += (G[i + c] / cnt[id] - P[i + c]) * this.bandK[id];
       }
   }
 

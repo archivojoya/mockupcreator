@@ -65,11 +65,11 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
 - **Prenda**: camiseta, musculosa, básquet o tank top.
   - **Musculosa** (de varón): el mismo molde de la camiseta sin mangas (la
     misma sisa y los mismos hombros); en cada sisa va un puño como el de las
-    mangas (tira doble de 2,4 cm, del color de los puños). Con cuerpo sale
-    hacia el costado, del lado del brazo (de frente y de espalda se ve como
-    una franja a lo largo de la sisa), y en la cresta del hombro baja como
-    alrededor del brazo; colgada sigue la tela, apenas levantada. Colgada, la
-    percha llega más cerca de la punta del hombro.
+    mangas (tira doble de 2,4 cm, del color de los puños). Con cuerpo
+    envuelve el borde y se apoya sobre la tela, como un ribete: de frente y
+    de espalda se ve como una franja a lo largo de la sisa. Colgada sale del
+    borde siguiendo la tela, y la percha llega más cerca de la punta del
+    hombro.
   - **Básquet**: la musculosa de sisa grande (baja 4,5 cm más, entra más en
     el frente y la espalda, y el hombro termina antes).
   - **Tank top** (de mujer): cuerpo con busto, cintura y cadera; escote
@@ -188,11 +188,14 @@ Cómo se arma (`src/camiseta/shirt.js`):
 - **Mangas**: de la sisa a un ruedo circular alrededor del eje del brazo, con
   puño aparte. La musculosa lleva un puño cosido al borde de cada sisa; el
   tank top, un vivo.
-- **Puños de sisa y vivos**: con cuerpo, donde el borde de la sisa va
-  vertical salen hacia el costado (siguiendo la tela quedaban detrás del
-  borde); arriba y en la axila siguen la tela y el giro se reparte a lo largo
-  del borde. La cola que entra por dentro de la prenda va hacia el punto de
-  la tela de al lado (una recta asomaba donde la tela se curva).
+- **Puños de sisa y vivos**: con cuerpo envuelven el borde y se apoyan sobre
+  la tela hacia adentro de la pieza, sobre una superficie suavizada (sobre la
+  malla tal cual copiarían sus facetas). Saliendo del borde hacia el hueco
+  quedaban detrás del borde, se hundían en el hombro o se torcían. Colgados
+  salen del borde siguiendo la tela; la cola que entra por dentro de la
+  prenda va hacia el punto de la tela de al lado (una recta asomaba donde la
+  tela se curva). Sin mangas el torso no lleva los pliegues que salen de la
+  axila (son el tirón de la manga).
 - **Espalda nadadora** (tank top): la sisa es un hueco más ancho en la espalda
   que en el frente, y las filas no van a la misma altura en todas las
   columnas. En el frente, la de arriba de la sisa queda a lo ancho de la tira
@@ -201,7 +204,8 @@ Cómo se arma (`src/camiseta/shirt.js`):
   llegar casi verticales a la columna del centro: así la sisa es una C. Las
   esquinas del frente se redondean en la grilla antes de ubicar cada punto;
   las de la punta de atrás, no (ahí la grilla se apiña en la columna y se
-  pisaría), y el tramo vertical se curva apenas para empalmar sin esquina.
+  pisaría), el tramo vertical se curva apenas para empalmar sin esquina y el
+  borde se promedia a lo largo de sí mismo: la C queda sin quiebres.
   Sobre el hombro el borde se redondea visto de costado (el frente sube
   empinado y la espalda sigue casi plana: la punta quedaba levantada). El
   busto es un relieve sobre el frente que la tela cruza de un pecho al otro
@@ -231,11 +235,18 @@ un aro que empuja el frente y arruga los hombros). En V la tira se cose estirada
 frunce apenas el escote: en el molde plano del frente las patas de la V quedan
 un 30 % más cortas que puestas (repartido en la tela de alrededor, que queda
 plana, sin burbujas bajo la punta) y la tira sigue al escote. Colgada, la V se
-hace unos 3 cm más honda que puesta, como el cuello redondo. Con broches nada sostiene el
+hace unos 3 cm más honda que puesta, como el cuello redondo. Ese acortamiento
+se apaga junto a la costura del hombro: si no, el hombro del frente aplanado
+medía hasta un 40 % más que el de la espalda y, cosidos, los dos se arrugaban.
+Con broches nada sostiene el
 cuello atrás (entre los broches) ni el hombro de afuera del broche: ahí cada
 tramo de unos 10 cm de la tira guarda algo de su forma puesta (si no, la
-espalda del cuello cae y se embolsa), se guarda menos volumen arriba y la copa
-de la manga cede más. Frente, espalda y mangas guardan algo del volumen que
+espalda del cuello cae y se embolsa), mucho más en los costados del cuello
+(ahí la tira dobla de frente a espalda; acostada se quebraba en una aleta), se
+guarda menos volumen arriba y la copa de la manga cede más. En el tank top la
+madera de la percha se ve casi entera y llega casi al borde de afuera de las
+tiras (cortada en el borde del cuello, en un escote tan ancho quedaba en el
+aire). Frente, espalda y mangas guardan algo del volumen que
 tenían puestas (más arriba, casi nada en el ruedo), y la copa de la manga
 conserva algo de cuerpo. La tela tiende a su molde plano (frente y espalda
 aplanados como se cortan, cada unión con su largo en la pieza plana) y no a la
@@ -261,6 +272,26 @@ se mueve libre y, cuando se aquieta, el lado derecho (visto de frente) se
 acomoda en medio segundo como espejo del izquierdo. Pasado un rato sin
 empujones el aire frena un poco más, así no quedan balanceos lentos. Después
 la simulación se duerme (como mucho 8 s después del último empujón).
+
+### Criterios estéticos
+
+Es un mockup: manda cómo se ve. Valen para estas prendas y para las que se
+agreguen:
+
+- Lisa ante todo: nada de arrugas que no se pidieron. Si para evitarlas hay
+  que recortar tela, esconder una pieza o hacer un truco, está bien.
+- Pliegues de terminación sólo donde tienen sentido (los de la axila, sólo
+  con mangas).
+- Puños y vivos, con cuerpo, apoyados sobre la tela; colgados, siguiendo la
+  tela sin levantarse.
+- Bordes de huecos en curvas sin quiebres (si la grilla dobla en un punto, se
+  promedia el borde).
+- Costuras que miden lo mismo en las dos piezas aplanadas; los acortamientos,
+  lejos de las costuras.
+- Con broches, la tira del cuello parada en los costados.
+- La percha se ve donde la prenda se apoya.
+- Si el pedido viene dibujado, pasar el trazo a medidas y superponerlo a la
+  prenda en 2D antes de renderizar.
 
 ## Cómo preparar el SVG
 

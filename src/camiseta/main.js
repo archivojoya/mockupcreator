@@ -1351,7 +1351,10 @@ async function addImages(files, { session = false } = {}) {
       bad.push(f.name);
       continue;
     }
-    const app = CREST_NAME.test(f.name) || BRAND_NAME.test(f.name) || transparency(dec.img) > 0.3;
+    // Una aplicación: con fondo transparente, o con escudo, marca o logo en
+    // el nombre (si el nombre no dice una pieza: "frente con logos" es un
+    // frente).
+    const app = transparency(dec.img) > 0.3 || (!pieceKeys(f.name).length && (CREST_NAME.test(f.name) || BRAND_NAME.test(f.name)));
     const item = { id: newId(), name: f.name, img: dec.img, url: dec.url, app, session };
     lib.set(item.id, item);
     if (!session && store) store.put({ id: item.id, name: item.name, type: blob.type, blob, added: Date.now(), app }).catch(() => {});
@@ -1371,7 +1374,7 @@ async function addImages(files, { session = false } = {}) {
 function autoAssign(items) {
   const placed = [];
   for (const item of items) {
-    const kind = CREST_NAME.test(item.name) ? 'crest' : BRAND_NAME.test(item.name) ? 'brand' : null;
+    const kind = !item.app ? null : CREST_NAME.test(item.name) ? 'crest' : BRAND_NAME.test(item.name) ? 'brand' : null;
     if (kind) {
       const zone = kind === 'crest' ? 'chestL' : 'chestR';
       if (!dress.apps.some((a) => a.id === item.id)) zoneApp(item, zone);

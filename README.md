@@ -71,11 +71,12 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   - **Básquet**: la musculosa de sisa grande (baja 4,5 cm más, entra más en
     el frente y la espalda, y el hombro termina antes).
   - **Tank top** (de mujer): cuerpo con busto, cintura y cadera; escote
-    redondo ancho y hondo (13 cm de entrada, de 9 a 18); tiras de 4,2 cm;
-    espalda nadadora (escote de atrás de 8,5 cm; las tiras bajan siguiendo
-    el escote hasta juntarse en una franja angosta de 9 cm de alto, y desde
-    ahí la sisa se abre hasta el costado); vivos finos de un mismo color en
-    el escote y las sisas. No lleva tapacostura.
+    redondo ancho y hondo adelante (13 cm de entrada, de 9 a 18) y alto
+    atrás (4 cm); tiras de 4,2 cm en el hombro; espalda nadadora (cada sisa
+    de atrás es una C que baja del hombro y se cierra hacia el centro: entre
+    las dos queda una columna de unos 9 cm de ancho, con un tramo casi
+    vertical de 5 cm, y abajo la sisa se abre hasta el costado); vivos finos
+    de un mismo color en el escote y las sisas. No lleva tapacostura.
   Sin mangas se ocultan el largo, la apertura, el puño y el color de las
   mangas, y sus piezas en la personalización.
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
@@ -186,11 +187,16 @@ Cómo se arma (`src/camiseta/shirt.js`):
   puño aparte. La musculosa lleva un puño cosido al borde de cada sisa; el
   tank top, un vivo.
 - **Espalda nadadora** (tank top): la sisa es un hueco más ancho en la espalda
-  que en el frente; las filas no van a la misma altura en todas las columnas
-  (la de arriba de la sisa queda a lo ancho de la tira del escote y la de la
-  axila sube hacia donde se juntan las tiras), y las esquinas del hueco se
-  redondean en la grilla antes de ubicar cada punto. El busto es un relieve
-  sobre el frente que la tela cruza de un pecho al otro sin meterse.
+  que en el frente, y las filas no van a la misma altura en todas las
+  columnas. En el frente, la de arriba de la sisa queda a lo ancho de la tira
+  del escote. En la espalda, la de arriba baja desde el hombro y la de la
+  axila sube desde el costado, las dos rectas y al final en elipse hasta
+  llegar casi verticales a la columna del centro: así la sisa es una C. Las
+  esquinas del frente se redondean en la grilla antes de ubicar cada punto;
+  las de la punta de atrás, no (ahí la grilla se apiña en la columna y se
+  pisaría), y el tramo vertical se curva apenas para empalmar sin esquina. El
+  busto es un relieve sobre el frente que la tela cruza de un pecho al otro
+  sin meterse.
 - **Cuello y dobladillos**: tira acanalada sobre el escote; ruedo y puños se dan
   vuelta hacia adentro y muestran el espesor de la tela.
 - **Terminación**: pliegues suaves (caída hacia el ruedo, tensiones desde la

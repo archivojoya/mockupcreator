@@ -85,18 +85,19 @@ function monotone(xs, ys) {
 // sisa. La de básquet tiene la sisa grande: baja 4,5 cm más, entra más en el
 // frente y la espalda, y el hombro termina antes, con la misma pendiente.
 // Tank top (de mujer): cuerpo con busto, cintura y cadera; escote redondo
-// ancho y hondo; tiras de 4,5 cm; espalda nadadora (la sisa de atrás entra
-// casi hasta el centro y el escote de atrás baja en U hasta donde se juntan
-// las tiras); vivos finos en el escote y las sisas.
+// ancho y hondo adelante y alto atrás; tiras de 4,2 cm en el hombro; espalda
+// nadadora (las sisas de atrás, en C, dejan una columna en el centro); vivos
+// finos en el escote y las sisas.
 const ARM_BAND = 0.024; // ancho del puño de la sisa
 const TANK = {
   neck: { a: 0.1, b: 0.075, bB: 0.04, c: -0.012 },
-  dropB: 0.085, // escote de atrás
-  strap: 0.042, // ancho de las tiras
-  racerGap: 0.09, // alto de la franja donde se juntan las tiras (borde de la sisa)
+  dropB: 0.04, // escote de atrás
+  strap: 0.042, // ancho de las tiras en el hombro
+  racerTop: 0.065, // de ahí la sisa de atrás baja hasta la columna del centro, a esto del escote
+  racerGap: 0.05, // tramo vertical de la columna del centro
   binding: 0.009, // ancho de los vivos
   colsF: 14, // columnas de la sisa en el frente y en la espalda
-  colsB: 28,
+  colsB: 26,
 };
 export function measures(p) {
   const f = p.fit;
@@ -120,7 +121,7 @@ export function measures(p) {
     // espalda, no se mete hacia el cuello.
     deepNeck: tank,
     shY: -0.046, // altura de la punta del hombro
-    pitY: (tank ? -0.245 : basket ? -0.25 : -0.205) - 0.03 * f, // altura de la axila
+    pitY: (tank ? -0.26 : basket ? -0.25 : -0.205) - 0.03 * f, // altura de la axila
     n: 2.35, // exponente de los cortes (2 = elipse)
     garment,
     sleeveless,
@@ -129,6 +130,7 @@ export function measures(p) {
     armColsB: tank ? TANK.colsB : basket ? 12 : ARM_COLS,
     racer: tank,
     strap: TANK.strap,
+    racerTop: TANK.racerTop,
     racerGap: TANK.racerGap,
     // Busto: altura y separación de las puntas, relieve y caída arriba y
     // abajo (más suelta, menos relieve y cae más derecho).
@@ -151,7 +153,7 @@ export function measures(p) {
         [-L, aH, bH, 0],
         [-0.56, aH - 0.004, bH, 0],
         [-0.4, aW, bW, 0.004],
-        [-0.3, aW + 0.012, bW + 0.008, 0.006],
+        [Math.min(-0.3, M.pitY - 0.04), aW + 0.012, bW + 0.008, 0.006],
         [M.pitY, aB, bB, 0.008],
         [-0.11, aB - 0.008, bB - 0.012, 0],
         [M.shY, shA, 0.082, -0.008],
@@ -379,14 +381,18 @@ function buildTorso(M) {
 
 // Torso del tank top (espalda nadadora). La sisa es otra vez un hueco
 // rectangular en la grilla, pero de AF columnas en el frente y AB en la
-// espalda, y las filas no van a la misma altura en todas las columnas: la de
-// arriba de la sisa queda a `strap` del escote (así la tira sigue el escote,
-// también por la espalda hasta donde se juntan), y la de la axila sube en la
-// espalda desde el costado hasta `racerGap` debajo de donde se juntan las
-// tiras (si bajara hacia ahí, en la costura del costado quedaría una punta
-// que, colgada, arma bolsas bajo la sisa). Las esquinas del hueco se
-// redondean en la grilla (superelipse) antes de ubicar cada punto.
+// espalda, y las filas no van a la misma altura en todas las columnas. En el
+// frente la de arriba de la sisa queda a `strap` del escote y la de la axila
+// va derecha. En la espalda (escote alto, casi plano) el borde de arriba baja
+// desde el hombro hasta `racerTop` debajo del escote donde se juntan las
+// tiras, el de abajo sube desde la axila hasta `racerGap` más abajo, y entre
+// los dos queda la columna del centro. Las esquinas del hueco se redondean en
+// la grilla (superelipse) antes de ubicar cada punto.
 const RACER_E = 2.2;
+const RACER_C = 0.99; // qué tan vertical llegan los bordes de atrás a la unión (1 = del todo)
+const RACER_K = 0.4; // cuánto de elipse lleva el borde de arriba (0 = recto)
+const RACER_KB = 0.6; // y el de abajo
+const RACER_D = 0.6; // columnas que se curva hacia afuera en las puntas el tramo vertical
 function buildRacerTorso(M) {
   const N = ROWS_LOW + ROWS_ARM + ROWS_TOP;
   const i1 = ROWS_LOW;
@@ -424,12 +430,39 @@ function buildRacerTorso(M) {
     const k = Math.min(S - 1, Math.floor(x));
     return lerp(tab[k], tab[k + 1], x - k);
   };
+  // Bordes de atrás: rectos y, cerca de la unión, elipse que llega casi
+  // vertical (la sisa queda como una C que se cierra hacia el centro).
   const thJ = Math.PI / 2 + (AB * Math.PI) / COLS;
-  const yJ = torsoPoint(M, thJ, look(tTop, thJ), P)[1] - M.racerGap;
+  const RE = Math.sqrt(1 - RACER_C * RACER_C);
+  const arc = (u, k) => (1 - k) * (1 - u) + (k * (Math.sqrt(1 - (RACER_C * u) ** 2) - RE)) / (1 - RE);
+  const tOfY = (phi, y) => {
+    let lo = 0;
+    let hi = 1;
+    for (let it = 0; it < 32; it++) {
+      const mid = (lo + hi) / 2;
+      if (torsoPoint(M, phi, mid, P)[1] < y) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  };
+  const yS = torsoPoint(M, Math.PI / 2, tTop[S / 2], P)[1];
+  const yT = neckY(M, thJ) - M.racerTop;
+  const yJ = yT - M.racerGap;
+  // Avance medido de costado a costado (vista de atrás), no alrededor del
+  // cuerpo: si no, junto a la costura los bordes bajan derecho.
+  const X = (phi) => Math.abs(Math.sin(phi)) ** (2 / M.n);
+  // En la columna del centro esas dos filas se separan hacia el medio hasta
+  // quedar parejas con las demás (si no, las de la sisa se apiñan en
+  // `racerGap` y al redondear las esquinas se pisan).
+  const yN = neckY(M, Math.PI);
+  const yPC = lerp(-L, yN, i1 / N);
+  const yTC = lerp(-L, yN, i2 / N);
   for (let s = 0; s <= S; s++) {
     const phi = (s / S) * Math.PI;
-    const u = clamp01((phi - Math.PI / 2) / (thJ - Math.PI / 2));
-    tPit[s] = (lerp(M.pitY, yJ, smooth(u)) + L) / (neckY(M, phi) + L);
+    const u = phi <= Math.PI / 2 ? 0 : phi >= thJ ? 1 : (1 - X(phi)) / (1 - X(thJ));
+    const w = smooth(clamp01((phi - thJ) / (Math.PI - thJ)));
+    if (s > S / 2) tTop[s] = tOfY(phi, lerp(yT + (yS - yT) * arc(u, RACER_K), yTC, w));
+    tPit[s] = tOfY(phi, lerp(yJ - (yJ - M.pitY) * arc(u, RACER_KB), yPC, w));
   }
   const tOf = (i, th) => {
     const tp = look(tPit, th);
@@ -444,16 +477,26 @@ function buildRacerTorso(M) {
   // Corrimiento (filas, columnas) que redondea la sisa centrada en jc; las
   // dos sisas de una pieza se suman (una tras otra, la segunda torcería la
   // primera y no quedarían iguales).
-  const warp = (i, j, jc) => {
+  // Hacia la punta de atrás (`tip`: de qué lado queda) no redondea: ahí la
+  // curva la dan los bordes, y la grilla, apretada en la columna del centro,
+  // se pisaría.
+  const warp = (i, j, jc, tip) => {
     const p = (j - jc) / hw;
     const q = (i - ic) / hh;
     const rho = Math.max(Math.abs(p), Math.abs(q));
     const r = Math.hypot(p, q);
     if (rho >= 1.8 || r < 1e-9) return [0, 0];
     const top = q > 0 ? clamp01((N - i) / (N - i2)) : 1;
+    const away = 1 - smoothstep(0.2, 0.6, (tip * p) / r);
     const R = ((Math.abs(p) / r) ** RACER_E + (Math.abs(q) / r) ** RACER_E) ** (-1 / RACER_E);
-    const k = lerp(1, (R * rho) / r, (1 - smoothstep(1, 1.8, rho)) * top) - 1;
+    const k = lerp(1, (R * rho) / r, (1 - smoothstep(1, 1.8, rho)) * top * away) - 1;
     return [q * k * hh, p * k * hw];
+  };
+  // El tramo vertical de la columna del centro se curva un poco hacia la sisa
+  // en las puntas: empalma con los bordes sin esquina.
+  const bend = (i) => {
+    const q = Math.abs(i - ic) / hh;
+    return q <= 1 ? q * q : Math.max(0, 1 - (q - 1) * 2);
   };
   const panels = {};
   for (const key of ['front', 'back']) {
@@ -471,10 +514,11 @@ function buildRacerTorso(M) {
       for (let j = 0; j <= COLS; j++) {
         let [ii, jj] = [i, j];
         for (const jc of centers) {
-          const [di, dj] = warp(i, j, jc);
+          const [di, dj] = warp(i, j, jc, front ? 0 : jc < COLS / 2 ? 1 : -1);
           ii += di;
           jj += dj;
         }
+        if (!front) for (const [e, sg] of [[AB, 1], [COLS - AB, -1]]) jj -= sg * RACER_D * bend(i) * (1 - smoothstep(0, 3, Math.abs(j - e)));
         const th = th0 + (Math.PI * jj) / COLS;
         torsoPoint(M, th, tOf(ii, th), tmp);
         const k = i * W + j;

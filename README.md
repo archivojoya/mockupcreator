@@ -62,6 +62,20 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   en la barra y la percha gira debajo. Colgada, la tela se simula en vivo: al pasar el mouse
   se empuja y se balancea, y después se acomoda sola (en el celular, con un
   toque).
+- **Prenda**: camiseta, musculosa o tank top.
+  - **Musculosa** (de varón): la misma camiseta sin mangas; la sisa baja
+    4,5 cm más y entra más en el frente y la espalda, y en cada sisa va un
+    puño como el de las mangas (tira doble de 2,4 cm, del color de los
+    puños) que entra en el hueco hacia su centro. Colgada, el puño queda
+    acostado sobre la tela y la percha llega más cerca de la punta del hombro.
+  - **Tank top** (de mujer): cuerpo con busto, cintura y cadera; escote
+    redondo ancho y hondo (13 cm de entrada, de 9 a 18); tiras de 4,5 cm;
+    espalda nadadora (la sisa de atrás entra casi hasta el centro: las tiras
+    bajan siguiendo el escote de atrás hasta juntarse, y desde ahí la sisa
+    baja hasta el costado); vivos finos de un mismo color en el escote y las
+    sisas. No lleva tapacostura.
+  Sin mangas se ocultan el largo, la apertura, el puño y el color de las
+  mangas, y sus piezas en la personalización.
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
   de mangas, puño (con puño, o sin puño: la manga sigue hasta el borde con su
   color y su diseño, sin costura), cuello (redondo o en V) y profundidad del
@@ -141,7 +155,8 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     camiseta tal como está. Para que se vea nítida de cerca, conviene
     exportar con unos 2 px por mm (el frente, unos 1200 × 1600 px).
 - **Mapa de estampado**: muestra una grilla de 5 cm con el nombre de cada pieza.
-- **Ficha**: contorno de pecho, ancho de hombros, largo, boca de manga y tela.
+- **Ficha**: contorno de pecho, ancho de hombros, largo, boca de manga (sin
+  mangas, el alto de la sisa) y tela.
 - **Configuración sin tocar código**: si la página trae un bloque
   `<script type="application/json" id="camiseta-config">` con `params`
   (incluidos `neckStyle`: `round` o `v`, y `cuff`: `band` o `none`), `colors`,
@@ -166,7 +181,14 @@ Cómo se arma (`src/camiseta/shirt.js`):
   quedar ovalado. La manga arranca exactamente de ese borde, así la costura
   queda cerrada.
 - **Mangas**: de la sisa a un ruedo circular alrededor del eje del brazo, con
-  puño aparte.
+  puño aparte. La musculosa lleva un puño cosido al borde de cada sisa; el
+  tank top, un vivo.
+- **Espalda nadadora** (tank top): la sisa es un hueco más ancho en la espalda
+  que en el frente; las filas no van a la misma altura en todas las columnas
+  (la de arriba de la sisa queda a lo ancho de la tira del escote y la de la
+  axila sube hacia donde se juntan las tiras), y las esquinas del hueco se
+  redondean en la grilla antes de ubicar cada punto. El busto es un relieve
+  sobre el frente que la tela cruza de un pecho al otro sin meterse.
 - **Cuello y dobladillos**: tira acanalada sobre el escote; ruedo y puños se dan
   vuelta hacia adentro y muestran el espesor de la tela.
 - **Terminación**: pliegues suaves (caída hacia el ruedo, tensiones desde la

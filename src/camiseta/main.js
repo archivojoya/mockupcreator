@@ -2152,12 +2152,14 @@ document.getElementById('reset').addEventListener('click', () => {
 function updateSpec() {
   const M = built.measures;
   document.getElementById('s-chest').textContent = fmtCm(girth(M, M.pitY - 0.03));
-  // Musculosa: los hombros llegan hasta el borde de los puños de las sisas;
-  // en vez de la boca de manga, el alto de la sisa (del hombro a la axila).
-  document.getElementById('s-shoulders').textContent = fmtCm((M.shA + (M.sleeveless ? M.armBand : 0)) * 2);
+  // Musculosa: los hombros llegan hasta el borde de las sisas (el puño va
+  // sobre la tela); en vez de la boca de manga, el alto de la sisa (del
+  // hombro a la axila). Tank top: hasta el borde de los vivos.
+  const bare = M.sleeveless && !M.racer;
+  document.getElementById('s-shoulders').textContent = fmtCm(bare ? M.shTip * 2 : (M.shA + (M.sleeveless ? M.armBand : 0)) * 2);
   document.getElementById('s-length').textContent = fmtCm(M.L);
   document.getElementById('s-sleeve-label').textContent = M.sleeveless ? 'Alto de sisa' : 'Boca de manga';
-  document.getElementById('s-sleeve').textContent = fmtCm(M.sleeveless ? M.shY - M.pitY - M.armBand : Math.PI * 2 * M.sleeve.rHem);
+  document.getElementById('s-sleeve').textContent = fmtCm(bare ? M.shTipY - M.pitY : M.sleeveless ? M.shY - M.pitY - M.armBand : Math.PI * 2 * M.sleeve.rHem);
   document.getElementById('s-fabric').textContent = `${(WEAVES[fabric.weave] || WEAVES.mesh).label} · ${fabric.finish === 'satin' ? 'satinada' : 'mate'} · ${FOUT.weight(fabric.weight)}`;
 }
 

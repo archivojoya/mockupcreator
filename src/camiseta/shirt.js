@@ -9,9 +9,12 @@
 // - Mangas: de la sisa a un ruedo circular alrededor del eje del brazo, con
 //   puño aparte. La musculosa no tiene: lleva un puño (tira doble) cosido al
 //   borde de cada sisa.
-// - Cuello: tira acanalada sobre el borde del escote (en V, las dos puntas
-//   de la tira se juntan en una costura al medio). Ruedo y puños llevan un
-//   dobladillo hacia adentro (se ve el espesor de la tela).
+// - Cuello: el escote es un corte sobre la misma tela (la de la camiseta de
+//   cuello redondo de referencia): redondo de cualquier hondo o en V, la
+//   camiseta y su molde son los mismos y sólo cambia la línea del corte.
+//   Encima va una tira acanalada (en V, las dos puntas de la tira se juntan
+//   en una costura al medio). Ruedo y puños llevan un dobladillo hacia
+//   adentro (se ve el espesor de la tela).
 //
 // Medidas en metros, y hacia arriba, z hacia el frente; y = 0 es el punto
 // más alto del hombro (junto al cuello). Las coordenadas UV de cada pieza
@@ -33,6 +36,10 @@ export const DEFAULTS = {
 // Resolución de las mallas.
 const COLS = 64; // columnas de cada mitad del torso (de costado a costado)
 const ARM_COLS = 10; // columnas de la sisa a cada lado de la costura
+const NECK_SPAN = 2.2; // desde cuánto más abajo que el corte se reacomodan las filas del escote
+const SHOULDER_CUT = 0.02; // sin mangas: cuánto más angosto queda el hombro
+const SHOULDER_SPREAD = 2; // en cuántos anchos de la sisa (desde la costura) se apaga ese corrimiento
+const SHOULDER_TOP_E = 4; // exponente de la mitad de arriba de la sisa sin mangas (2 = redonda)
 const ROWS_LOW = 64; // del ruedo a la axila
 const ROWS_ARM = 24; // de la axila a la punta del hombro
 const ROWS_TOP = 8; // del hombro al cuello
@@ -88,6 +95,7 @@ function monotone(xs, ys) {
 // ancho y hondo adelante y alto atrás; tiras de 4,2 cm en el hombro; espalda
 // nadadora (las sisas de atrás, en C, dejan una columna en el centro); vivos
 // finos en el escote y las sisas.
+const NECK_REF = 0.075; // escote de referencia (ver measures)
 const ARM_BAND = 0.024; // ancho del puño de la sisa
 const ARM_RISE = 0.0011; // con cuerpo, lo que el puño queda por encima de la tela
 const ARM_WRAP = 0.0015; // y lo que su vuelta pasa del borde
@@ -119,6 +127,10 @@ export function measures(p) {
     neck: tank ? TANK.neck : { a: 0.088, b: 0.08, bB: 0.035, c: -0.014 },
     dropF: p.neckDepth,
     dropB: tank ? TANK.dropB : 0.014,
+    // Escote de referencia: la tela de todas las camisetas es la de cuello
+    // redondo con este escote, y cada cuello (redondo de cualquier hondo o en
+    // V) es un corte sobre ella. El tank top tiene su propia tela.
+    refF: tank ? p.neckDepth : NECK_REF,
     vNeck: !tank && p.neckStyle === 'v',
     // Escote hondo (tank top): el borde va apoyado sobre el pecho y la
     // espalda, no se mete hacia el cuello.
@@ -170,7 +182,7 @@ export function measures(p) {
         [-0.44, aC - 0.008 + 0.006 * f, bC - 0.008, 0.004],
         [M.pitY, aC, bC, 0.006],
         [-0.115, Math.max(shA - 0.008, aC + 0.006), bC - 0.006, 0],
-        [M.shY, shA, 0.098 + 0.01 * f, -0.008],
+        ...shoulderRows(M, [-0.115, Math.max(shA - 0.008, aC + 0.006), bC - 0.006, 0], [M.shY, shA, 0.098 + 0.01 * f, -0.008], [M.shY / 2, lerp(M.neck.a, shA, 0.5), lerp(M.neck.b, 0.098 + 0.01 * f, 0.5), lerp(M.neck.c, -0.008, 0.5)]),
         [M.shY / 2, lerp(M.neck.a, shA, 0.5), lerp(M.neck.b, 0.098 + 0.01 * f, 0.5), lerp(M.neck.c, -0.008, 0.5)],
         [0, M.neck.a, M.neck.b, M.neck.c],
       ];
@@ -199,6 +211,37 @@ export function measures(p) {
   return M;
 }
 
+// Punta del hombro: con mangas, una fila (el costado sube casi vertical y
+// ahí dobla hacia el cuello, bajo la costura de la manga). Sin mangas el borde
+// de la sisa cruza esa zona: se redondea con un arco de SHOULDER_R que empalma
+// el costado (desde la fila de abajo) con la línea del hombro (hacia la de
+// arriba); medio ancho, fondo y centro de cada fila del arco, interpolados.
+const SHOULDER_R = 0.03;
+function shoulderRows(M, below, tip, above) {
+  if (!M.sleeveless) return [tip];
+  const dir = (a, b) => {
+    const l = Math.hypot(b[1] - a[1], b[0] - a[0]);
+    return [(b[1] - a[1]) / l, (b[0] - a[0]) / l]; // (x, y)
+  };
+  const u1 = dir(below, tip);
+  const u2 = dir(tip, above);
+  const turn = Math.acos(u1[0] * u2[0] + u1[1] * u2[1]);
+  const T = SHOULDER_R * Math.tan(turn / 2);
+  const n1 = [-u1[1], u1[0]];
+  const start = [tip[1] - u1[0] * T, tip[0] - u1[1] * T];
+  const O = [start[0] + n1[0] * SHOULDER_R, start[1] + n1[1] * SHOULDER_R];
+  const rows = [];
+  for (let k = 0; k <= 4; k++) {
+    const a = (turn * k) / 4;
+    const x = O[0] - n1[0] * SHOULDER_R * Math.cos(a) + u1[0] * SHOULDER_R * Math.sin(a);
+    const y = O[1] - n1[1] * SHOULDER_R * Math.cos(a) + u1[1] * SHOULDER_R * Math.sin(a);
+    const [r0, r1] = y <= tip[0] ? [below, tip] : [tip, above];
+    const f = (y - r0[0]) / (r1[0] - r0[0]);
+    rows.push([y, x, lerp(r0[2], r1[2], f), lerp(r0[3], r1[3], f)]);
+  }
+  return rows;
+}
+
 // Perímetro del corte del torso a una altura (para la ficha de medidas).
 export function girth(M, y) {
   let per = 0;
@@ -219,7 +262,8 @@ export function girth(M, y) {
 // En V, adelante la recta (vista de frente) desde cada punto del hombro hasta
 // la punta se mezcla con la curva del cuello redondo: las patas se abomban un
 // poco hacia afuera y la punta queda neta. Junto al hombro se redondea el
-// último pedacito para no hacer pico donde sigue la espalda.
+// último pedacito para no hacer pico donde sigue la espalda. (El escote de la
+// camiseta es un corte con esta forma, ver cutY; neckY lo usa el tank top.)
 const VEE_EASE = 0.08; // fracción del ancho que se redondea junto al hombro
 const VEE_ROUND = 0.4; // cuánto de la curva redonda llevan las patas (0 = rectas)
 const neckY = (M, th) => {
@@ -231,6 +275,12 @@ const neckY = (M, th) => {
     return -M.dropF * g;
   }
   return -(c >= 0 ? M.dropF : M.dropB) * Math.abs(c) ** 1.6;
+};
+// El escote de referencia (redondo, ver measures), hasta donde llega la tela
+// de base.
+const refY = (M, th) => {
+  const c = Math.cos(th);
+  return -(c >= 0 ? M.refF : M.dropB) * Math.abs(c) ** 1.6;
 };
 
 // Busto (tank top): la tela pasa por encima de los dos pechos y entre ellos
@@ -260,9 +310,13 @@ function backZ(M, x, y) {
 }
 
 // Punto del torso para el ángulo th (0 frente, π/2 costado izquierdo, π
-// espalda) y t (0 ruedo, 1 escote).
+// espalda) y t (0 ruedo, 1 escote de referencia). Más allá de 1 la tela sigue
+// hacia arriba por el cuello (ver NECK_EXT_R): de ahí sale lo que un escote
+// tiene por encima del de referencia (un redondo más alto, las patas de la V
+// junto al hombro).
 function torsoPoint(M, th, t, out) {
-  const yn = neckY(M, th);
+  if (t > 1) return torsoAbove(M, th, t, out);
+  const yn = refY(M, th);
   const y = lerp(-M.L, yn, t);
   const sn = Math.sin(th);
   const cs = Math.cos(th);
@@ -280,9 +334,9 @@ function torsoPoint(M, th, t, out) {
     x = lerp(x, M.neck.a * sn, w);
     yy = lerp(y, yn, w);
     z = lerp(z, M.neck.c + (cs >= 0 ? M.neck.b : M.neck.bB) * cs, w);
-    // En V el escote baja por el pecho: ahí la tela sigue el pecho y no se
-    // hunde hacia el cuello (el contorno del cuello queda más atrás).
-    if ((M.vNeck || M.deepNeck) && cs > 0) z = Math.max(z, chestZ(M, x, yy));
+    // Escote hondo (tank top): el borde va apoyado sobre el pecho y la
+    // espalda, no se mete hacia el cuello.
+    if (M.deepNeck && cs > 0) z = Math.max(z, chestZ(M, x, yy));
     if (M.deepNeck && cs < 0) z = Math.min(z, backZ(M, x, yy));
   }
   out[0] = x;
@@ -290,7 +344,83 @@ function torsoPoint(M, th, t, out) {
   out[2] = z;
   return out;
 }
-
+// Por encima del escote de referencia: la columna sigue desde su punta con la
+// misma dirección y velocidad y dobla hacia arriba (radio NECK_EXT_R) hasta
+// subir derecho, pegada al cuello. Mientras dobla, su rumbo horizontal gira
+// hacia el eje del cuello (perpendicular al contorno): así las columnas no se
+// juntan en el medio.
+const NECK_EXT_R = 0.012;
+function torsoAbove(M, th, t, out) {
+  const h = 1e-4;
+  const p1 = torsoPoint(M, th, 1, [0, 0, 0]);
+  const p0 = torsoPoint(M, th, 1 - h, [0, 0, 0]);
+  const T = [(p1[0] - p0[0]) / h, (p1[1] - p0[1]) / h, (p1[2] - p0[2]) / h];
+  const v = Math.hypot(...T) || 1e-9;
+  const s = (t - 1) * v;
+  const R = NECK_EXT_R;
+  const c0 = Math.min(1, Math.max(-1, T[1] / v));
+  const phi0 = Math.acos(c0);
+  // Rumbo horizontal: el de la columna al salir, el del contorno al terminar
+  // de doblar.
+  const ha = Math.atan2(T[2], T[0]);
+  let hb = Math.atan2(-Math.cos(th) / (Math.cos(th) >= 0 ? M.neck.b : M.neck.bB), -Math.sin(th) / M.neck.a);
+  hb = ha + Math.atan2(Math.sin(hb - ha), Math.cos(hb - ha));
+  const steps = 24;
+  const ds = Math.min(s, R * phi0) / steps;
+  out[0] = p1[0];
+  out[1] = p1[1];
+  out[2] = p1[2];
+  for (let k = 0; k < steps; k++) {
+    const phi = Math.acos(c0) - ((k + 0.5) * ds) / R;
+    const el = Math.PI / 2 - Math.max(0, phi); // elevación del rumbo
+    const az = lerp(ha, hb, smooth(phi0 > 1e-6 ? 1 - Math.max(0, phi) / phi0 : 1));
+    out[0] += ds * Math.cos(el) * Math.cos(az);
+    out[1] += ds * Math.sin(el);
+    out[2] += ds * Math.cos(el) * Math.sin(az);
+  }
+  out[1] += Math.max(0, s - R * phi0);
+  return out;
+}
+// t en que la columna th (desde t0 hacia el cuello) llega al medio ancho x.
+function tAtX(M, th, t0, x) {
+  const P = [0, 0, 0];
+  let lo = t0;
+  let hi = 1;
+  for (let k = 0; k < 48; k++) {
+    const mid = (lo + hi) / 2;
+    if (Math.abs(torsoPoint(M, th, mid, P)[0]) > x) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+// Escote del frente visto de frente: la altura del corte a la distancia ax
+// del centro (cada cuello, con el mismo ancho en el hombro). Fuera del cuello
+// no corta nada.
+const cutY = (M, ax) => {
+  const r = Math.min(1, ax / M.neck.a);
+  const round = (1 - r * r) ** 0.8;
+  if (!M.vNeck) return -M.dropF * round;
+  const u = 1 - r;
+  const e = VEE_EASE;
+  return -M.dropF * (((u < e ? (u * u) / (2 * e) : u - e / 2) / (1 - e / 2)) * (1 - VEE_ROUND) + round * VEE_ROUND);
+};
+// Dónde corta el escote la columna de ángulo th del frente: el t en que la
+// columna llega a la línea del corte (menos de 1 si pasa más abajo que el de
+// referencia, más si pasa más arriba). Atrás no cambia.
+function neckT(M, th) {
+  const c = Math.cos(th);
+  if (c < 1e-9 || (!M.vNeck && M.dropF === M.refF)) return 1;
+  const P = [0, 0, 0];
+  const f = (t) => torsoPoint(M, th, t, P)[1] - cutY(M, Math.abs(P[0]));
+  let lo = 0.5;
+  let hi = 1.5;
+  for (let k = 0; k < 48; k++) {
+    const mid = (lo + hi) / 2;
+    if (f(mid) < 0) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
 // ---------- ruido suave para los pliegues ----------
 
 function hash3(x, y, z) {
@@ -321,6 +451,25 @@ function buildTorso(M) {
   const N = ROWS_LOW + ROWS_ARM + ROWS_TOP;
   const tPit = (M.pitY + M.L) / M.L;
   const tSh = (M.shY + M.L) / M.L;
+  // Sin mangas el hombro queda SHOULDER_CUT más angosto: la tela es la misma
+  // y la sisa sube por ella hacia el cuello, arriba eso y nada en la axila
+  // (las filas de arriba se apretan hacia el escote). Agrandar el óvalo de la
+  // sisa lo dejaba en punta: arriba de la punta del hombro la tela rinde tres
+  // veces más por cada t.
+  const lift0 = M.sleeveless ? tAtX(M, Math.PI / 2, tSh, M.shA - SHOULDER_CUT * Math.cos(Math.atan2(-M.shY, M.shA - M.neck.a))) - tSh : 0;
+  const lift = (th, t) => {
+    if (!lift0 || t <= tPit) return t;
+    const d = Math.abs(Math.atan2(Math.sin(th - Math.PI / 2), Math.cos(th - Math.PI / 2)));
+    // Parejo en todo el ancho de la sisa (arriba el borde cruza el hombro
+    // derecho, de frente a espalda; si fuera más en la costura, haría un pico
+    // hacia el cuello) y se apaga hacia el frente y la espalda.
+    const e = (Math.min(d, Math.PI - d) / dTh - 1) / (SHOULDER_SPREAD - 1);
+    if (e >= 1) return t;
+    const k = e <= 0 ? lift0 : lift0 * Math.cos((Math.PI / 2) * e) ** 2;
+    return t <= tSh ? t + k * smooth((t - tPit) / (tSh - tPit)) : t + (k * (1 - t)) / (1 - tSh);
+  };
+  // Hasta dónde llega el hombro (medio ancho y altura).
+  [M.shTip, M.shTipY] = torsoPoint(M, Math.PI / 2, tSh + lift0, [0, 0, 0]);
   const tRow = (i) => {
     if (i <= ROWS_LOW) return (tPit * i) / ROWS_LOW;
     if (i <= ROWS_LOW + ROWS_ARM) return lerp(tPit, tSh, (i - ROWS_LOW) / ROWS_ARM);
@@ -338,7 +487,9 @@ function buildTorso(M) {
     const p = (th - thc) / dTh;
     const q = (t - tc) / dT;
     const rho = Math.max(Math.abs(p), Math.abs(q));
-    const r = Math.hypot(p, q);
+    // Sin mangas, la mitad de arriba más cuadrada (ver lift).
+    const m = lift0 && q > 0 ? SHOULDER_TOP_E : 2;
+    const r = (Math.abs(p) ** m + Math.abs(q) ** m) ** (1 / m);
     if (rho >= 2.4 || r < 1e-9) return [th, t];
     // Sin tocar el escote (la fila de arriba sigue en t = 1).
     const top = q > 0 ? clamp01((1 - t) / (1 - tSh)) : 1;
@@ -352,14 +503,35 @@ function buildTorso(M) {
     const pos = new Float32Array(W * (N + 1) * 3);
     const ang = new Float32Array(W * (N + 1));
     const tmp = [0, 0, 0];
+    // Escote: cada columna termina donde la corta (neckT). Sus filas se
+    // corren sólo arriba, desde tA (nunca más abajo que la punta del hombro,
+    // ni que dos veces lo que cambia el escote): debajo la tela es la misma
+    // con cualquier cuello.
+    const cut = [];
+    for (let j = 0; j <= COLS; j++) {
+      const t1 = neckT(M, th0 + (Math.PI * j) / COLS);
+      cut.push([t1, 1 - Math.max(1 - tSh, NECK_SPAN * (1 - t1))]);
+    }
+    const reach = (t, j) => {
+      const [t1, tA] = cut[j];
+      return t1 === 1 || t <= tA ? t : t + (t1 - 1) * smooth((t - tA) / (1 - tA));
+    };
+    // t de cada punto antes y después del corte (para sacar el molde del de
+    // referencia, ver flattenPrint).
+    const tw = new Float32Array(W * (N + 1));
+    const tv = new Float32Array(W * (N + 1));
+    if (cut.some(([t1]) => t1 !== 1)) M.cutNeck = true;
     for (let i = 0; i <= N; i++) {
       for (let j = 0; j <= COLS; j++) {
         let th = th0 + (Math.PI * j) / COLS;
         let t = tRow(i);
         [th, t] = warp(th, t, th0);
         [th, t] = warp(th, t, th0 + Math.PI);
-        torsoPoint(M, th, t, tmp);
+        t = lift(th, t);
         const k = i * W + j;
+        tw[k] = t;
+        tv[k] = reach(t, j);
+        torsoPoint(M, th, tv[k], tmp);
         pos.set(tmp, k * 3);
         ang[k] = th;
       }
@@ -377,7 +549,7 @@ function buildTorso(M) {
         idx.push(a, b, d, a, d, c);
       }
     orient(pos, idx, fromVertical);
-    panels[key] = { pos, ang, idx, W, N };
+    panels[key] = { pos, ang, idx, W, N, tw, tv };
   }
   return { panels, i1, i2, N, armCols: A, armColsB: A };
 }
@@ -993,7 +1165,7 @@ export function buildShirt(params) {
     parts[k + 'Lip'] = buildLip(ring, 0.016, true);
   }
 
-  printUV(parts, N, W);
+  printUV(parts, N, W, M);
 
   // Normales, costuras soldadas y marcas de costura.
   for (const part of Object.values(parts)) part.nrm = computeNormals(part.pos, part.idx);
@@ -1039,7 +1211,14 @@ export function buildShirt(params) {
           }),
     },
   };
-  return { geos, measures: M, layout, printBase: { front: parts.front.printBase, back: parts.back.printBase } };
+  return {
+    geos,
+    measures: M,
+    layout,
+    params: { ...DEFAULTS, ...params },
+    printBase: { front: parts.front.printBase, back: parts.back.printBase },
+    cut: M.cutNeck ? { tw: panels.front.tw, tv: panels.front.tv } : null,
+  };
 }
 
 // ---------- coordenadas de estampado ----------
@@ -1047,11 +1226,13 @@ export function buildShirt(params) {
 // Cada pieza desplegada en metros sobre la tela (las UV de la tela), como se
 // ve desde afuera: x hacia la derecha, y hacia abajo, con el origen en un
 // punto fijo de la pieza (así un diseño no se mueve al cambiar el largo o el
-// calce): frente y espalda, el centro del escote; mangas, la punta del
+// calce ni el cuello): frente y espalda, el centro del escote (en el frente,
+// el del escote de referencia, aunque el corte pase más abajo o más arriba:
+// ver flattenPrint); mangas, la punta del
 // hombro, con el ruedo derecho (como un molde); puños, el centro de arriba;
 // cuello, el centro de atrás en la costura (arriba la cara de afuera y, más
 // arriba, la de adentro).
-function printUV(parts, N, W) {
+function printUV(parts, N, W, M) {
   const C = COLS / 2;
   // Signo de x: que crezca hacia la derecha de quien mira de afuera.
   const facing = (pos, uv, ids, right) => {
@@ -1072,7 +1253,10 @@ function printUV(parts, N, W) {
       uv1[v * 2 + 1] = -pos[v * 3 + 1];
     }
     const A = (N * W + C) * 2;
-    parts[key].uv1 = uv1.map((x, i) => x - uv1[A + (i % 2)]);
+    // Con otro cuello, el origen sigue en el escote de referencia (ver
+    // flattenPrint); de entrada, a su altura.
+    const o = [uv1[A], key === 'front' && M.cutNeck ? M.refF : uv1[A + 1]];
+    parts[key].uv1 = uv1.map((x, i) => x - o[i % 2]);
     parts[key].printBase = Float32Array.from(parts[key].uv1);
   }
   for (const [key, cuffKey, side] of [['sleeveL', 'cuffL', 1], ['sleeveR', 'cuffR', -1]]) {
@@ -1135,6 +1319,20 @@ const FLAT_WARM = [
 ];
 export function flattenPrint(built, prev = null) {
   if (built.flatPrint) return;
+  // Con otro cuello el molde es el de la camiseta de referencia (la misma, con
+  // el escote redondo de referencia), cortado: un diseño cae igual con
+  // cualquier cuello. Esa camiseta se aplana una vez y sirve para todos.
+  const prevRef = prev && prev.cut ? prev.ref : prev;
+  if (built.cut) {
+    const rp = { ...built.params, neckStyle: 'round', neckDepth: NECK_REF };
+    const ref = prevRef && prevRef.flatPrint && refKey(prevRef.params) === refKey(rp) ? prevRef : buildShirt(rp);
+    flattenPrint(ref, prevRef);
+    cutMold(built, ref);
+    built.ref = ref;
+    built.flatPrint = true;
+    return;
+  }
+  prev = prevRef;
   const L = built.layout;
   const W = L.cols + 1;
   const H = L.rows + 1;
@@ -1157,6 +1355,59 @@ export function flattenPrint(built, prev = null) {
     g.attributes.uv1.needsUpdate = true;
   }
   built.flatPrint = true;
+}
+const refKey = (p) => [p.garment, p.fit, p.length, p.neckStyle === 'v' ? 'v' : 'r', p.neckDepth].join();
+// Molde del frente cortado (cutMold): cada punto toma el lugar del de
+// referencia en su columna con el mismo t (entre dos filas, interpolado; por
+// encima del escote de referencia, la columna sigue derecha en el molde lo
+// que sube sobre la tela). La espalda es la misma pieza.
+function cutMold(built, ref) {
+  const M = built.measures;
+  const L = built.layout;
+  const W = L.cols + 1;
+  const N = L.rows;
+  const { tw, tv } = built.cut;
+  const src = ref.geos.front.attributes.uv1.array;
+  const dst = built.geos.front.attributes.uv1.array;
+  const P = [0, 0, 0];
+  const Q = [0, 0, 0];
+  for (let j = 0; j <= L.cols; j++) {
+    const th = -Math.PI / 2 + (Math.PI * j) / L.cols;
+    const tTop = tw[N * W + j];
+    for (let i = 0; i <= N; i++) {
+      const v = i * W + j;
+      const t = tv[v];
+      if (t > tTop) {
+        const a = N * W + j;
+        const b = a - W;
+        const dx = src[a * 2] - src[b * 2];
+        const dy = src[a * 2 + 1] - src[b * 2 + 1];
+        const l = Math.hypot(dx, dy) || 1;
+        let len = 0;
+        torsoPoint(M, th, tTop, Q);
+        for (let k = 1; k <= 16; k++) {
+          torsoPoint(M, th, lerp(tTop, t, k / 16), P);
+          len += Math.hypot(P[0] - Q[0], P[1] - Q[1], P[2] - Q[2]);
+          Q.splice(0, 3, ...P);
+        }
+        dst[v * 2] = src[a * 2] + (dx / l) * len;
+        dst[v * 2 + 1] = src[a * 2 + 1] + (dy / l) * len;
+        continue;
+      }
+      let k = Math.min(i, N - 1);
+      while (k > 0 && tw[k * W + j] > t) k--;
+      while (k < N - 1 && tw[(k + 1) * W + j] < t) k++;
+      const t0 = tw[k * W + j];
+      const t1 = tw[(k + 1) * W + j];
+      const f = t1 > t0 ? clamp01((t - t0) / (t1 - t0)) : 0;
+      const a = k * W + j;
+      dst[v * 2] = lerp(src[a * 2], src[(a + W) * 2], f);
+      dst[v * 2 + 1] = lerp(src[a * 2 + 1], src[(a + W) * 2 + 1], f);
+    }
+  }
+  built.geos.front.attributes.uv1.needsUpdate = true;
+  built.geos.back.attributes.uv1.array.set(ref.geos.back.attributes.uv1.array);
+  built.geos.back.attributes.uv1.needsUpdate = true;
 }
 
 // Molde de una pieza del torso (grilla W×H, simétrica respecto de la columna

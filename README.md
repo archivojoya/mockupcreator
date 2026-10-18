@@ -63,15 +63,17 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   se empuja y se balancea, y después se acomoda sola (en el celular, con un
   toque).
 - **Prenda**: camiseta, musculosa, básquet o tank top.
-  - **Musculosa** (de varón): el mismo molde de la camiseta sin mangas (la
-    misma sisa y los mismos hombros); en cada sisa va un puño como el de las
-    mangas (tira doble de 2,4 cm, del color de los puños). Con cuerpo
+  - **Musculosa** (de varón): el mismo molde de la camiseta sin mangas, con
+    el hombro 2 cm más angosto (la sisa sube por la misma tela hacia el
+    cuello, arriba 2 cm y nada en la axila); en cada sisa va un puño como el
+    de las mangas (tira doble de 2,4 cm, del color de los puños). Con cuerpo
     envuelve el borde y se apoya sobre la tela, como un ribete: de frente y
-    de espalda se ve como una franja a lo largo de la sisa. Colgada sale del
-    borde siguiendo la tela, y la percha llega más cerca de la punta del
-    hombro.
+    de espalda se ve como una franja a lo largo de la sisa, y arriba cruza el
+    hombro derecho, de frente a espalda. Colgada sale del borde siguiendo la
+    tela, y la percha llega más cerca de la punta del hombro.
   - **Básquet**: la musculosa de sisa grande (baja 4,5 cm más, entra más en
-    el frente y la espalda, y el hombro termina antes).
+    el frente y la espalda, y el hombro termina antes), también con el
+    hombro 2 cm más angosto.
   - **Tank top** (de mujer): cuerpo con busto, cintura y cadera; escote
     redondo ancho y hondo adelante (13 cm de entrada, de 9 a 18) y alto
     atrás (4 cm); tiras de 4,2 cm en el hombro; espalda nadadora (cada sisa
@@ -86,11 +88,14 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   color y su diseño, sin costura), cuello (redondo o en V) y profundidad del
   escote. De entrada: calce ajustado, 62 cm de largo, manga de 18 cm, 30° de
   apertura, cuello redondo con 7,5 cm de escote. La malla se rehace
-  al instante. El cuello en V tiene el mismo ancho que el redondo; sus patas
-  bajan de cada hombro a la punta apenas abombadas hacia afuera (como el
-  redondo, pero en punta); adelante la tira va acostada sobre el pecho, con el
-  mismo ancho en toda la V, y sus dos puntas se juntan en una costura que
-  también se respeta colgada.
+  al instante. El cuello es sólo un corte: con cualquier cuello y cualquier
+  hondo la camiseta y su molde son los mismos (la tela de la de cuello
+  redondo de 7,5 cm), y un diseño cae en el mismo lugar; la V se lleva lo que
+  queda adentro del triángulo. El cuello en V tiene el mismo ancho que el
+  redondo; sus patas bajan de cada hombro a la punta apenas abombadas hacia
+  afuera (como el redondo, pero en punta); adelante la tira va acostada sobre
+  el pecho, con el mismo ancho en toda la V, y sus dos puntas se juntan en una
+  costura que también se respeta colgada.
 - **Tela**: siete tejidos (malla deportiva, piqué, panal, jersey liso,
   acanalada, jacquard con rayas tono sobre tono y microperforada con zonas
   caladas a los costados y bajo los brazos), más dos controles:
@@ -175,16 +180,33 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
 
 Cómo se arma (`src/camiseta/shirt.js`):
 
-- **Torso**: anillos horizontales desde el ruedo hasta el escote. Cerca del
-  escote cada columna se curva hacia el contorno del cuello; a los costados esa
-  curva es la línea del hombro. Visto desde arriba, el contorno del cuello es
-  una D: adelante baja 8 cm por delante de los hombros y atrás es casi plano
-  (3,5 cm), como un escote real. La espalda sube de la axila al cuello con una
+- **Torso**: anillos horizontales desde el ruedo hasta el escote de
+  referencia (el redondo de 7,5 cm). Cerca del escote cada columna se curva
+  hacia el contorno del cuello; a los costados esa curva es la línea del
+  hombro. Visto desde arriba, el contorno del cuello es una D: adelante baja
+  8 cm por delante de los hombros y atrás es casi plano (3,5 cm), como un
+  escote real. La espalda sube de la axila al cuello con una
   pendiente pareja: sin escalón bajo el cuello, así lo que se estampa ahí (un
   logo, un nombre) mira hacia atrás y no hacia arriba.
+- **Escote**: un corte sobre esa tela, con su forma vista de frente (el
+  redondo, a su hondo; la V). Cada columna termina donde la corta y sus filas
+  se reacomodan sólo cerca del escote; si el corte pasa más arriba que el de
+  referencia (un redondo más alto, las patas de la V junto al hombro), la
+  columna sigue por la tela hacia el cuello: dobla hacia arriba y gira hacia
+  el eje del cuello (siguiendo derecho, las columnas se juntaban en el medio).
+  Para el estampado se aplana una sola vez la camiseta de referencia y cada
+  punto toma su lugar en ese molde (sobre su columna): la tela que comparten
+  dos cuellos tiene exactamente las mismas coordenadas. Aplanando cada
+  camiseta por su lado, el molde cambiaba al sacarle un pedazo (hasta 1 cm
+  en el hombro con los escotes hondos).
 - **Sisas**: un hueco en la grilla del torso a cada lado, deformado hasta
   quedar ovalado. La manga arranca exactamente de ese borde, así la costura
-  queda cerrada.
+  queda cerrada. Sin mangas la sisa sube 2 cm por la tela hacia el cuello
+  (parejo en todo su ancho, nada en la axila), con la mitad de arriba más
+  cuadrada y la punta del hombro redondeada (arco de 3 cm entre el costado y
+  la línea del hombro): agrandando el óvalo quedaba en punta (arriba de la
+  punta del hombro la tela rinde tres veces más por cada fila) y el borde
+  cruzaba en diagonal un doblez de 1 cm de radio; el puño hacía un gancho.
 - **Mangas**: de la sisa a un ruedo circular alrededor del eje del brazo, con
   puño aparte. La musculosa lleva un puño cosido al borde de cada sisa; el
   tank top, un vivo.
@@ -231,19 +253,29 @@ veces por paso), no se dobla de canto y no se da vuelta sobre la costura, pero
 se achata libre: en la percha la abertura queda como un óvalo finito, el frente
 cae en U delante de la barra y la espalda apoya contra ella, como una camiseta
 colgada de verdad (si la tira recordara la vuelta alrededor del cuello, armaría
-un aro que empuja el frente y arruga los hombros). En V la tira se cose estirada y
-frunce apenas el escote: en el molde plano del frente las patas de la V quedan
-un 30 % más cortas que puestas (repartido en la tela de alrededor, que queda
-plana, sin burbujas bajo la punta) y la tira sigue al escote. Colgada, la V se
-hace unos 3 cm más honda que puesta, como el cuello redondo. Ese acortamiento
-se apaga junto a la costura del hombro: si no, el hombro del frente aplanado
-medía hasta un 40 % más que el de la espalda y, cosidos, los dos se arrugaban.
+un aro que empuja el frente y arruga los hombros). La tira se cose estirada y
+frunce apenas el escote, igual con cualquier cuello: en el molde plano el borde
+del escote apunta a la mitad de su largo puesto en el frente y a tres cuartos
+en la espalda (repartido en la tela de alrededor, que queda plana). Colgado,
+el redondo se hace 0,7 cm más hondo que puesto y la V de 9 cm, 1 cm (sin esto,
+3,7 y 4,6). Ese acortamiento se apaga junto a la costura del hombro: si no, el
+hombro del frente aplanado medía hasta un 40 % más que el de la espalda y,
+cosidos, los dos se arrugaban.
 Con broches nada sostiene el
 cuello atrás (entre los broches) ni el hombro de afuera del broche: ahí cada
 tramo de unos 10 cm de la tira guarda algo de su forma puesta (si no, la
 espalda del cuello cae y se embolsa), mucho más en los costados del cuello
 (ahí la tira dobla de frente a espalda; acostada se quebraba en una aleta), se
-guarda menos volumen arriba y la copa de la manga cede más. En el tank top la
+guarda menos volumen arriba y la copa de la manga cede más. La percha llega
+a 1,5 cm de la punta del hombro: más corta, la punta y la manga caían, los
+costados se cerraban y arriba la tela quedaba sobrando a lo ancho (ondas
+verticales en la espalda y el frente). Dentro del cuello la madera baja
+2,1 cm, donde sale el gancho: la espalda del escote (más baja que los hombros)
+apoya arriba y la tira la tapa; si no, colgaba detrás de la madera y la dejaba
+asomar sobre el cuello de atrás, y los costados de la tira quedaban en punta.
+En el torso la tela no se comprime tan fácil al doblarse (en las mangas sí):
+blanda, se arrugaba punto a punto junto a los hombros y marcaba un pliegue a lo
+largo del centro de la espalda y el frente. En el tank top la
 madera de la percha se ve casi entera y llega casi al borde de afuera de las
 tiras (cortada en el borde del cuello, en un escote tan ancho quedaba en el
 aire). Frente, espalda y mangas guardan algo del volumen que

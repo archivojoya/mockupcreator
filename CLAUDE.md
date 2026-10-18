@@ -19,7 +19,20 @@ Es un mockup: manda cómo se ve, no la física exacta.
 - Colgada, cada pieza tiende a su molde aplanado: las costuras tienen que
   medir lo mismo en las dos piezas, y los acortamientos van lejos de ellas.
 - Con broches, la tira del cuello queda parada en los costados.
-- La percha se ve donde la prenda se apoya.
+- Variantes de una prenda (cuello redondo o en V, hondo del escote, sisa
+  más grande): la misma tela y el mismo molde, sólo cambia el corte. El
+  estampado sale del molde de referencia, así un diseño cae igual en todas.
+  Aplanar cada variante por su lado no sirve: al sacarle un pedazo el molde
+  entero se acomoda distinto.
+- Un borde no cruza en diagonal un doblez cerrado de la tela (la punta del
+  hombro): se redondea el doblez o el borde lo cruza derecho. Agrandar un
+  hueco en la grilla donde la tela rinde distinto por fila lo deja en punta.
+- La percha se ve donde la prenda se apoya, sostiene casi hasta la punta del
+  hombro (más corta, la tela de arriba sobra a lo ancho y se ondula) y dentro
+  del cuello va más baja: la espalda del escote apoya arriba y la tapa.
+- Ondas de una celda en la tela colgada son la malla, no la tela: la flexión
+  tiene que resistir la compresión (medir el residuo de cada fila contra su
+  versión suavizada, no la curva entera).
 - Si el pedido viene dibujado, pasar el trazo a medidas y superponerlo a la
   prenda en 2D antes de renderizar.
 

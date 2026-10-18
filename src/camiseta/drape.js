@@ -50,6 +50,7 @@ const CLIPS_CAP = 0.15;
 const CLIPS_BAND_SIDE = 0.9;
 const CLIPS_BAND_SEAM = 0.45;
 const HANGER_SINK = 0.008; // (tank top) cuánto baja la madera que se ve bajo las tiras
+const HANGER_DIP = 0.021; // cuánto baja la madera dentro del cuello (ver makeHanger)
 const VOLUME_HEM = 0.06;
 const RACER_PAIR = 0.03; // (tank top) a más de esto, de costado, no se miran
 const VOLUME_SLEEVE = 0.5;
@@ -87,22 +88,17 @@ const BAND_SPAN = 6;
 const BAND_SIDE = [0.6, 0.9];
 // La costura de la tira es más firme que la tela: no la deja darse vuelta.
 const SEAM_K = 0.5;
-// En V la tira acanalada se cose estirada y frunce un poco el escote: al
-// aplanar el molde del frente para colgarla, las patas (de cada hombro a la
-// punta) apuntan a este largo respecto del puesto (la tela de alrededor no
-// las deja llegar: quedan en ≈ 0,7). Puestas vienen curvas por el pecho;
-// colgada la camiseta queda plana y, sin esto, la V se hacía mucho más honda
-// que puesta (9 cm → 17; con esto, 12; el redondo, 8,5 → 11,8).
-const V_EASE = 0.4;
-// Ese escote más corto acerca las puntas de los hombros: el escote de atrás,
-// con su largo de siempre, quedaba sobrado (la tira de atrás ondulada y la
-// espalda fruncida desde el cuello, en percha y con broches). Se acorta
-// también, menos, en el mismo aplanado.
-const V_BACK_EASE = 0.7;
+// La tira acanalada del cuello se cose estirada y frunce un poco el escote:
+// al aplanar el molde para colgarla, el borde del escote apunta a este largo
+// respecto del puesto, en el frente y en la espalda (la tela de alrededor no
+// lo deja llegar). Es igual para cualquier cuello: sin esto el escote colgado
+// se caía (redondo 7,6 cm → 11,3; V 9 → 13,6); con esto, 8,3 y 10. (El tank
+// top, con su escote hondo y su vivo, no.)
+const NECK_EASE = [0.5, 0.75];
 // Columnas desde la costura del hombro en las que ese acortamiento se apaga:
 // tiraba de la punta del hombro y el hombro del frente quedaba más largo que
 // el de la espalda (al coserlos, los dos se arrugaban).
-const V_EASE_SIDE = [1, 4];
+const NECK_EASE_SIDE = [1, 4];
 // La tira acanalada es más firme que la tela: sus uniones se resuelven
 // estas veces más en cada iteración (casi no se estira con el peso del pecho).
 const BAND_PASSES = 4;
@@ -122,10 +118,13 @@ const FLAT_REST = [
 // rectángulo de bordes apenas redondeados (más alto que ancho) y las puntas
 // son redondas vistas de frente.
 export function makeHanger(M) {
-  // Sin mangas, la percha llega más cerca de la punta del hombro (si no, la
-  // punta cuelga y se dobla junto a la sisa); con las tiras finas del tank
-  // top, casi hasta su borde de afuera (si no, media tira queda en el aire).
-  const xEnd = M.shA - (M.deepNeck ? 0.008 : M.sleeveless ? 0.022 : 0.05);
+  // La percha llega cerca de la punta del hombro: si termina antes, la punta
+  // y la manga caen, los costados se cierran y arriba la tela queda sobrando
+  // a lo ancho (ondas verticales en la espalda y el frente: con 5 cm, 4 mm;
+  // con 1,5 cm, la mitad). Sin mangas, un poco antes (si no, la punta
+  // cuelga y se dobla junto a la sisa); con las tiras finas del tank top,
+  // casi hasta su borde de afuera (si no, media tira queda en el aire).
+  const xEnd = (M.shTip || M.shA) - (M.deepNeck ? 0.008 : M.sleeveless ? 0.022 : 0.015);
   const seamY = (x) => {
     const ax = Math.abs(x);
     return ax <= M.neck.a ? 0 : (M.shY * (ax - M.neck.a)) / (M.shA - M.neck.a);
@@ -140,7 +139,12 @@ export function makeHanger(M) {
   const p = 1.8;
   let drop = 0.03;
   for (let x = M.neck.a - 0.01; x <= xEnd; x += 0.002) drop = Math.max(drop, (y0 - (seamY(x) - 0.006)) / (x / xEnd) ** p);
-  const topY = (x) => y0 - drop * (Math.abs(x) / xEnd) ** p;
+  // Dentro del cuello la madera baja HANGER_DIP (donde sale el gancho): la
+  // espalda del escote, más baja que los hombros, apoya arriba y la tira la
+  // tapa; si no, colgaba detrás de la madera y la dejaba asomar sobre el
+  // cuello de atrás. (En el tank top la madera se ve entera: no.)
+  const dip = M.deepNeck ? 0 : HANGER_DIP;
+  const topY = (x) => y0 - drop * (Math.abs(x) / xEnd) ** p - dip * (1 - smoothstep(M.neck.a - 0.03, M.neck.a + 0.005, Math.abs(x)));
   const center = (x) => new THREE.Vector3(x, topY(x) - half(x), z0);
   const tangent = (x) => new THREE.Vector3().subVectors(center(x + 1e-4), center(x - 1e-4)).normalize();
   const upOf = (t) => new THREE.Vector3(-t.y, t.x, 0).normalize();
@@ -233,7 +237,7 @@ export function makeHanger(M) {
   for (let i = 0; i < exact.length; i += 3) if (exact[i] || exact[i + 1] || exact[i + 2]) na.set([exact[i], exact[i + 1], exact[i + 2]], i);
 
   // Gancho de alambre, desde el centro del borde de arriba.
-  const hook = makeHook(topY(0) - 0.004, z0, 0.035);
+  const hook = makeHook(topY(0) - 0.004, z0, 0.035 + dip);
   return { kind: 'hanger', wood: bar, metal: hook.stem, hook, segments, minY: Math.min(...segments.map((s) => Math.min(s.a.y, s.b.y) - s.hu)) };
 }
 
@@ -437,7 +441,13 @@ export class HangingShirt {
   // más volumen), el aire la frena menos y el mouse la mueve menos.
   constructor(built, support, opts = {}) {
     const heavy = Math.min(1, Math.max(0, opts.weight ?? 0.5)) - 0.5;
-    this.bend = [0.4 + 0.5 * heavy, 0.25 + 0.36 * heavy]; // flexión: estirar, comprimir
+    // Flexión: estirar, comprimir en el torso y en las mangas. En el torso
+    // comprimir no es tan blando: si no, la tela se arruga punto a punto
+    // (ondas de una celda junto a los hombros y un pliegue a lo largo del
+    // centro de la espalda y el frente colgados). En las mangas sí (bajo la
+    // axila la tela queda apretada y, más firme, no se terminaba de quedar
+    // quieta).
+    this.bend = [0.4 + 0.5 * heavy, 0.7 + 0.36 * heavy, 0.25 + 0.36 * heavy];
     this.damp = DAMP + 0.006 * heavy;
     this.dampCalm = DAMP_CALM + 0.01 * heavy;
     this.pushScale = 1 - 0.7 * heavy;
@@ -580,7 +590,7 @@ export class HangingShirt {
       if (!pairs.has(key)) pairs.set(key, [a, b, dist(a, b), kind]);
       else if (force) pairs.get(key)[3] = kind;
     };
-    const grid = (m, w, h, cellOk) => {
+    const grid = (m, w, h, cellOk, bendKind = 2) => {
       for (let i = 0; i <= h; i++)
         for (let j = 0; j < w; j++) {
           const a = m[i * w + j];
@@ -590,15 +600,15 @@ export class HangingShirt {
             link(a, m[(i + 1) * w + j + 1], 1);
             link(m[i * w + j + 1], m[(i + 1) * w + j], 1);
           }
-          if (j + 2 < w && m[i * w + j + 1] >= 0) link(a, m[i * w + j + 2], 2);
-          if (i + 2 <= h && m[(i + 1) * w + j] >= 0) link(a, m[(i + 2) * w + j], 2);
+          if (j + 2 < w && m[i * w + j + 1] >= 0) link(a, m[i * w + j + 2], bendKind);
+          if (i + 2 <= h && m[(i + 1) * w + j] >= 0) link(a, m[(i + 2) * w + j], bendKind);
         }
     };
     const cellOkOf = (a) => (i, j) => !(i >= i1 && i < i2 && (j < a || j >= C - a));
     const cellOkK = { front: cellOkOf(A), back: cellOkOf(AB) };
     grid(map.front, WC, NC, cellOkK.front);
     grid(map.back, WC, NC, cellOkK.back);
-    for (const m of Object.values(sleeveMap)) grid(m, SWC, RC, () => true);
+    for (const m of Object.values(sleeveMap)) grid(m, SWC, RC, () => true, 8);
     // La copa de la manga tiene algo de cuerpo: uniones blandas entre las
     // primeras filas de la manga y la tela del torso junto a la sisa (la
     // manga no cuelga a plomo).
@@ -643,9 +653,9 @@ export class HangingShirt {
     // cortan) y no a la forma puesta: si no, recuerda la curva de hombros,
     // pecho y espalda y al quedar plana se arruga. Cada unión dentro de una
     // pieza toma su largo en la pieza aplanada (las de la costura, el
-    // promedio de las dos). En V, el escote del frente se acorta como la
-    // tira (V_EASE) en el mismo aplanado: la tela de alrededor se acomoda
-    // plana, sin fruncirse bajo la V; y el de atrás, menos (V_BACK_EASE).
+    // promedio de las dos). El borde del escote se acorta como la tira
+    // (NECK_EASE) en el mismo aplanado: la tela de alrededor se acomoda plana,
+    // sin fruncirse.
     const flatSum = new Map();
     for (const key of ['front', 'back']) {
       const m = map[key];
@@ -666,9 +676,9 @@ export class HangingShirt {
           if (cellOkK[key](i, j)) tri.push(a, a + 1, a + WC, a + 1, a + WC + 1, a + WC);
         }
       const top = NC * WC;
-      const e = built.measures.vNeck ? (key === 'front' ? V_EASE : V_BACK_EASE) : 1;
-      // (Se apaga junto a la costura del hombro: ver V_EASE_SIDE.)
-      const side = (p, q) => smoothstep(V_EASE_SIDE[0], V_EASE_SIDE[1], Math.min(p % WC, q % WC, C - (p % WC), C - (q % WC)));
+      const e = built.measures.deepNeck ? 1 : NECK_EASE[key === 'front' ? 0 : 1];
+      // (Se apaga junto a la costura del hombro: ver NECK_EASE_SIDE.)
+      const side = (p, q) => smoothstep(NECK_EASE_SIDE[0], NECK_EASE_SIDE[1], Math.min(p % WC, q % WC, C - (p % WC), C - (q % WC)));
       const ease = e !== 1 ? (p, q) => (p >= top && q >= top ? 1 + (e - 1) * side(p, q) : 1) : null;
       const X = flattenPanel(pos3, tri, WC, NC + 1, X0, FLAT_REST, ease);
       const cellOf = new Map();
@@ -1464,7 +1474,7 @@ export class HangingShirt {
     const P = this.p;
     const W = this.w;
     const { ca, cb, rest, kind } = this;
-    const [bendS, bendC] = this.bend;
+    const [bendS, bendC, bendCS] = this.bend;
     const capK = this.capK;
     const count = only ? only.length : ca.length;
     for (let o = 0; o < count; o++) {
@@ -1480,7 +1490,7 @@ export class HangingShirt {
       // Estirar cuesta mucho; comprimir, poco (la tela se pliega). La
       // flexión es blanda.
       const kd = kind[c];
-      const k = kd === 7 ? SEAM_K : kd === 2 ? (err > 0 ? bendS : bendC) : kd === 4 ? capK : kd === 6 ? (err > 0 ? 0.6 : 0.45) : err > 0 ? 1 : kd === 1 ? 0.5 : kd === 5 ? 0.9 : 0.7;
+      const k = kd === 7 ? SEAM_K : kd === 2 ? (err > 0 ? bendS : bendC) : kd === 8 ? (err > 0 ? bendS : bendCS) : kd === 4 ? capK : kd === 6 ? (err > 0 ? 0.6 : 0.45) : err > 0 ? 1 : kd === 1 ? 0.5 : kd === 5 ? 0.9 : 0.7;
       const wa = W[ca[c]];
       const wb = W[cb[c]];
       const ws = wa + wb;

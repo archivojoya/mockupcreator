@@ -132,6 +132,7 @@ export function pieceKeys(name) {
 export function pieceSizes(built) {
   const out = {};
   for (const pc of PIECES) {
+    if (!built.geos[pc.key]) continue; // pieza que esta prenda no tiene (mangas en la musculosa)
     const a = built.geos[pc.key].attributes.uv1.array;
     let n = a.length / 2;
     if (pc.key === 'collar') n = (built.layout.rings.collar.length + 1) * (COLLAR_FOLD + 1);

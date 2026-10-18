@@ -102,7 +102,9 @@ const FLAT_REST = [
 // rectángulo de bordes apenas redondeados (más alto que ancho) y las puntas
 // son redondas vistas de frente.
 export function makeHanger(M) {
-  const xEnd = M.shA - 0.05;
+  // Sin mangas, la percha llega más cerca de la punta del hombro (si no, la
+  // punta cuelga y se dobla junto a la sisa).
+  const xEnd = M.shA - (M.sleeveless ? 0.022 : 0.05);
   const seamY = (x) => {
     const ax = Math.abs(x);
     return ax <= M.neck.a ? 0 : (M.shY * (ax - M.neck.a)) / (M.shA - M.neck.a);
@@ -276,6 +278,33 @@ export function makeClipHanger(clips) {
   return { kind: 'clips', metal: mergeGeometries(metal), plastic: mergeGeometries(plastic), hook };
 }
 
+// Subidas de un borde cerrado (n vectores en `u`, tangentes en `t`),
+// promediadas con sus vecinos a lo largo del borde y perpendiculares a la
+// tangente otra vez. Cambia `u`.
+const SMOOTH_W = [1, 2, 3, 2, 1];
+function smoothUps(u, t, n) {
+  const src = Float32Array.from(u);
+  for (let k = 0; k < n; k++) {
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    SMOOTH_W.forEach((w, d) => {
+      const j = (k + d - 2 + n) % n;
+      x += src[j * 3] * w;
+      y += src[j * 3 + 1] * w;
+      z += src[j * 3 + 2] * w;
+    });
+    const dt = x * t[k * 3] + y * t[k * 3 + 1] + z * t[k * 3 + 2];
+    x -= dt * t[k * 3];
+    y -= dt * t[k * 3 + 1];
+    z -= dt * t[k * 3 + 2];
+    const l = Math.hypot(x, y, z) || 1;
+    u[k * 3] = x / l;
+    u[k * 3 + 1] = y / l;
+    u[k * 3 + 2] = z / l;
+  }
+}
+
 // ---------- simulación ----------
 
 // Distancia a lo largo de la tela desde el punto de apoyo más cercano
@@ -398,8 +427,9 @@ export class HangingShirt {
     const A = L.armCols / 2;
     const W = L.cols + 1;
     const WC = C + 1;
+    // Sin mangas (musculosa) no hay grilla de manga.
     const SW = L.sleeveSW;
-    const SWC = (SW - 1) / 2 + 1;
+    const SWC = L.sleeveless ? 0 : (SW - 1) / 2 + 1;
     const RC = (L.sleeveRows + L.cuffRows) / 2;
     this.dims = { C, NC, WC, SWC, RC };
 
@@ -427,7 +457,7 @@ export class HangingShirt {
     }
     // Mangas (con el puño): la primera fila es la sisa del torso.
     const sleeveMap = {};
-    for (const [key, side] of [['sleeveL', 1], ['sleeveR', -1]]) {
+    for (const [key, side] of L.sleeveless ? [] : [['sleeveL', 1], ['sleeveR', -1]]) {
       const m = new Int32Array(SWC * (RC + 1)).fill(-1);
       const loop = armholeLoopIJ(C, A, i1, i2, side);
       const cuff = key === 'sleeveL' ? 'cuffL' : 'cuffR';
@@ -477,7 +507,7 @@ export class HangingShirt {
           const m = map[key][i * WC + C - j];
           if (a >= 0 && m >= 0) mirror[a] = m;
         }
-    for (let k = 0; k < sleeveMap.sleeveL.length; k++) {
+    for (let k = 0; k < (sleeveMap.sleeveL?.length || 0); k++) {
       const a = sleeveMap.sleeveL[k];
       const m = sleeveMap.sleeveR[k];
       if (mirror[a] < 0 && mirror[m] < 0) {
@@ -543,7 +573,7 @@ export class HangingShirt {
     const torsoIds = [...new Set([...map.front, ...map.back])].filter((id) => id >= 0 && Math.abs(P[id * 3]) > 0.1 && P[id * 3 + 1] > -0.4);
     // (Se buscan para una manga y la otra copia en espejo: así las dos
     // quedan iguales aunque haya empates de distancia.)
-    for (const r of [2, 4, 6])
+    for (const r of L.sleeveless ? [] : [2, 4, 6])
       for (let k = 0; k < SWC - 1; k++) {
         const a = sleeveMap.sleeveR[r * SWC + k];
         const near = torsoIds
@@ -931,13 +961,13 @@ export class HangingShirt {
       this.binds.push({ key, ids, ws, use });
     };
     for (const key of ['front', 'back']) bindGrid(key, NC, C, (v) => [Math.floor(v / W), v % W, this.map[key], WC, NC]);
-    for (const [key, cuff] of [['sleeveL', 'cuffL'], ['sleeveR', 'cuffR']]) {
+    for (const [key, cuff] of L.sleeveless ? [] : [['sleeveL', 'cuffL'], ['sleeveR', 'cuffR']]) {
       bindGrid(key, RC, SWC, (v) => [Math.floor(v / SW), v % SW, this.sleeveMap[key], SWC, RC]);
       bindGrid(cuff, RC, SWC, (v) => [Math.floor(v / SW) + L.sleeveRows, v % SW, this.sleeveMap[key], SWC, RC]);
     }
     // Normales soldadas en las costuras (puntos que coinciden).
     const groups = new Map();
-    for (const key of ['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR']) {
+    for (const key of ['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR'].filter((k) => this.geos[k])) {
       const g = this.geos[key];
       const a = g.attributes.position.array;
       const used = new Uint8Array(g.attributes.position.count);
@@ -954,18 +984,21 @@ export class HangingShirt {
     // (tangente, subida, normal) de su punto del borde: la subida se mide a
     // lo largo de la tela (sigue su curva), así el dobladillo no se separa de
     // su panel ni atraviesa el de enfrente. (La tira del cuello se arma
-    // aparte, con la cinta simulada: ver updateMeshes.)
+    // aparte, con la cinta simulada: ver updateMeshes.) Los puños de las
+    // sisas de la musculosa siguen su borde igual.
     this.ribbons = [];
-    for (const [key, ring, sign] of [
-      ['hem', L.rings.hem, 1],
-      ['cuffLLip', L.rings.cuffLLip, 1],
-      ['cuffRLip', L.rings.cuffRLip, 1],
-    ]) {
+    const lips = L.sleeveless ? ['armL', 'armR'] : ['cuffLLip', 'cuffRLip'];
+    for (const [key, ring, sign] of [['hem', L.rings.hem, 1], ...lips.map((k) => [k, L.rings[k], 1])]) {
       const g = this.geos[key];
       const n = ring.length;
       const SWr = n + 1;
-      const frames = this.ringFrames(ring, sign);
-      const a = g.attributes.position.array;
+      // Los puños de las sisas siguen la tela por filas y por columnas según
+      // el tramo de la sisa: su subida se suaviza a lo largo del borde (si
+      // no, se quiebran en las esquinas).
+      const smooth = key.startsWith('arm');
+      const frames = this.ringFrames(ring, sign, smooth);
+      // (Los puños de las sisas, con su forma de reposo colgada.)
+      const a = g.userData.hang || g.attributes.position.array;
       const local = new Float32Array(a.length);
       for (let v = 0; v < a.length / 3; v++) {
         const k = (v % SWr) % n;
@@ -982,23 +1015,30 @@ export class HangingShirt {
       ring.forEach(([, v, w], k) => {
         for (let r = 0; r <= LIP_ROWS; r++) cols[k * (LIP_ROWS + 1) + r] = v + r * (w - v);
       });
-      this.ribbons.push({ key, ring, sign, local, SWr, n, cols });
+      this.ribbons.push({ key, ring, sign, local, SWr, n, cols, smooth });
     }
   }
 
-  ringFrames(ring, sign) {
+  ringFrames(ring, sign, smooth = false) {
     const n = ring.length;
     const P = (key, v) => {
       const a = this.geos[key].attributes.position.array;
       return new THREE.Vector3(a[v * 3], a[v * 3 + 1], a[v * 3 + 2]);
     };
     const base = ring.map(([key, v]) => P(key, v));
-    return ring.map(([key, v, w], k) => {
-      const t = new THREE.Vector3().subVectors(base[(k + 1) % n], base[(k - 1 + n) % n]).normalize();
-      const u0 = P(key, w).sub(base[k]).multiplyScalar(sign).normalize();
-      const nn = new THREE.Vector3().crossVectors(t, u0).normalize();
+    const ts = base.map((_, k) => new THREE.Vector3().subVectors(base[(k + 1) % n], base[(k - 1 + n) % n]).normalize());
+    let us = ring.map(([key, , w], k) => P(key, w).sub(base[k]).multiplyScalar(sign).normalize());
+    if (smooth) {
+      const flat = new Float32Array(n * 3);
+      us.forEach((u, k) => u.toArray(flat, k * 3));
+      smoothUps(flat, ts.map((t) => t.toArray()).flat(), n);
+      us = us.map((u, k) => u.fromArray(flat, k * 3));
+    }
+    return base.map((o, k) => {
+      const t = ts[k];
+      const nn = new THREE.Vector3().crossVectors(t, us[k]).normalize();
       const u = new THREE.Vector3().crossVectors(nn, t).normalize();
-      return { o: base[k], t, u, n: nn };
+      return { o, t, u, n: nn };
     });
   }
 
@@ -1782,6 +1822,12 @@ export class HangingShirt {
         let ux = (at(k, r0 + 1, 0) - at(k, r0, 0)) * rb.sign;
         let uy = (at(k, r0 + 1, 1) - at(k, r0, 1)) * rb.sign;
         let uz = (at(k, r0 + 1, 2) - at(k, r0, 2)) * rb.sign;
+        // Perpendicular al borde, como en el marco de reposo (en las esquinas
+        // de la sisa la columna de la tela no lo es).
+        const ut = ux * tx + uy * ty + uz * tz;
+        ux -= ut * tx;
+        uy -= ut * ty;
+        uz -= ut * tz;
         const seg = Math.hypot(ux, uy, uz) || 1;
         ux /= seg;
         uy /= seg;
@@ -1800,6 +1846,33 @@ export class HangingShirt {
         up[i + 1] = uy;
         up[i + 2] = uz;
         len[k * R + r] = r ? len[k * R + r - 1] + Math.hypot(at(k, r, 0) - at(k, r - 1, 0), at(k, r, 1) - at(k, r - 1, 1), at(k, r, 2) - at(k, r - 1, 2)) : 0;
+      }
+    }
+    // Puños de las sisas: la subida del borde (fila 0), suavizada como en
+    // reposo, y su normal.
+    if (rb.smooth) {
+      const u0 = (rb._u0 ||= new Float32Array(n * 3));
+      const t0 = (rb._t0 ||= new Float32Array(n * 3));
+      for (let k = 0; k < n; k++)
+        for (let c = 0; c < 3; c++) {
+          u0[k * 3 + c] = up[k * R * 3 + c];
+          t0[k * 3 + c] = tan[k * R * 3 + c];
+        }
+      smoothUps(u0, t0, n);
+      for (let k = 0; k < n; k++) {
+        const i = k * R * 3;
+        const [tx, ty, tz] = [t0[k * 3], t0[k * 3 + 1], t0[k * 3 + 2]];
+        const [ux, uy, uz] = [u0[k * 3], u0[k * 3 + 1], u0[k * 3 + 2]];
+        up[i] = ux;
+        up[i + 1] = uy;
+        up[i + 2] = uz;
+        const nx = ty * uz - tz * uy;
+        const ny = tz * ux - tx * uz;
+        const nz = tx * uy - ty * ux;
+        const nl = Math.hypot(nx, ny, nz) || 1;
+        nrm[i] = nx / nl;
+        nrm[i + 1] = ny / nl;
+        nrm[i + 2] = nz / nl;
       }
     }
     const attr = this.geos[rb.key].attributes.position;

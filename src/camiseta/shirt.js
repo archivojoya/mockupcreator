@@ -7,7 +7,8 @@
 // - Sisas: un hueco en la grilla del torso a cada lado, deformado hasta
 //   quedar ovalado. Las mangas arrancan exactamente de su borde.
 // - Mangas: de la sisa a un ruedo circular alrededor del eje del brazo, con
-//   puño aparte.
+//   puño aparte. La musculosa no tiene: lleva un puño (tira doble) cosido al
+//   borde de cada sisa.
 // - Cuello: tira acanalada sobre el borde del escote (en V, las dos puntas
 //   de la tira se juntan en una costura al medio). Ruedo y puños llevan un
 //   dobladillo hacia adentro (se ve el espesor de la tela).
@@ -26,6 +27,7 @@ export const DEFAULTS = {
   neckDepth: 0.075, // profundidad del escote delantero
   neckStyle: 'round', // 'round' redondo · 'v' en V
   cuff: 'band', // 'band' con puño · 'none' sin puño (la manga sigue hasta el borde)
+  garment: 'tee', // 'tee' camiseta · 'muscle' musculosa (sin mangas)
 };
 
 // Resolución de las mallas.
@@ -79,9 +81,14 @@ function monotone(xs, ys) {
 }
 
 // Medidas del cuerpo de la prenda según los controles.
+// Musculosa: la sisa baja 4,5 cm más y el hombro de la tela termina antes (el
+// puño de la sisa sigue la línea del hombro hacia afuera), con la misma
+// pendiente.
+const ARM_BAND = 0.024; // ancho del puño de la sisa
 export function measures(p) {
   const f = p.fit;
   const L = p.length;
+  const sleeveless = p.garment === 'muscle';
   const M = {
     L,
     fit: f,
@@ -94,10 +101,15 @@ export function measures(p) {
     dropB: 0.014,
     vNeck: p.neckStyle === 'v',
     shY: -0.046, // altura de la punta del hombro
-    pitY: -0.205 - 0.03 * f, // altura de la axila
+    pitY: (sleeveless ? -0.25 : -0.205) - 0.03 * f, // altura de la axila
     n: 2.35, // exponente de los cortes (2 = elipse)
+    garment: sleeveless ? 'muscle' : 'tee',
+    sleeveless,
+    armBand: ARM_BAND,
+    armCols: sleeveless ? 12 : ARM_COLS, // sin mangas, la sisa entra más en el frente y la espalda
   };
-  const shA = 0.214 + 0.032 * f; // medio ancho de hombros
+  const shA = sleeveless ? 0.188 + 0.026 * f : 0.214 + 0.032 * f; // medio ancho de hombros
+  if (sleeveless) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
   const aC = 0.176 + 0.046 * f; // medio ancho y media profundidad del pecho
   const bC = 0.112 + 0.022 * f;
   const rows = [
@@ -244,7 +256,8 @@ function buildTorso(M) {
   };
   const i1 = ROWS_LOW;
   const i2 = ROWS_LOW + ROWS_ARM;
-  const dTh = (ARM_COLS * Math.PI) / COLS;
+  const A = M.armCols;
+  const dTh = (A * Math.PI) / COLS;
   const tc = (tPit + tSh) / 2;
   const dT = (tSh - tPit) / 2;
   // Las sisas son huecos rectangulares en la grilla; alrededor de cada una
@@ -281,7 +294,7 @@ function buildTorso(M) {
     }
     // Celdas: todas menos las de las sisas.
     const idx = [];
-    const hole = (i, j) => i >= i1 && i < i2 && (j < ARM_COLS || j >= COLS - ARM_COLS);
+    const hole = (i, j) => i >= i1 && i < i2 && (j < A || j >= COLS - A);
     for (let i = 0; i < N; i++)
       for (let j = 0; j < COLS; j++) {
         if (hole(i, j)) continue;
@@ -294,7 +307,7 @@ function buildTorso(M) {
     orient(pos, idx, fromVertical);
     panels[key] = { pos, ang, idx, W, N };
   }
-  return { panels, i1, i2, N };
+  return { panels, i1, i2, N, armCols: A };
 }
 
 // Borde de cada sisa, desde la axila: sube por el frente, cruza el hombro y
@@ -325,7 +338,7 @@ export function armholeLoopIJ(cols, A, i1, i2, side) {
 }
 function armholeLoop(torso, side) {
   const W = COLS + 1;
-  return armholeLoopIJ(COLS, ARM_COLS, torso.i1, torso.i2, side).map(([key, i, j]) => [key, i * W + j]);
+  return armholeLoopIJ(COLS, torso.armCols, torso.i1, torso.i2, side).map(([key, i, j]) => [key, i * W + j]);
 }
 
 // Pliegues del torso: caída suave hacia el ruedo y tensiones que salen de la
@@ -508,7 +521,7 @@ export function buildShirt(params) {
 
   // ---------- mangas ----------
   const S = M.sleeve;
-  for (const side of [1, -1]) {
+  for (const side of M.sleeveless ? [] : [1, -1]) {
     const loop = armholeLoop(torso, side).map(([key, v]) => new THREE.Vector3().fromArray(panels[key].pos, v * 3));
     const L = loop.length;
     const top = loop[L / 2];
@@ -598,7 +611,25 @@ export function buildShirt(params) {
     parts[key] = { pos: pos.slice(0, (cut + SW) * 3), idx: sub(SLEEVE_ROWS), uv: uv.slice(0, (cut + SW) * 2) };
     parts[cuffKey] = { pos: pos.slice(cut * 3), idx: sub(CUFF_ROWS), uv: uv.slice(cut * 2), axis: [hemC.clone(), dir.clone()] };
     parts[key].loopLen = per;
+    parts[key].seamLoop = Array.from({ length: SW }, (_, k) => [pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]]);
     parts[cuffKey].ring = Array.from({ length: SW }, (_, k) => ((CUFF_ROWS) * SW + k));
+  }
+
+  // ---------- puños de las sisas (musculosa) ----------
+  // Cada punto del borde con el de la tela que le sigue hacia adentro de la
+  // pieza (para orientar el puño y para que, colgada, lo siga).
+  const armRings = {};
+  if (M.sleeveless) {
+    for (const key of ['front', 'back']) panels[key].nrm = computeNormals(panels[key].pos, panels[key].idx);
+    weldNormals([panels.front, panels.back]);
+    for (const [name, side] of [['armL', 1], ['armR', -1]]) {
+      const ring = armholeLoopIJ(COLS, torso.armCols, i1, i2, side).map(([key, i, j]) => {
+        const [ii, jj] = i === i1 ? [i - 1, j] : i === i2 ? [i + 1, j] : [i, j < COLS / 2 ? j + 1 : j - 1];
+        return [key, i * W + j, ii * W + jj];
+      });
+      armRings[name] = ring;
+      parts[name] = buildArmBand(ring.map(([key, v, w]) => [panels[key].pos, v, w, panels[key].nrm]), M.armBand);
+    }
   }
 
   // ---------- cuello ----------
@@ -612,7 +643,7 @@ export function buildShirt(params) {
   for (let j = 0; j <= COLS; j++) hemRing.push([panels.front.pos, j, W + j]);
   for (let j = 1; j < COLS; j++) hemRing.push([panels.back.pos, j, W + j]);
   parts.hem = buildLip(hemRing, 0.022, true);
-  for (const k of ['cuffL', 'cuffR']) {
+  for (const k of M.sleeveless ? [] : ['cuffL', 'cuffR']) {
     const c = parts[k];
     const SW = c.ring.length;
     const ring = [];
@@ -624,7 +655,7 @@ export function buildShirt(params) {
 
   // Normales, costuras soldadas y marcas de costura.
   for (const part of Object.values(parts)) part.nrm = computeNormals(part.pos, part.idx);
-  weldNormals([parts.front, parts.back, parts.sleeveL, parts.sleeveR, parts.cuffL, parts.cuffR]);
+  weldNormals(['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR'].filter((k) => parts[k]).map((k) => parts[k]));
   seamMarks(parts, N, W, params.cuff === 'none');
   zoneMarks(parts, M, W);
 
@@ -639,24 +670,30 @@ export function buildShirt(params) {
     g.setAttribute('zone', new THREE.BufferAttribute(part.zone || new Float32Array(part.pos.length / 3), 1));
     g.setIndex(part.idx);
     g.computeBoundingBox();
+    if (part.hang) g.userData.hang = part.hang;
     geos[key] = g;
   }
   // Estructura de las mallas (para la versión colgada, que simula la tela).
-  const sleeveSW = parts.cuffL.ring.length;
+  const sleeveSW = M.sleeveless ? 0 : parts.cuffL.ring.length;
   const layout = {
     cols: COLS,
-    armCols: ARM_COLS,
+    armCols: torso.armCols,
     rows: N,
     i1,
     i2,
+    sleeveless: M.sleeveless,
     sleeveRows: SLEEVE_ROWS,
     cuffRows: CUFF_ROWS,
     sleeveSW,
     rings: {
       collar: neck,
       hem: [...Array.from({ length: COLS + 1 }, (_, j) => ['front', j, W + j]), ...Array.from({ length: COLS - 1 }, (_, j) => ['back', j + 1, W + j + 1])],
-      cuffLLip: Array.from({ length: sleeveSW - 1 }, (_, i) => ['cuffL', CUFF_ROWS * sleeveSW + i, (CUFF_ROWS - 1) * sleeveSW + i]),
-      cuffRLip: Array.from({ length: sleeveSW - 1 }, (_, i) => ['cuffR', CUFF_ROWS * sleeveSW + i, (CUFF_ROWS - 1) * sleeveSW + i]),
+      ...(M.sleeveless
+        ? armRings
+        : {
+            cuffLLip: Array.from({ length: sleeveSW - 1 }, (_, i) => ['cuffL', CUFF_ROWS * sleeveSW + i, (CUFF_ROWS - 1) * sleeveSW + i]),
+            cuffRLip: Array.from({ length: sleeveSW - 1 }, (_, i) => ['cuffR', CUFF_ROWS * sleeveSW + i, (CUFF_ROWS - 1) * sleeveSW + i]),
+          }),
     },
   };
   return { geos, measures: M, layout, printBase: { front: parts.front.printBase, back: parts.back.printBase } };
@@ -698,6 +735,7 @@ function printUV(parts, N, W) {
   for (const [key, cuffKey, side] of [['sleeveL', 'cuffL', 1], ['sleeveR', 'cuffR', -1]]) {
     const sl = parts[key];
     const cf = parts[cuffKey];
+    if (!sl) continue;
     const SW = cf.ring.length;
     const L = SW - 1;
     const cap = L / 2;
@@ -1098,6 +1136,78 @@ function buildLip(ring, height, closed) {
   return { pos, uv, idx: orient(pos, idx, (x, y, z) => [x - center.x, y - center.y, z - center.z]) };
 }
 
+// Puño de la sisa (musculosa): una tira doble cosida al borde que entra en el
+// hueco de la sisa hacia su centro, como un aro en la boca de la sisa (si
+// siguiera la tela, en el hombro saldría hacia afuera y los dos lados se
+// cruzarían en la punta): cara de afuera, borde redondeado y cara de
+// adentro, que sigue un poco por dentro de la prenda. Colgada, la sisa se
+// aplasta y el aro quedaría de canto: ahí el puño sigue la tela (`hang`, la
+// forma de reposo con la que lo acompaña la simulación). `ring`:
+// [posiciones, punto del borde, punto de la tela que le sigue hacia adentro
+// de la pieza, normales].
+function buildArmBand(ring, h) {
+  const n = ring.length;
+  const th = 0.0032;
+  const prof = [[0, 0], [h * 0.5, 0.0002], [h - th / 2, 0]];
+  for (let a = 1; a < 6; a++) {
+    const ang = (a / 6) * Math.PI;
+    prof.push([h - th / 2 + Math.sin(ang) * (th / 2), -th / 2 + Math.cos(ang) * (th / 2)]);
+  }
+  prof.push([h - th / 2, -th], [h * 0.4, -th], [-0.009, -th]);
+  const P = prof.length;
+  const SW = n + 1;
+  const E = ring.map(([p, v]) => new THREE.Vector3().fromArray(p, v * 3));
+  const ins = ring.map(([p, , w]) => new THREE.Vector3().fromArray(p, w * 3));
+  const nrm = ring.map(([, v, , nn]) => new THREE.Vector3().fromArray(nn, v * 3));
+  const center = new THREE.Vector3();
+  for (const e of E) center.add(e);
+  center.divideScalar(n);
+  // Hacia el centro de la sisa, perpendicular al borde (suavizado); la cara de
+  // afuera, del lado de afuera de la tela.
+  const tans = E.map((e, k) => new THREE.Vector3().subVectors(E[(k + 1) % n], E[(k - 1 + n) % n]).normalize());
+  let ups = E.map((e, k) => {
+    const d = new THREE.Vector3().subVectors(center, e);
+    return d.addScaledVector(tans[k], -d.dot(tans[k])).normalize();
+  });
+  // Colgada: perpendicular al borde dentro de la tela, hacia el hueco.
+  let flat = E.map((e, k) => {
+    const d = new THREE.Vector3().crossVectors(tans[k], nrm[k]).normalize();
+    return d.dot(new THREE.Vector3().subVectors(e, ins[k])) < 0 ? d.negate() : d;
+  });
+  const smoothRing = (a) => {
+    for (let pass = 0; pass < 4; pass++) a = a.map((_, k) => a[(k - 1 + n) % n].clone().add(a[(k + 1) % n]).addScaledVector(a[k], 2).normalize());
+    return a;
+  };
+  ups = smoothRing(ups);
+  flat = smoothRing(flat);
+  const outOf = (d, k) => {
+    const o = new THREE.Vector3().crossVectors(tans[k], d).normalize();
+    return o.dot(nrm[k]) < 0 ? o.negate() : o;
+  };
+  const pos = new Float32Array(SW * P * 3);
+  const hang = new Float32Array(SW * P * 3);
+  const uv = new Float32Array(SW * P * 2);
+  const q = new THREE.Vector3();
+  let u = 0;
+  for (let i = 0; i < SW; i++) {
+    const k = i % n;
+    if (i > 0) u += E[k].distanceTo(E[i - 1]);
+    let v = 0;
+    for (let j = 0; j < P; j++) {
+      if (j > 0) v += Math.hypot(prof[j][0] - prof[j - 1][0], prof[j][1] - prof[j - 1][1]);
+      for (const [arr, d] of [[pos, ups[k]], [hang, flat[k]]]) q.copy(E[k]).addScaledVector(d, prof[j][0]).addScaledVector(outOf(d, k), prof[j][1]).toArray(arr, (j * SW + i) * 3);
+      uv[(j * SW + i) * 2] = u;
+      uv[(j * SW + i) * 2 + 1] = v;
+    }
+  }
+  // La cara de afuera mira hacia afuera de la prenda.
+  const idx = gridIndex(n, P - 1, SW);
+  const nn = computeNormals(pos, idx);
+  let s = 0;
+  for (let i = 0; i < SW; i++) s += nn[(SW + i) * 3] * nrm[i % n].x + nn[(SW + i) * 3 + 1] * nrm[i % n].y + nn[(SW + i) * 3 + 2] * nrm[i % n].z;
+  return { pos, hang, uv, idx: s < 0 ? flip(idx) : idx, seamLoop: E.map((e) => e.toArray()) };
+}
+
 // Zonas de tela calada (para los tejidos que las tienen): una franja a cada
 // costado, de la axila al ruedo, y otra bajo el brazo en cada manga. 1 en la
 // zona, 0 afuera, con un borde suave.
@@ -1116,6 +1226,7 @@ function zoneMarks(parts, M, W) {
   }
   for (const key of ['sleeveL', 'sleeveR']) {
     const p = parts[key];
+    if (!p) continue;
     const n = p.pos.length / 3;
     const SW = p.uv.length / 2 / (SLEEVE_ROWS + 1);
     p.zone = new Float32Array(n);
@@ -1142,16 +1253,9 @@ function seamMarks(parts, N, W, noCuff = false) {
       part.seam[v * 2 + 1] = b;
     }
   };
-  // Torso: costados y hombros (bordes de la grilla), sisas, escote; pespunte
-  // del ruedo.
-  const loops = [];
-  for (const k of ['sleeveL', 'sleeveR']) {
-    const s = parts[k];
-    const SW = s.uv.length / 2 / (SLEEVE_ROWS + 1);
-    const pts = [];
-    for (let i = 0; i < SW; i++) pts.push([s.pos[i * 3], s.pos[i * 3 + 1], s.pos[i * 3 + 2]]);
-    loops.push(pts);
-  }
+  // Torso: costados y hombros (bordes de la grilla), sisas (donde arranca la
+  // manga o el puño de la sisa), escote; pespunte del ruedo.
+  const loops = ['sleeveL', 'sleeveR', 'armL', 'armR'].filter((k) => parts[k]).map((k) => parts[k].seamLoop);
   for (const key of ['front', 'back']) {
     const p = parts[key];
     const uvs = p.uv;
@@ -1180,6 +1284,7 @@ function seamMarks(parts, N, W, noCuff = false) {
   }
   for (const key of ['sleeveL', 'sleeveR']) {
     const p = parts[key];
+    if (!p) continue;
     const SW = p.uv.length / 2 / (SLEEVE_ROWS + 1);
     set(p, (v) => {
       const k = v % SW;
@@ -1192,6 +1297,7 @@ function seamMarks(parts, N, W, noCuff = false) {
   }
   for (const key of ['cuffL', 'cuffR']) {
     const p = parts[key];
+    if (!p) continue;
     const SW = p.ring.length;
     set(p, (v) => {
       const k = v % SW;
@@ -1200,6 +1306,11 @@ function seamMarks(parts, N, W, noCuff = false) {
       const per = p.uv[(Math.floor(v / SW) * SW + SW - 1) * 2];
       return [noCuff ? Math.min(u, per - u) : p.uv[v * 2 + 1] - p.uv[k * 2 + 1], vEnd - p.uv[v * 2 + 1]];
     });
+  }
+  // Puños de las sisas: el hundido de la costura del lado del puño.
+  for (const key of ['armL', 'armR']) {
+    const p = parts[key];
+    if (p) set(p, (v) => [p.uv[v * 2 + 1], 1]);
   }
   set(parts.collar, () => [1, 1]);
 }

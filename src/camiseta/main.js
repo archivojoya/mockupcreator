@@ -23,7 +23,13 @@ const PARTS = {
   cuffLLip: { color: 'cuffs', lining: 'cuffL' },
   cuffRLip: { color: 'cuffs', lining: 'cuffR' },
   collar: { color: 'collar', label: 'CUELLO', rib: true },
+  // Puños de las sisas de la musculosa: como los de las mangas.
+  armL: { color: 'cuffs', band: true },
+  armR: { color: 'cuffs', band: true },
 };
+// Las piezas que la prenda no tiene (mangas en la musculosa, puños de sisa
+// en la camiseta) quedan con una geometría vacía y ocultas.
+const NO_GEO = new THREE.BufferGeometry();
 const CENTER = new THREE.Vector3(0, -0.36, 0);
 const HANG_Y = -0.38; // centro de la vista colgada
 const CAM_OFF = new THREE.Vector3(0, 0.08, 2.15); // cámara respecto del centro, de entrada
@@ -728,7 +734,9 @@ function updateLabel() {
   }
 }
 // Distancia entre las camisetas según su ancho (con cuerpo, mangas abiertas):
-// de frente quedan a PAIR_MARGIN de tocarse; de perfil, según su fondo.
+// de frente quedan a PAIR_MARGIN de tocarse; de perfil, según su fondo. La
+// musculosa colgada queda aplastada: más ancha que con cuerpo (media vuelta
+// del torso a lo ancho).
 function fitPair() {
   let w = 0;
   let d = 0;
@@ -739,6 +747,8 @@ function fitPair() {
       d = Math.max(d, Math.abs(a[i + 2]));
     }
   }
+  const M = built.measures;
+  if (M.sleeveless && hanging()) w = Math.max(w, girth(M, -M.L) / 4, girth(M, M.pitY) / 4);
   VIEWS[0].gap = w + PAIR_MARGIN;
   VIEWS[1].gap = Math.max(0.22, d + 0.06);
   if (turn) turn.gap[1] = VIEWS[turn.view].gap - turn.gap[0];
@@ -749,8 +759,9 @@ function rebuild() {
   built = buildShirt(params);
   fitPair();
   for (const [k, mesh] of Object.entries(meshes)) {
-    mesh.geometry.dispose();
-    mesh.geometry = twins[k].geometry = built.geos[k];
+    if (mesh.geometry !== NO_GEO) mesh.geometry.dispose();
+    mesh.geometry = twins[k].geometry = built.geos[k] || NO_GEO;
+    mesh.visible = twins[k].visible = !!built.geos[k];
   }
   buildTape();
   buildLabel();
@@ -805,7 +816,7 @@ function applyLook() {
   document.querySelector('[data-zoom="label"]').hidden = !design.labelTex;
   for (const [k, mesh] of Object.entries(meshes)) {
     const def = PARTS[k];
-    const color = colors[def.color === 'cuffs' && params.cuff === 'none' ? 'sleeves' : def.color];
+    const color = colors[def.color === 'cuffs' && params.cuff === 'none' && !def.band ? 'sleeves' : def.color];
     const m = mesh.material;
     const app = !view.uvmap && design.app[k];
     m.userData.own.appOn.value = app ? 1 : 0;
@@ -885,7 +896,14 @@ function syncControls() {
   }
   neckButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.neck === (params.neckStyle === 'v' ? 'v' : 'round'))));
   cuffButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cuff === (params.cuff === 'none' ? 'none' : 'band'))));
-  document.getElementById('sw-cuffs').hidden = params.cuff === 'none';
+  // La musculosa no tiene mangas: ni su largo, apertura, puño ni color; sí
+  // los puños de las sisas (color de los puños).
+  const bare = sleeveless();
+  garmentButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.garment === (bare ? 'muscle' : 'tee'))));
+  for (const id of ['sleeveLength', 'sleeveAngle']) sliders[id].closest('.control').hidden = bare;
+  document.getElementById('cuff-control').hidden = bare;
+  document.getElementById('c-sleeves').closest('.swatch').hidden = bare;
+  document.getElementById('sw-cuffs').hidden = !bare && params.cuff === 'none';
   weaveButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.weave === fabric.weave)));
   finishButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.finish === (fabric.finish === 'satin' ? 'satin' : 'matte'))));
   spinButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.spin === view.spin)));
@@ -922,6 +940,22 @@ neckButtons.forEach((b) =>
     params.neckDepth = NECK[params.neckStyle][2];
     syncControls();
     scheduleRebuild();
+  }),
+);
+// Prenda: camiseta, o musculosa (sin mangas, con un puño en cada sisa).
+const sleeveless = () => params.garment === 'muscle';
+const garmentButtons = [...document.querySelectorAll('[data-garment]')];
+garmentButtons.forEach((b) =>
+  b.addEventListener('click', () => {
+    if ((sleeveless() ? 'muscle' : 'tee') === b.dataset.garment) return;
+    params.garment = b.dataset.garment;
+    syncControls();
+    scheduleRebuild();
+    requestAnimationFrame(() => {
+      renderSlots();
+      renderApps();
+      if (hasDress()) renderDress();
+    });
   }),
 );
 // Puño: con puño, o sin puño (la manga sigue hasta el borde, con su color y
@@ -1158,6 +1192,8 @@ const lib = new Map();
 const dress = { pieces: {}, apps: [], free: false };
 const SLOTS = ['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR', 'collar', 'tape', 'label'];
 const APP_PIECES = ['front', 'back', 'sleeveL', 'sleeveR'];
+// ¿Tiene la prenda esa pieza? (La musculosa no tiene mangas ni puños.)
+const hasPiece = (k) => k === 'tape' || k === 'label' || !!built.geos[k];
 const APP_AS = { emb: 'Bordado', vin: 'Vinilo', print: 'Sublimado' };
 const CREST_NAME = /escudo|crest|badge|emblema|insignia|parche/i;
 const BRAND_NAME = /marca|logo|brand|sponsor/i;
@@ -1220,7 +1256,7 @@ const cmUp = (mm, d = 0) => (Math.ceil(mm / 10 ** (1 - d)) / 10 ** d).toFixed(d)
 function fillSizes() {
   if (!sizesBox.open) return;
   const sz = sizesNow();
-  sizesBox.querySelector('dl').innerHTML = SIZE_ROWS.map(([k, label]) => {
+  sizesBox.querySelector('dl').innerHTML = SIZE_ROWS.filter(([k]) => sz[k]).map(([k, label]) => {
     const d = sz[k].h < 50 ? 1 : 0;
     return `<div><dt>${label}</dt><dd>${cmUp(sz[k].w)} × ${cmUp(sz[k].h, d)} cm</dd></div>`;
   }).join('');
@@ -1262,6 +1298,7 @@ function renderPiece(k, sz) {
     design.app[k].shape.dispose();
     delete design.app[k];
   }
+  if (!sz[k]) return;
   const apps = dress.apps.filter((a) => a.piece === k && lib.has(a.id)).map((a) => {
     const [x, y] = appXY(a, sz);
     return { ...a, x, y, img: lib.get(a.id).img };
@@ -1411,7 +1448,7 @@ function removeImage(id) {
 function assign(id, k, at = null) {
   const item = lib.get(id);
   if (!item) return;
-  if (item.app && at && APP_PIECES.includes(k)) {
+  if (item.app && at && APP_PIECES.includes(k) && hasPiece(k)) {
     // Al pecho (el lado más cercano) o a la espalda, salvo ubicación libre.
     const zone = dress.free ? null : k === 'front' ? (at[0] >= 0 ? 'chestL' : 'chestR') : k === 'back' ? 'back' : null;
     let a;
@@ -1459,7 +1496,7 @@ function renderLibrary() {
 }
 function renderSlots() {
   slotList.replaceChildren(
-    ...SLOTS.filter((k) => !(CUFF_SLEEVE[k] && params.cuff === 'none')).map((k) => {
+    ...SLOTS.filter((k) => hasPiece(k) && !(CUFF_SLEEVE[k] && params.cuff === 'none')).map((k) => {
       const item = dress.pieces[k] && lib.get(dress.pieces[k].id);
       const li = el('li', { className: `slot${item ? '' : ' empty'}`, title: item ? item.name : `Soltá una imagen para ${PIECE_LABELS[k].toLowerCase()}` }, item ? el('img', { className: 'slot-img', src: item.url, alt: '' }) : el('span', { className: 'slot-img' }), el('span', { className: 'slot-name', textContent: PIECE_LABELS[k] }));
       li.dataset.piece = k;
@@ -1560,9 +1597,9 @@ function paintRange(input) {
 // aplicación que se agarra); la rueda la agranda o la achica.
 let edView = null;
 function editorPiece() {
-  if (selected?.piece) return selected.piece;
+  if (selected?.piece) return hasPiece(selected.piece) ? selected.piece : null;
   const a = selected?.app && dress.apps.find((x) => x.uid === selected.app);
-  return a ? a.piece : null;
+  return a && hasPiece(a.piece) ? a.piece : null;
 }
 function drawEditor() {
   const k = editorPiece();
@@ -1821,6 +1858,7 @@ function pieceAt(x, y) {
   if (!hit) return null;
   let key = hit.object.userData.piece;
   if (key === 'hem') key = hit.object.userData.rig.worldToLocal(hit.point.clone()).z >= 0 ? 'front' : 'back';
+  if (!SLOTS.includes(key)) return null; // los puños de las sisas no llevan diseño
   const uv = hit.object.userData.piece === key && hit.uv1 ? [hit.uv1.x * 1000, hit.uv1.y * 1000] : null;
   return { key, at: uv };
 }
@@ -1872,7 +1910,7 @@ document.addEventListener('pointermove', (e) => {
   libDrag.target = t;
   slotList.querySelectorAll('.slot').forEach((s) => s.classList.toggle('target', s === t?.slot));
   highlight(t && !t.slot ? t.key : null);
-  const asApp = t && !t.slot && libDrag.item.app && t.at && APP_PIECES.includes(t.key);
+  const asApp = t && !t.slot && libDrag.item.app && t.at && APP_PIECES.includes(t.key) && hasPiece(t.key);
   const zone = asApp && !dress.free ? (t.key === 'front' ? (t.at[0] >= 0 ? 'chestL' : 'chestR') : t.key === 'back' ? 'back' : null) : null;
   tip.textContent = t ? (zone ? ZONES[zone].label : asApp ? `Aplicación en ${PIECE_LABELS[t.key].toLowerCase()}` : PIECE_LABELS[t.key]) : 'Soltá sobre una pieza';
 });
@@ -2091,9 +2129,12 @@ document.getElementById('reset').addEventListener('click', () => {
 function updateSpec() {
   const M = built.measures;
   document.getElementById('s-chest').textContent = fmtCm(girth(M, M.pitY - 0.03));
-  document.getElementById('s-shoulders').textContent = fmtCm(M.shA * 2);
+  // Musculosa: los hombros llegan hasta el borde de los puños de las sisas;
+  // en vez de la boca de manga, el alto de la sisa (del hombro a la axila).
+  document.getElementById('s-shoulders').textContent = fmtCm((M.shA + (M.sleeveless ? M.armBand : 0)) * 2);
   document.getElementById('s-length').textContent = fmtCm(M.L);
-  document.getElementById('s-sleeve').textContent = fmtCm(Math.PI * 2 * M.sleeve.rHem);
+  document.getElementById('s-sleeve-label').textContent = M.sleeveless ? 'Alto de sisa' : 'Boca de manga';
+  document.getElementById('s-sleeve').textContent = fmtCm(M.sleeveless ? M.shY - M.pitY - M.armBand : Math.PI * 2 * M.sleeve.rHem);
   document.getElementById('s-fabric').textContent = `${(WEAVES[fabric.weave] || WEAVES.mesh).label} · ${fabric.finish === 'satin' ? 'satinada' : 'mate'} · ${FOUT.weight(fabric.weight)}`;
 }
 
@@ -2293,7 +2334,7 @@ function sheetPose(aspect, fill = 0.86) {
 }
 function sheetSpec() {
   const w = WEAVES[fabric.weave] || WEAVES.mesh;
-  return [w.label, fabric.finish === 'satin' ? 'satinada' : 'mate', FOUT.weight(fabric.weight), `calce ${OUT.fit(params.fit).toLowerCase()}`, `largo ${fmtCm(params.length)}`, `cuello ${params.neckStyle === 'v' ? 'en V' : 'redondo'}`].join(' · ');
+  return [...(sleeveless() ? ['Musculosa'] : []), w.label, fabric.finish === 'satin' ? 'satinada' : 'mate', FOUT.weight(fabric.weight), `calce ${OUT.fit(params.fit).toLowerCase()}`, `largo ${fmtCm(params.length)}`, `cuello ${params.neckStyle === 'v' ? 'en V' : 'redondo'}`].join(' · ');
 }
 function drawHeader(g, x, y, size) {
   const css = getComputedStyle(document.documentElement);

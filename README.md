@@ -48,10 +48,9 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   la del ruedo. **Girar solas** gira cada una sobre su eje (lenta, media o
   rápida). El mouse empuja la tela de cualquiera de las dos.
 - **Descargar muestra** (abajo a la derecha del escenario) baja una lámina PNG
-  de 3000 px con el fondo del estudio: las dos camisetas (frente y espalda,
-  aunque estén giradas) y, si los tiene, de cerca cada bordado o vinilo, el
-  tapacostura y la etiqueta, con sus nombres; arriba, la tela, el calce, el
-  largo y el cuello. Se dibuja aparte, sin mover la vista.
+  de 3000 px con el fondo del estudio: las dos camisetas en una sola toma,
+  frente y espalda del mismo tamaño (aunque estén giradas), y arriba la tela,
+  el calce, el largo y el cuello. Se dibuja aparte, sin mover la vista.
 
 - **Presentación**: con cuerpo (forma fija, como puesta), en percha o con
   broches. La percha es de madera, plana y paralela a la camiseta, con el arco

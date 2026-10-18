@@ -2198,14 +2198,13 @@ controls.addEventListener('start', () => {
 
 // ---------- muestra ----------
 
-// Lámina para mandar: las camisetas sobre el fondo del estudio y, si los
-// llevan, de cerca el bordado o el vinilo, el tapacostura y la etiqueta. Se
-// dibuja aparte (la vista no cambia) y se baja como PNG. Publicada en
+// Lámina para mandar: el frente y la espalda, del mismo tamaño, sobre el
+// fondo del estudio y, si los lleva, de cerca cada bordado o vinilo (el
+// tapacostura y la etiqueta son del fabricante: no van). Se dibuja aparte
+// (la vista no cambia) y se baja como PNG. Publicada en
 // claude.ai, la descarga pasa por la capacidad `downloads` (la persona
 // confirma); sola o en desarrollo, un enlace de descarga común.
 const downloadsP = window.claude?.use ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
-const SHEET_LAYOUTS = ['side', 'bottom', 'editorial'];
-let sheetLayout = 'side';
 
 // El fondo del escenario (el mismo degradado).
 function studioBackground(g, x, y, w, h) {
@@ -2235,7 +2234,9 @@ function withPairView(fn) {
   rigs.forEach((rig, j) => {
     rig.rotation.y = VIEWS[0].turn[j];
     rig.position.x = (j ? 1 : -1) * VIEWS[0].gap;
+    rig.visible = true;
   });
+  supports.forEach((sp) => (sp.curl.visible = hanging()));
   syncCurls();
   scene.updateMatrixWorld(true);
   renderer.setPixelRatio(1);
@@ -2255,11 +2256,8 @@ function withPairView(fn) {
     requestRender();
   }
 }
-// La escena desde `pose` en un lienzo de w × h; `only`: una sola camiseta;
-// `bg`: con el fondo del estudio (si no, transparente).
-function shoot(w, h, pose, { only = null, bg = true } = {}) {
-  rigs.forEach((rig, j) => (rig.visible = only === null || only === j));
-  supports.forEach((sp, j) => (sp.curl.visible = hanging() && (only === null || only === j)));
+// La escena desde `pose` en un lienzo de w × h, con el fondo transparente.
+function shoot(w, h, pose) {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -2269,13 +2267,9 @@ function shoot(w, h, pose, { only = null, bg = true } = {}) {
   renderer.render(scene, camera);
   const c = document.createElement('canvas');
   [c.width, c.height] = [w, h];
-  const g = c.getContext('2d');
-  if (bg) studioBackground(g, 0, 0, w, h);
-  g.drawImage(renderer.domElement, 0, 0, w, h);
+  c.getContext('2d').drawImage(renderer.domElement, 0, 0, w, h);
   return c;
 }
-// Poses de la lámina: las dos camisetas, una sola, y de cerca cada
-// aplicación (la normal de la tela en su centro).
 // Distancia para que entre un ancho y un alto (m, a cada lado del centro) en
 // un cuadro de esa proporción, con un poco de aire.
 function fitDistance(halfW, halfH, aspect) {
@@ -2288,70 +2282,9 @@ function pairPose(aspect) {
   const d = fitDistance(2 * g - PAIR_MARGIN, view.mode === 'body' ? 0.46 : 0.58, aspect);
   return { target: c, position: c.clone().add(new THREE.Vector3(0, (CAM_OFF.y * d) / CAM_OFF.z, d)) };
 }
-function singlePose(j, aspect) {
-  const c = new THREE.Vector3(rigs[j].position.x, view.mode === 'body' ? CENTER.y : HANG_Y + 0.04, 0);
-  const d = fitDistance(VIEWS[0].gap - PAIR_MARGIN, view.mode === 'body' ? 0.46 : 0.58, aspect);
-  return { target: c, position: c.clone().add(new THREE.Vector3(0, (CAM_OFF.y * d) / CAM_OFF.z, d)) };
-}
-function appPose(a, dist = 0.17) {
-  const sz = sizesNow();
-  const [ax, ay] = appXY(a, sz);
-  const mesh = (a.piece === 'back' ? twins : meshes)[a.piece];
-  const g = mesh.geometry;
-  const uv = g.attributes.uv1.array;
-  let best = 0;
-  let bd = Infinity;
-  for (let i = 0; i < uv.length / 2; i++) {
-    const d = (uv[i * 2] * 1000 - ax) ** 2 + (uv[i * 2 + 1] * 1000 - ay) ** 2;
-    if (d < bd) [bd, best] = [d, i];
-  }
-  mesh.updateWorldMatrix(true, false);
-  const p = new THREE.Vector3().fromArray(g.attributes.position.array, best * 3).applyMatrix4(mesh.matrixWorld);
-  const n = new THREE.Vector3().fromArray(g.attributes.normal.array, best * 3).transformDirection(mesh.matrixWorld);
-  n.y = Math.max(n.y, 0) + 0.15;
-  n.normalize();
-  return { target: p, position: p.clone().addScaledVector(n, dist) };
-}
-// Detalles que van en la lámina: cada aplicación bordada o en vinilo, el
-// tapacostura y la etiqueta (si tienen diseño).
-function sheetDetails() {
-  const out = [];
-  for (const a of dress.apps) {
-    if (a.as === 'print' || !lib.has(a.id)) continue;
-    out.push({ pose: () => appPose(a), caption: `${ZONES[a.zone]?.label || PIECE_LABELS[a.piece]} · ${a.as === 'emb' ? 'bordado' : 'vinilo'}` });
-  }
-  if (design.tapeTex) out.push({ pose: () => zoomPose('neck', 0.2), caption: 'Tapacostura' });
-  if (design.labelTex) out.push({ pose: () => labelPose(0.13), caption: 'Etiqueta tejida' });
-  return out.slice(0, 4);
-}
 function sheetSpec() {
   const w = WEAVES[fabric.weave] || WEAVES.mesh;
   return [w.label, fabric.finish === 'satin' ? 'satinada' : 'mate', FOUT.weight(fabric.weight), `calce ${OUT.fit(params.fit).toLowerCase()}`, `largo ${fmtCm(params.length)}`, `cuello ${params.neckStyle === 'v' ? 'en V' : 'redondo'}`].join(' · ');
-}
-// Un detalle: recuadro redondeado con su foto y el texto abajo.
-function drawTile(g, img, x, y, s, caption) {
-  const css = getComputedStyle(document.documentElement);
-  const r = s * 0.06;
-  g.save();
-  g.shadowColor = 'rgba(0,0,0,0.22)';
-  g.shadowBlur = s * 0.05;
-  g.shadowOffsetY = s * 0.015;
-  g.beginPath();
-  g.roundRect(x, y, s, s, r);
-  g.fillStyle = css.getPropertyValue('--stage-hi').trim();
-  g.fill();
-  g.restore();
-  g.save();
-  g.beginPath();
-  g.roundRect(x, y, s, s, r);
-  g.clip();
-  g.drawImage(img, x, y, s, s);
-  g.restore();
-  g.fillStyle = css.getPropertyValue('--ink').trim();
-  g.font = `600 ${Math.round(s * 0.065)}px "Barlow Condensed", "Arial Narrow", sans-serif`;
-  g.textAlign = 'center';
-  g.textBaseline = 'top';
-  g.fillText(caption.toUpperCase(), x + s / 2, y + s + s * 0.04);
 }
 function drawHeader(g, x, y, size) {
   const css = getComputedStyle(document.documentElement);
@@ -2364,10 +2297,9 @@ function drawHeader(g, x, y, size) {
   g.font = `400 ${Math.round(size * 0.42)}px Barlow, "Helvetica Neue", Arial, sans-serif`;
   g.fillText(sheetSpec(), x, y + size * 1.12);
 }
-// La lámina, con una de tres disposiciones: 'side' (las dos camisetas y los
-// detalles a la derecha), 'bottom' (los detalles en una fila abajo) o
-// 'editorial' (el frente grande, la espalda y los detalles al costado).
-function makeSheet(layout = sheetLayout) {
+// La lámina: el frente y la espalda en una sola toma (del mismo tamaño, con
+// la barra del perchero entera) sobre el fondo del estudio.
+function makeSheet() {
   if (hasDress()) ensureFlat();
   if (drape) {
     let f = 0;
@@ -2377,47 +2309,17 @@ function makeSheet(layout = sheetLayout) {
     }
     drape.updateMeshes();
   }
-  const details = sheetDetails();
   return withPairView(() => {
     const W = 3000;
-    const H = layout === 'bottom' && details.length ? 2150 : 1800;
+    const H = 1800;
     const sheet = document.createElement('canvas');
     [sheet.width, sheet.height] = [W, H];
     const g = sheet.getContext('2d');
     studioBackground(g, 0, 0, W, H);
     const M = 90;
     drawHeader(g, M, M * 0.8, 68);
-    const shots = details.map((d) => shoot(800, 800, d.pose()));
-    if (layout === 'editorial') {
-      // El frente grande, la espalda más chica y atrás, los detalles en una
-      // columna a la derecha.
-      const n = shots.length;
-      const s = n ? Math.min(560, (H - 2 * M - 40 - (n - 1) * 100) / n) : 0;
-      const right = n ? W - M - s - 60 : W - 40;
-      g.drawImage(shoot(1250, 1610, singlePose(0, 1250 / 1610), { only: 0, bg: false }), 10, 190);
-      const bw = Math.round(right - 1180);
-      g.drawImage(shoot(bw, 1300, singlePose(1, bw / 1300), { only: 1, bg: false }), 1180, 460);
-      shots.forEach((c, i) => drawTile(g, c, W - M - s, M + 40 + i * (s + 100), s, details[i].caption));
-    } else if (layout === 'bottom' && shots.length) {
-      g.drawImage(shoot(W, 1350, pairPose(W / 1350), { bg: false }), 0, 170);
-      const s = 520;
-      const gap = 70;
-      const x0 = (W - shots.length * s - (shots.length - 1) * gap) / 2;
-      shots.forEach((c, i) => drawTile(g, c, x0 + i * (s + gap), 1530, s, details[i].caption));
-    } else {
-      // Las dos camisetas y los detalles a la derecha (en dos columnas si son
-      // más de dos).
-      const n = shots.length;
-      const cols = n > 2 ? 2 : 1;
-      const rows = Math.ceil(n / cols);
-      const s = n ? Math.min(cols === 2 ? 520 : 700, (H - 2 * M - 60 - (rows - 1) * 110) / rows) : 0;
-      const colW = n ? cols * s + (cols - 1) * 50 : 0;
-      const mainW = W - colW - (n ? M + 40 : 0);
-      g.drawImage(shoot(mainW, H - 170, pairPose(mainW / (H - 170)), { bg: false }), 0, 170);
-      const x0 = W - M - colW;
-      const y0 = (H - (rows * s + (rows - 1) * 110)) / 2;
-      shots.forEach((c, i) => drawTile(g, c, x0 + (i % cols) * (s + 50), y0 + Math.floor(i / cols) * (s + 110), s, details[i].caption));
-    }
+    const [cw, ch] = [W - 40, H - 190];
+    g.drawImage(shoot(cw, ch, pairPose(cw / ch)), 20, 190);
     return sheet;
   });
 }

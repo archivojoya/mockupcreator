@@ -27,7 +27,7 @@ export const DEFAULTS = {
   neckDepth: 0.075, // profundidad del escote delantero
   neckStyle: 'round', // 'round' redondo · 'v' en V
   cuff: 'band', // 'band' con puño · 'none' sin puño (la manga sigue hasta el borde)
-  garment: 'tee', // 'tee' camiseta · 'muscle' musculosa (sin mangas)
+  garment: 'tee', // 'tee' camiseta · 'muscle' musculosa (sin mangas) · 'tank' tank top (de mujer, espalda nadadora)
 };
 
 // Resolución de las mallas.
@@ -84,11 +84,26 @@ function monotone(xs, ys) {
 // Musculosa: la sisa baja 4,5 cm más y el hombro de la tela termina antes (el
 // puño de la sisa sigue la línea del hombro hacia afuera), con la misma
 // pendiente.
+// Tank top (de mujer): cuerpo con busto, cintura y cadera; escote redondo
+// ancho y hondo; tiras de 4,5 cm; espalda nadadora (la sisa de atrás entra
+// casi hasta el centro y el escote de atrás baja en U hasta donde se juntan
+// las tiras); vivos finos en el escote y las sisas.
 const ARM_BAND = 0.024; // ancho del puño de la sisa
+const TANK = {
+  neck: { a: 0.1, b: 0.075, bB: 0.04, c: -0.012 },
+  dropB: 0.15, // escote de atrás
+  strap: 0.045, // ancho de las tiras
+  racerGap: 0.045, // alto de la sisa de atrás donde se juntan las tiras
+  binding: 0.009, // ancho de los vivos
+  colsF: 14, // columnas de la sisa en el frente y en la espalda
+  colsB: 26,
+};
 export function measures(p) {
   const f = p.fit;
   const L = p.length;
-  const sleeveless = p.garment === 'muscle';
+  const garment = p.garment === 'muscle' || p.garment === 'tank' ? p.garment : 'tee';
+  const sleeveless = garment !== 'tee';
+  const tank = garment === 'tank';
   const M = {
     L,
     fit: f,
@@ -96,33 +111,63 @@ export function measures(p) {
     // hacia atrás desde los hombros (atrás es casi plano, como un escote real:
     // colgada, si no, la espalda del cuello cuelga en U detrás de la percha),
     // y centro.
-    neck: { a: 0.088, b: 0.08, bB: 0.035, c: -0.014 },
+    neck: tank ? TANK.neck : { a: 0.088, b: 0.08, bB: 0.035, c: -0.014 },
     dropF: p.neckDepth,
-    dropB: 0.014,
-    vNeck: p.neckStyle === 'v',
+    dropB: tank ? TANK.dropB : 0.014,
+    vNeck: !tank && p.neckStyle === 'v',
+    // Escote hondo (tank top): el borde va apoyado sobre el pecho y la
+    // espalda, no se mete hacia el cuello.
+    deepNeck: tank,
     shY: -0.046, // altura de la punta del hombro
-    pitY: (sleeveless ? -0.25 : -0.205) - 0.03 * f, // altura de la axila
+    pitY: (tank ? -0.245 : sleeveless ? -0.25 : -0.205) - 0.03 * f, // altura de la axila
     n: 2.35, // exponente de los cortes (2 = elipse)
-    garment: sleeveless ? 'muscle' : 'tee',
+    garment,
     sleeveless,
-    armBand: ARM_BAND,
-    armCols: sleeveless ? 12 : ARM_COLS, // sin mangas, la sisa entra más en el frente y la espalda
+    armBand: tank ? TANK.binding : ARM_BAND,
+    armCols: tank ? TANK.colsF : sleeveless ? 12 : ARM_COLS, // sin mangas, la sisa entra más en el frente y la espalda
+    armColsB: tank ? TANK.colsB : sleeveless ? 12 : ARM_COLS,
+    racer: tank,
+    strap: TANK.strap,
+    racerGap: TANK.racerGap,
+    // Busto: altura y separación de las puntas, relieve y caída arriba y
+    // abajo (más suelta, menos relieve y cae más derecho).
+    bust: tank ? { x: 0.085, y: -0.245, h: 0.042 * (1 - 0.4 * f), sx: 0.045, sUp: 0.12, sDown: 0.05 + 0.07 * f } : null,
   };
-  const shA = sleeveless ? 0.188 + 0.026 * f : 0.214 + 0.032 * f; // medio ancho de hombros
+  const shA = tank ? M.neck.a + TANK.strap : sleeveless ? 0.188 + 0.026 * f : 0.214 + 0.032 * f; // medio ancho de hombros
   if (sleeveless) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
   const aC = 0.176 + 0.046 * f; // medio ancho y media profundidad del pecho
   const bC = 0.112 + 0.022 * f;
-  const rows = [
-    // y, medio ancho, media profundidad, centro z
-    [-L - 0.2, aC + 0.012 * f, bC - 0.004 + 0.004 * f, 0],
-    [-L, aC + 0.012 * f, bC - 0.004 + 0.004 * f, 0],
-    [-0.44, aC - 0.008 + 0.006 * f, bC - 0.008, 0.004],
-    [M.pitY, aC, bC, 0.006],
-    [-0.115, Math.max(shA - 0.008, aC + 0.006), bC - 0.006, 0],
-    [M.shY, shA, 0.098 + 0.01 * f, -0.008],
-    [M.shY / 2, lerp(M.neck.a, shA, 0.5), lerp(M.neck.b, 0.098 + 0.01 * f, 0.5), lerp(M.neck.c, -0.008, 0.5)],
-    [0, M.neck.a, M.neck.b, M.neck.c],
-  ];
+  // Tank top: pecho (sin el busto), cintura y cadera.
+  const aB = 0.152 + 0.04 * f;
+  const bB = 0.1 + 0.02 * f;
+  const aW = lerp(0.128, 0.162, f);
+  const bW = 0.088 + 0.02 * f;
+  const aH = 0.168 + 0.035 * f;
+  const bH = 0.1 + 0.02 * f;
+  const rows = tank
+    ? [
+        [-L - 0.2, aH, bH, 0],
+        [-L, aH, bH, 0],
+        [-0.56, aH - 0.004, bH, 0],
+        [-0.4, aW, bW, 0.004],
+        [-0.3, aW + 0.012, bW + 0.008, 0.006],
+        [M.pitY, aB, bB, 0.008],
+        [-0.11, aB - 0.008, bB - 0.012, 0],
+        [M.shY, shA, 0.082, -0.008],
+        [M.shY / 2, lerp(M.neck.a, shA, 0.5), lerp(M.neck.b, 0.082, 0.5), lerp(M.neck.c, -0.008, 0.5)],
+        [0, M.neck.a, M.neck.b, M.neck.c],
+      ]
+    : [
+        // y, medio ancho, media profundidad, centro z
+        [-L - 0.2, aC + 0.012 * f, bC - 0.004 + 0.004 * f, 0],
+        [-L, aC + 0.012 * f, bC - 0.004 + 0.004 * f, 0],
+        [-0.44, aC - 0.008 + 0.006 * f, bC - 0.008, 0.004],
+        [M.pitY, aC, bC, 0.006],
+        [-0.115, Math.max(shA - 0.008, aC + 0.006), bC - 0.006, 0],
+        [M.shY, shA, 0.098 + 0.01 * f, -0.008],
+        [M.shY / 2, lerp(M.neck.a, shA, 0.5), lerp(M.neck.b, 0.098 + 0.01 * f, 0.5), lerp(M.neck.c, -0.008, 0.5)],
+        [0, M.neck.a, M.neck.b, M.neck.c],
+      ];
   const ys = rows.map((r) => r[0]);
   M.sa = monotone(ys, rows.map((r) => r[1]));
   M.sb = monotone(ys, rows.map((r) => r[2]));
@@ -130,7 +175,7 @@ export function measures(p) {
   // escote (casi plano atrás): si siguiera redonda como el frente, justo
   // abajo del cuello haría un escalón casi horizontal y lo que se estampa ahí
   // miraría hacia arriba.
-  const pit = rows[3];
+  const pit = rows.find((r) => r[0] === M.pitY);
   const zPit = pit[3] - pit[2];
   const zNeck = M.neck.c - M.neck.bB;
   M.sbB = monotone(
@@ -182,12 +227,30 @@ const neckY = (M, th) => {
   return -(c >= 0 ? M.dropF : M.dropB) * Math.abs(c) ** 1.6;
 };
 
+// Busto (tank top): la tela pasa por encima de los dos pechos y entre ellos
+// sin meterse (pareja entre las puntas) y abajo cae; se apaga hacia los
+// costados (`side`: 1 al frente, 0 en la costura).
+export function bust(M, x, y, side = 1) {
+  const B = M.bust;
+  if (!B) return 0;
+  const ax = Math.abs(x);
+  const across = ax <= B.x ? 1 : Math.exp(-(((ax - B.x) / B.sx) ** 2));
+  const dy = y - B.y;
+  return B.h * across * Math.exp(-((dy / (dy >= 0 ? B.sUp : B.sDown)) ** 2)) * smoothstep(0, 0.35, side);
+}
+
 // Frente del torso (sin la curva hacia el cuello) en el punto de ancho x y
-// altura y: el corte superelíptico a esa altura.
+// altura y: el corte superelíptico a esa altura (con el busto).
 function chestZ(M, x, y) {
   const a = M.sa(y);
   const r = Math.min(1, Math.abs(x) / a) ** M.n;
-  return M.sc(y) + M.sb(y) * (1 - r) ** (1 / M.n);
+  return M.sc(y) + M.sb(y) * (1 - r) ** (1 / M.n) + bust(M, x, y);
+}
+// Lo mismo en la espalda.
+function backZ(M, x, y) {
+  const a = M.sa(y);
+  const r = Math.min(1, Math.abs(x) / a) ** M.n;
+  return M.sc(y) - M.sbB(y) * (1 - r) ** (1 / M.n);
 }
 
 // Punto del torso para el ángulo th (0 frente, π/2 costado izquierdo, π
@@ -200,6 +263,7 @@ function torsoPoint(M, th, t, out) {
   const e = 2 / M.n;
   let x = M.sa(y) * spow(sn, e);
   let z = M.sc(y) + (cs >= 0 ? M.sb(y) : M.sbB(y)) * spow(cs, e);
+  if (cs > 0) z += bust(M, x, y, cs);
   let yy = y;
   // Cerca del escote la columna se curva hacia el contorno del cuello. A los
   // costados eso recorre la línea del hombro; al frente, la subida del pecho.
@@ -212,7 +276,8 @@ function torsoPoint(M, th, t, out) {
     z = lerp(z, M.neck.c + (cs >= 0 ? M.neck.b : M.neck.bB) * cs, w);
     // En V el escote baja por el pecho: ahí la tela sigue el pecho y no se
     // hunde hacia el cuello (el contorno del cuello queda más atrás).
-    if (M.vNeck && cs > 0) z = Math.max(z, chestZ(M, x, yy));
+    if ((M.vNeck || M.deepNeck) && cs > 0) z = Math.max(z, chestZ(M, x, yy));
+    if (M.deepNeck && cs < 0) z = Math.min(z, backZ(M, x, yy));
   }
   out[0] = x;
   out[1] = yy;
@@ -246,6 +311,7 @@ function noise3(x, y, z) {
 // ---------- torso ----------
 
 function buildTorso(M) {
+  if (M.racer) return buildRacerTorso(M);
   const N = ROWS_LOW + ROWS_ARM + ROWS_TOP;
   const tPit = (M.pitY + M.L) / M.L;
   const tSh = (M.shY + M.L) / M.L;
@@ -307,13 +373,126 @@ function buildTorso(M) {
     orient(pos, idx, fromVertical);
     panels[key] = { pos, ang, idx, W, N };
   }
-  return { panels, i1, i2, N, armCols: A };
+  return { panels, i1, i2, N, armCols: A, armColsB: A };
+}
+
+// Torso del tank top (espalda nadadora). La sisa es otra vez un hueco
+// rectangular en la grilla, pero de AF columnas en el frente y AB en la
+// espalda, y las filas no van a la misma altura en todas las columnas: la de
+// arriba de la sisa queda a `strap` del escote (así la tira sigue el escote,
+// también por la espalda hasta donde se juntan), y la de la axila sube en la
+// espalda desde el costado hasta `racerGap` debajo de donde se juntan las
+// tiras (si bajara hacia ahí, en la costura del costado quedaría una punta
+// que, colgada, arma bolsas bajo la sisa). Las esquinas del hueco se
+// redondean en la grilla (superelipse) antes de ubicar cada punto.
+const RACER_E = 4;
+function buildRacerTorso(M) {
+  const N = ROWS_LOW + ROWS_ARM + ROWS_TOP;
+  const i1 = ROWS_LOW;
+  const i2 = ROWS_LOW + ROWS_ARM;
+  const AF = M.armCols;
+  const AB = M.armColsB;
+  const L = M.L;
+  // Por ángulo desde el centro del frente (0) hasta el de la espalda (π):
+  // parámetro de la axila y del borde de arriba de la sisa.
+  const S = 128;
+  const tPit = new Float64Array(S + 1);
+  const tTop = new Float64Array(S + 1);
+  const neckPts = [];
+  for (let k = 0; k <= 256; k++) neckPts.push(torsoPoint(M, (k / 256) * 2 * Math.PI, 1, [0, 0, 0]));
+  const P = [0, 0, 0];
+  const toNeck = (th, t) => {
+    torsoPoint(M, th, t, P);
+    let d = Infinity;
+    for (const q of neckPts) d = Math.min(d, Math.hypot(P[0] - q[0], P[1] - q[1], P[2] - q[2]));
+    return d;
+  };
+  for (let s = 0; s <= S; s++) {
+    const phi = (s / S) * Math.PI;
+    let lo = 0.5;
+    let hi = 1;
+    for (let it = 0; it < 32; it++) {
+      const mid = (lo + hi) / 2;
+      if (toNeck(phi, mid) > M.strap) lo = mid;
+      else hi = mid;
+    }
+    tTop[s] = (lo + hi) / 2;
+  }
+  const look = (tab, th) => {
+    const x = (Math.abs(Math.atan2(Math.sin(th), Math.cos(th))) / Math.PI) * S;
+    const k = Math.min(S - 1, Math.floor(x));
+    return lerp(tab[k], tab[k + 1], x - k);
+  };
+  const thJ = Math.PI / 2 + (AB * Math.PI) / COLS;
+  const yJ = torsoPoint(M, thJ, look(tTop, thJ), P)[1] - M.racerGap;
+  for (let s = 0; s <= S; s++) {
+    const phi = (s / S) * Math.PI;
+    const u = clamp01((phi - Math.PI / 2) / (thJ - Math.PI / 2));
+    tPit[s] = (lerp(M.pitY, yJ, smooth(u)) + L) / (neckY(M, phi) + L);
+  }
+  const tOf = (i, th) => {
+    const tp = look(tPit, th);
+    const tt = look(tTop, th);
+    if (i <= i1) return (tp * i) / i1;
+    if (i <= i2) return lerp(tp, tt, (i - i1) / (i2 - i1));
+    return lerp(tt, 1, (i - i2) / (N - i2));
+  };
+  const hw = (AF + AB) / 2;
+  const ic = (i1 + i2) / 2;
+  const hh = (i2 - i1) / 2;
+  const warp = (i, j, jc) => {
+    const p = (j - jc) / hw;
+    const q = (i - ic) / hh;
+    const rho = Math.max(Math.abs(p), Math.abs(q));
+    const r = Math.hypot(p, q);
+    if (rho >= 1.8 || r < 1e-9) return [i, j];
+    const top = q > 0 ? clamp01((N - i) / (N - i2)) : 1;
+    const R = ((Math.abs(p) / r) ** RACER_E + (Math.abs(q) / r) ** RACER_E) ** (-1 / RACER_E);
+    const k = lerp(1, (R * rho) / r, (1 - smoothstep(1, 1.8, rho)) * top);
+    return [ic + q * k * hh, jc + p * k * hw];
+  };
+  const panels = {};
+  for (const key of ['front', 'back']) {
+    const front = key === 'front';
+    const th0 = front ? -Math.PI / 2 : Math.PI / 2;
+    // Centro de cada sisa en las columnas de esta pieza (cada sisa sigue en
+    // la otra pieza, del otro lado de la costura).
+    const centers = front ? [COLS + (AB - AF) / 2, (AF - AB) / 2] : [(AB - AF) / 2, COLS + (AF - AB) / 2];
+    const A = front ? AF : AB;
+    const W = COLS + 1;
+    const pos = new Float32Array(W * (N + 1) * 3);
+    const ang = new Float32Array(W * (N + 1));
+    const tmp = [0, 0, 0];
+    for (let i = 0; i <= N; i++) {
+      for (let j = 0; j <= COLS; j++) {
+        let [ii, jj] = [i, j];
+        for (const jc of centers) [ii, jj] = warp(ii, jj, jc);
+        const th = th0 + (Math.PI * jj) / COLS;
+        torsoPoint(M, th, tOf(ii, th), tmp);
+        const k = i * W + j;
+        pos.set(tmp, k * 3);
+        ang[k] = th;
+      }
+    }
+    const idx = [];
+    const hole = (i, j) => i >= i1 && i < i2 && (j < A || j >= COLS - A);
+    for (let i = 0; i < N; i++)
+      for (let j = 0; j < COLS; j++) {
+        if (hole(i, j)) continue;
+        const a = i * W + j;
+        idx.push(a, a + 1, a + W + 1, a, a + W + 1, a + W);
+      }
+    orient(pos, idx, fromVertical);
+    panels[key] = { pos, ang, idx, W, N };
+  }
+  return { panels, i1, i2, N, armCols: AF, armColsB: AB };
 }
 
 // Borde de cada sisa, desde la axila: sube por el frente, cruza el hombro y
 // baja por la espalda. Devuelve [pieza, fila, columna] de cada punto de una
-// grilla de `cols` columnas con la sisa entre las filas i1 e i2.
-export function armholeLoopIJ(cols, A, i1, i2, side) {
+// grilla de `cols` columnas con la sisa entre las filas i1 e i2 (de A
+// columnas en el frente y AB en la espalda).
+export function armholeLoopIJ(cols, A, i1, i2, side, AB = A) {
   const F = (i, j) => ['front', i, j];
   const B = (i, j) => ['back', i, j];
   const out = [];
@@ -322,23 +501,23 @@ export function armholeLoopIJ(cols, A, i1, i2, side) {
     for (let j = cols - 1; j >= cols - A; j--) out.push(F(i1, j));
     for (let i = i1 + 1; i <= i2; i++) out.push(F(i, cols - A));
     for (let j = cols - A + 1; j <= cols; j++) out.push(F(i2, j));
-    for (let j = 1; j <= A; j++) out.push(B(i2, j));
-    for (let i = i2 - 1; i >= i1; i--) out.push(B(i, A));
-    for (let j = A - 1; j >= 1; j--) out.push(B(i1, j));
+    for (let j = 1; j <= AB; j++) out.push(B(i2, j));
+    for (let i = i2 - 1; i >= i1; i--) out.push(B(i, AB));
+    for (let j = AB - 1; j >= 1; j--) out.push(B(i1, j));
   } else {
     out.push(F(i1, 0));
     for (let j = 1; j <= A; j++) out.push(F(i1, j));
     for (let i = i1 + 1; i <= i2; i++) out.push(F(i, A));
     for (let j = A - 1; j >= 0; j--) out.push(F(i2, j));
-    for (let j = cols - 1; j >= cols - A; j--) out.push(B(i2, j));
-    for (let i = i2 - 1; i >= i1; i--) out.push(B(i, cols - A));
-    for (let j = cols - A + 1; j <= cols - 1; j++) out.push(B(i1, j));
+    for (let j = cols - 1; j >= cols - AB; j--) out.push(B(i2, j));
+    for (let i = i2 - 1; i >= i1; i--) out.push(B(i, cols - AB));
+    for (let j = cols - AB + 1; j <= cols - 1; j++) out.push(B(i1, j));
   }
   return out;
 }
 function armholeLoop(torso, side) {
   const W = COLS + 1;
-  return armholeLoopIJ(COLS, torso.armCols, torso.i1, torso.i2, side).map(([key, i, j]) => [key, i * W + j]);
+  return armholeLoopIJ(COLS, torso.armCols, torso.i1, torso.i2, side, torso.armColsB).map(([key, i, j]) => [key, i * W + j]);
 }
 
 // Pliegues del torso: caída suave hacia el ruedo y tensiones que salen de la
@@ -623,12 +802,12 @@ export function buildShirt(params) {
     for (const key of ['front', 'back']) panels[key].nrm = computeNormals(panels[key].pos, panels[key].idx);
     weldNormals([panels.front, panels.back]);
     for (const [name, side] of [['armL', 1], ['armR', -1]]) {
-      const ring = armholeLoopIJ(COLS, torso.armCols, i1, i2, side).map(([key, i, j]) => {
+      const ring = armholeLoopIJ(COLS, torso.armCols, i1, i2, side, torso.armColsB).map(([key, i, j]) => {
         const [ii, jj] = i === i1 ? [i - 1, j] : i === i2 ? [i + 1, j] : [i, j < COLS / 2 ? j + 1 : j - 1];
         return [key, i * W + j, ii * W + jj];
       });
       armRings[name] = ring;
-      parts[name] = buildArmBand(ring.map(([key, v, w]) => [panels[key].pos, v, w, panels[key].nrm]), M.armBand);
+      parts[name] = buildArmBand(ring.map(([key, v, w]) => [panels[key].pos, v, w, panels[key].nrm]), M.armBand, M.racer);
     }
   }
 
@@ -636,7 +815,7 @@ export function buildShirt(params) {
   const neck = [];
   for (let j = 0; j <= COLS; j++) neck.push(['front', N * W + j, (N - 3) * W + j]);
   for (let j = 1; j < COLS; j++) neck.push(['back', N * W + j, (N - 3) * W + j]);
-  parts.collar = buildCollar(M, neck.map(([key, v, below]) => [panels[key].pos, v, below]), COLS / 2);
+  parts.collar = buildCollar(M, neck.map(([key, v, below]) => [panels[key].pos, v, below, panels[key].nrm]), COLS / 2);
 
   // ---------- dobladillos (espesor de la tela en ruedo y puños) ----------
   const hemRing = [];
@@ -678,6 +857,7 @@ export function buildShirt(params) {
   const layout = {
     cols: COLS,
     armCols: torso.armCols,
+    armColsB: torso.armColsB,
     rows: N,
     i1,
     i2,
@@ -987,11 +1167,14 @@ export const COLLAR_FOLD = 5;
 const COLLAR_GAP = 0.006;
 
 // Tira acanalada del cuello sobre el borde del escote (lazo cerrado). En V,
-// la punta del escote es el punto `tip` del lazo.
+// la punta del escote es el punto `tip` del lazo. Con el escote hondo del
+// tank top es un vivo angosto que sigue la tela (mismo perfil, más chico).
 function buildCollar(M, neck, tip) {
   const n = neck.length;
   const base = neck.map(([pos, v]) => new THREE.Vector3().fromArray(pos, v * 3));
   const below = neck.map(([pos, , b]) => new THREE.Vector3().fromArray(pos, b * 3));
+  const nrms = neck.map(([, v, , nn]) => new THREE.Vector3().fromArray(nn, v * 3));
+  const flat = M.deepNeck;
   // Contorno suavizado (redondo y parejo; en V, el frente queda tal cual para
   // que las patas sean rectas y la punta neta).
   const front = (k) => M.vNeck && k <= 2 * tip;
@@ -1001,8 +1184,8 @@ function buildCollar(M, neck, tip) {
     for (let i = 0; i < n; i++) if (!front(i)) ring[i].copy(prev[(i - 1 + n) % n]).add(prev[(i + 1) % n]).multiplyScalar(0.25).addScaledVector(prev[i], 0.5);
   }
   // Alto de la tira (en V, apenas más angosta).
-  const h = M.vNeck ? 0.019 : 0.021;
-  const th = 0.0034;
+  const h = flat ? M.armBand : M.vNeck ? 0.019 : 0.021;
+  const th = flat ? 0.0032 : 0.0034;
   const center = new THREE.Vector3();
   for (const p of ring) center.add(p);
   center.divideScalar(n);
@@ -1040,7 +1223,7 @@ function buildCollar(M, neck, tip) {
   let ty = ring.map((r, k) => r.y + ups[k].y * h);
   const minRise = 0.3 * h;
   for (let pass = 0; pass < 80; pass++) ty = ty.map((y, k) => Math.max((ty[(k - 1 + n) % n] + ty[(k + 1) % n] + 2 * y) / 4, ring[k].y + minRise));
-  ups = ups.map((u0, k) => {
+  if (!flat) ups = ups.map((u0, k) => {
     const rise = Math.min(h, ty[k] - ring[k].y);
     const hz = new THREE.Vector3(u0.x, 0, u0.z);
     if (hz.lengthSq() < 1e-8) hz.set(center.x - ring[k].x, 0, center.z - ring[k].z);
@@ -1059,6 +1242,11 @@ function buildCollar(M, neck, tip) {
       return along(u.clone().lerp(flat, f).normalize(), k);
     });
   }
+  // Vivo: sigue la tela desde el borde.
+  if (flat) {
+    ups = base.map((b, k) => along(new THREE.Vector3().subVectors(b, below[k]).normalize(), k));
+    for (let pass = 0; pass < 4; pass++) ups = ups.map((_, k) => along(ups[(k - 1 + n) % n].clone().add(ups[(k + 1) % n]).addScaledVector(ups[k], 2).normalize(), k));
+  }
   const up = new THREE.Vector3();
   const out = new THREE.Vector3();
   const q = new THREE.Vector3();
@@ -1067,8 +1255,10 @@ function buildCollar(M, neck, tip) {
     const k = i % n;
     if (i > 0) u += ring[k].distanceTo(ring[i - 1]);
     up.copy(ups[k]);
-    // Afuera: perpendicular a "arriba" dentro del plano vertical radial.
-    out.set(ring[k].x - center.x, 0, ring[k].z - center.z).normalize();
+    // Afuera: perpendicular a "arriba" dentro del plano vertical radial (el
+    // vivo, del lado de afuera de la tela).
+    if (flat) out.copy(nrms[k]);
+    else out.set(ring[k].x - center.x, 0, ring[k].z - center.z).normalize();
     out.addScaledVector(up, -out.dot(up)).normalize();
     let v = 0;
     for (let j = 0; j < P; j++) {
@@ -1142,10 +1332,10 @@ function buildLip(ring, height, closed) {
 // cruzarían en la punta): cara de afuera, borde redondeado y cara de
 // adentro, que sigue un poco por dentro de la prenda. Colgada, la sisa se
 // aplasta y el aro quedaría de canto: ahí el puño sigue la tela (`hang`, la
-// forma de reposo con la que lo acompaña la simulación). `ring`:
-// [posiciones, punto del borde, punto de la tela que le sigue hacia adentro
-// de la pieza, normales].
-function buildArmBand(ring, h) {
+// forma de reposo con la que lo acompaña la simulación). El vivo del tank
+// top (`flat`, angosto) sigue la tela siempre. `ring`: [posiciones, punto del
+// borde, punto de la tela que le sigue hacia adentro de la pieza, normales].
+function buildArmBand(ring, h, flatOnly = false) {
   const n = ring.length;
   const th = 0.0032;
   const prof = [[0, 0], [h * 0.5, 0.0002], [h - th / 2, 0]];
@@ -1195,7 +1385,7 @@ function buildArmBand(ring, h) {
     let v = 0;
     for (let j = 0; j < P; j++) {
       if (j > 0) v += Math.hypot(prof[j][0] - prof[j - 1][0], prof[j][1] - prof[j - 1][1]);
-      for (const [arr, d] of [[pos, ups[k]], [hang, flat[k]]]) q.copy(E[k]).addScaledVector(d, prof[j][0]).addScaledVector(outOf(d, k), prof[j][1]).toArray(arr, (j * SW + i) * 3);
+      for (const [arr, d] of [[pos, flatOnly ? flat[k] : ups[k]], [hang, flat[k]]]) q.copy(E[k]).addScaledVector(d, prof[j][0]).addScaledVector(outOf(d, k), prof[j][1]).toArray(arr, (j * SW + i) * 3);
       uv[(j * SW + i) * 2] = u;
       uv[(j * SW + i) * 2 + 1] = v;
     }

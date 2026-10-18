@@ -52,6 +52,7 @@
               <div class="seg" role="group" aria-labelledby="garment-label">
                 <button type="button" data-garment="tee" aria-pressed="true">Camiseta</button>
                 <button type="button" data-garment="muscle" aria-pressed="false">Musculosa</button>
+                <button type="button" data-garment="tank" aria-pressed="false">Tank top</button>
               </div>
             </div>
             <div class="control">
@@ -81,7 +82,7 @@
                 <button type="button" data-cuff="none" aria-pressed="false">Sin puño</button>
               </div>
             </div>
-            <div class="control">
+            <div class="control" id="neck-control">
               <span class="label" id="neckStyle-label">Cuello</span>
               <div class="seg" role="group" aria-labelledby="neckStyle-label">
                 <button type="button" data-neck="round" aria-pressed="true">Redondo</button>
@@ -155,7 +156,7 @@
             <div class="swatches">
               <label class="swatch"><input id="c-body" type="color" /><span>Cuerpo</span></label>
               <label class="swatch"><input id="c-sleeves" type="color" /><span>Mangas</span></label>
-              <label class="swatch"><input id="c-collar" type="color" /><span>Cuello</span></label>
+              <label class="swatch"><input id="c-collar" type="color" /><span id="c-collar-label">Cuello</span></label>
               <label class="swatch" id="sw-cuffs"><input id="c-cuffs" type="color" /><span>Puños</span></label>
             </div>
             <p class="note">Con un diseño cargado, la pieza muestra el diseño; el color queda donde la imagen es transparente.</p>

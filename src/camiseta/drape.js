@@ -18,7 +18,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { armholeLoopIJ, flattenPanel } from './shirt.js';
+import { armholeLoopIJ, flattenPanel, bust } from './shirt.js';
 
 const SUBSTEPS = 4;
 const ITERATIONS = 5;
@@ -39,6 +39,7 @@ const CLIPS_BAND = 0.2;
 const CLIPS_VOLUME_TOP = 0.1;
 const CLIPS_CAP = 0.15;
 const VOLUME_HEM = 0.06;
+const RACER_PAIR = 0.03; // (tank top) a más de esto, de costado, no se miran
 const VOLUME_SLEEVE = 0.5;
 // Broches: filas de la costura del hombro donde pellizcan (desde la punta
 // del hombro hacia el cuello) y media separación entre las mordazas.
@@ -425,6 +426,9 @@ export class HangingShirt {
     const i1 = L.i1 / 2;
     const i2 = L.i2 / 2;
     const A = L.armCols / 2;
+    // (El tank top tiene la sisa más ancha en la espalda.)
+    const AB = (L.armColsB ?? L.armCols) / 2;
+    const AK = { front: A, back: AB };
     const W = L.cols + 1;
     const WC = C + 1;
     // Sin mangas (musculosa) no hay grilla de manga.
@@ -445,11 +449,11 @@ export class HangingShirt {
     // Partículas del torso: la grilla fina tomando una fila y columna de cada
     // dos; las costuras de costado y hombro comparten partícula.
     const map = { front: new Int32Array(WC * (NC + 1)).fill(-1), back: new Int32Array(WC * (NC + 1)).fill(-1) };
-    const inHole = (i, j) => i > i1 && i < i2 && (j < A || j > C - A);
+    const inHole = (key, i, j) => i > i1 && i < i2 && (j < AK[key] || j > C - AK[key]);
     for (const key of ['front', 'back']) {
       for (let i = 0; i <= NC; i++)
         for (let j = 0; j <= C; j++) {
-          if (inHole(i, j)) continue;
+          if (inHole(key, i, j)) continue;
           let id = -1;
           if (key === 'back' && (j === 0 || j === C)) id = map.front[i * WC + (j === 0 ? C : 0)];
           map[key][i * WC + j] = id >= 0 ? id : add(fine(key, 2 * i * W + 2 * j));
@@ -563,9 +567,10 @@ export class HangingShirt {
           if (i + 2 <= h && m[(i + 1) * w + j] >= 0) link(a, m[(i + 2) * w + j], 2);
         }
     };
-    const cellOk = (i, j) => !(i >= i1 && i < i2 && (j < A || j >= C - A));
-    grid(map.front, WC, NC, cellOk);
-    grid(map.back, WC, NC, cellOk);
+    const cellOkOf = (a) => (i, j) => !(i >= i1 && i < i2 && (j < a || j >= C - a));
+    const cellOkK = { front: cellOkOf(A), back: cellOkOf(AB) };
+    grid(map.front, WC, NC, cellOkK.front);
+    grid(map.back, WC, NC, cellOkK.back);
     for (const m of Object.values(sleeveMap)) grid(m, SWC, RC, () => true);
     // La copa de la manga tiene algo de cuerpo: uniones blandas entre las
     // primeras filas de la manga y la tela del torso junto a la sisa (la
@@ -631,7 +636,7 @@ export class HangingShirt {
       for (let i = 0; i < NC; i++)
         for (let j = 0; j < C; j++) {
           const a = i * WC + j;
-          if (cellOk(i, j)) tri.push(a, a + 1, a + WC, a + 1, a + WC + 1, a + WC);
+          if (cellOkK[key](i, j)) tri.push(a, a + 1, a + WC, a + 1, a + WC + 1, a + WC);
         }
       const top = NC * WC;
       const e = built.measures.vNeck ? (key === 'front' ? V_EASE : V_BACK_EASE) : 1;
@@ -870,10 +875,16 @@ export class HangingShirt {
     // El lado derecho copia en espejo los pares del izquierdo.
     for (const f of this.frontIds) if (P[f * 3] <= 0) partner[f] = nearestBack(f);
     for (const f of this.frontIds) if (P[f * 3] > 0) partner[f] = mirror[partner[mirror[f]]];
+    // Espalda nadadora: frente a la sisa de atrás no hay espalda; el punto
+    // más cercano queda en el borde de la sisa y lo empujaría hacia afuera.
+    const racer = built.measures.racer;
     for (const f of this.frontIds) {
       const best = partner[f];
+      if (racer && Math.hypot(P[f * 3] - P[best * 3], P[f * 3 + 1] - P[best * 3 + 1]) > RACER_PAIR) continue;
       const t = Math.min(1, rowOf[f] / i1);
-      const g = (P[f * 3 + 2] - P[best * 3 + 2]) * (VOLUME_HEM + (volTop - VOLUME_HEM) * t * t * (3 - 2 * t));
+      // (El relieve del busto no cuenta: inflaría la espalda.)
+      const depth = P[f * 3 + 2] - P[best * 3 + 2] - bust(built.measures, P[f * 3], P[f * 3 + 1]);
+      const g = depth * (VOLUME_HEM + (volTop - VOLUME_HEM) * t * t * (3 - 2 * t));
       if (g <= GAP) continue;
       vol.push(f, best);
       volGap.push(g);
@@ -908,8 +919,8 @@ export class HangingShirt {
           if (ok(i, j) && q.every((id) => id >= 0 && !this.noCollide[id]) && new Set(q).size === 4) quads.push(...q);
         }
     };
-    addQuads(map.front, WC, NC, cellOk);
-    addQuads(map.back, WC, NC, cellOk);
+    addQuads(map.front, WC, NC, cellOkK.front);
+    addQuads(map.back, WC, NC, cellOkK.back);
     for (const m of Object.values(sleeveMap)) addQuads(m, SWC, RC, () => true);
     const bandRows = [...ring, ring[0], ...band, band[0]];
     addQuads(bandRows, K + 1, 1, () => true);

@@ -23,7 +23,8 @@ const PARTS = {
   cuffLLip: { color: 'cuffs', lining: 'cuffL' },
   cuffRLip: { color: 'cuffs', lining: 'cuffR' },
   collar: { color: 'collar', label: 'CUELLO', rib: true },
-  // Puños de las sisas de la musculosa: como los de las mangas.
+  // Puños de las sisas de la musculosa: como los de las mangas (en el tank
+  // top son vivos, del color del vivo del escote).
   armL: { color: 'cuffs', band: true },
   armR: { color: 'cuffs', band: true },
 };
@@ -376,6 +377,8 @@ const CONFIG = (() => {
 // satinado) y peso (0 liviana · 1 pesada).
 const FABRIC = { weave: 'mesh', finish: 'matte', weight: 0.5 };
 const BASE_PARAMS = { ...DEFAULTS, ...CONFIG.params };
+// El tank top arranca con su escote típico (ver NECK.tank).
+if (BASE_PARAMS.garment === 'tank' && CONFIG.params?.neckDepth === undefined) BASE_PARAMS.neckDepth = 0.13;
 const BASE_COLORS = { ...COLORS, ...CONFIG.colors };
 const BASE_FABRIC = { ...FABRIC, ...CONFIG.fabric };
 const BASE_LIGHT = CONFIG.light in LIGHTS ? CONFIG.light : 'studio';
@@ -548,15 +551,18 @@ let drape = null;
 const TAPE_FACE = 0.007;
 const TAPE_OUT = 0.0006; // por delante de la cara de adentro del cuello
 const tapeMat = new THREE.MeshStandardMaterial({ roughness: 0.72, side: THREE.DoubleSide });
-const tape = { geo: new THREE.BufferGeometry(), cols: null, W: 0, N: 0, len: 0, w: 0 };
+const tape = { geo: new THREE.BufferGeometry(), cols: null, W: 0, N: 0, len: 0, w: 0, meshes: [] };
 for (const rig of rigs) {
   const m = new THREE.Mesh(tape.geo, tapeMat);
   m.receiveShadow = true;
   m.userData.piece = 'tape';
   rig.userData.inner.add(m);
+  tape.meshes.push(m);
 }
 const TAPE_ROWS = 2;
 function buildTape() {
+  // El tank top (escote hondo con vivo) no lleva.
+  for (const m of tape.meshes) m.visible = !built.measures.deepNeck;
   const pos = built.geos.back.attributes.position.array;
   const C = built.layout.cols;
   const W = C + 1;
@@ -816,7 +822,7 @@ function applyLook() {
   document.querySelector('[data-zoom="label"]').hidden = !design.labelTex;
   for (const [k, mesh] of Object.entries(meshes)) {
     const def = PARTS[k];
-    const color = colors[def.color === 'cuffs' && params.cuff === 'none' && !def.band ? 'sleeves' : def.color];
+    const color = colors[def.band && built.measures.deepNeck ? 'collar' : def.color === 'cuffs' && params.cuff === 'none' && !def.band ? 'sleeves' : def.color];
     const m = mesh.material;
     const app = !view.uvmap && design.app[k];
     m.userData.own.appOn.value = app ? 1 : 0;
@@ -872,7 +878,7 @@ const FOUT = {
   weight: (v) => `${Math.round(120 + 100 * v)} g/m²`,
 };
 // Escote según el tipo de cuello: mínimo, máximo y valor al elegirlo.
-const NECK = { round: [0.055, 0.12, 0.075], v: [0.07, 0.13, 0.09] };
+const NECK = { round: [0.055, 0.12, 0.075], v: [0.07, 0.13, 0.09], tank: [0.09, 0.18, 0.13] };
 const sliders = {};
 const fabricSliders = {};
 function setFill(input) {
@@ -880,7 +886,7 @@ function setFill(input) {
   input.style.setProperty('--fill', `${f}%`);
 }
 function syncControls() {
-  const [lo, hi] = NECK[params.neckStyle] || NECK.round;
+  const [lo, hi] = neckRange();
   sliders.neckDepth.min = lo;
   sliders.neckDepth.max = hi;
   params.neckDepth = Math.min(hi, Math.max(lo, params.neckDepth));
@@ -896,14 +902,18 @@ function syncControls() {
   }
   neckButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.neck === (params.neckStyle === 'v' ? 'v' : 'round'))));
   cuffButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cuff === (params.cuff === 'none' ? 'none' : 'band'))));
-  // La musculosa no tiene mangas: ni su largo, apertura, puño ni color; sí
-  // los puños de las sisas (color de los puños).
+  // Sin mangas: ni su largo, apertura, puño ni color; la musculosa tiene los
+  // puños de las sisas (color de los puños). El tank top tiene escote
+  // redondo hondo y vivos (un color para los tres).
   const bare = sleeveless();
-  garmentButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.garment === (bare ? 'muscle' : 'tee'))));
+  const tank = params.garment === 'tank';
+  garmentButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.garment === garmentOf())));
   for (const id of ['sleeveLength', 'sleeveAngle']) sliders[id].closest('.control').hidden = bare;
   document.getElementById('cuff-control').hidden = bare;
+  document.getElementById('neck-control').hidden = tank;
   document.getElementById('c-sleeves').closest('.swatch').hidden = bare;
-  document.getElementById('sw-cuffs').hidden = !bare && params.cuff === 'none';
+  document.getElementById('sw-cuffs').hidden = tank || (!bare && params.cuff === 'none');
+  document.getElementById('c-collar-label').textContent = tank ? 'Vivos' : 'Cuello';
   weaveButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.weave === fabric.weave)));
   finishButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.finish === (fabric.finish === 'satin' ? 'satin' : 'matte'))));
   spinButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.spin === view.spin)));
@@ -937,18 +947,27 @@ neckButtons.forEach((b) =>
   b.addEventListener('click', () => {
     if (params.neckStyle === b.dataset.neck) return;
     params.neckStyle = b.dataset.neck;
-    params.neckDepth = NECK[params.neckStyle][2];
+    params.neckDepth = neckRange()[2];
     syncControls();
     scheduleRebuild();
   }),
 );
-// Prenda: camiseta, o musculosa (sin mangas, con un puño en cada sisa).
-const sleeveless = () => params.garment === 'muscle';
+// Prenda: camiseta, musculosa (sin mangas, con un puño en cada sisa) o tank
+// top (de mujer, espalda nadadora). Al entrar o salir del tank top el escote
+// vuelve al típico (el del tank top es redondo y mucho más hondo).
+const garmentOf = () => (params.garment === 'muscle' || params.garment === 'tank' ? params.garment : 'tee');
+const sleeveless = () => garmentOf() !== 'tee';
+const neckRange = () => (params.garment === 'tank' ? NECK.tank : NECK[params.neckStyle] || NECK.round);
 const garmentButtons = [...document.querySelectorAll('[data-garment]')];
 garmentButtons.forEach((b) =>
   b.addEventListener('click', () => {
-    if ((sleeveless() ? 'muscle' : 'tee') === b.dataset.garment) return;
+    const was = garmentOf();
+    if (was === b.dataset.garment) return;
     params.garment = b.dataset.garment;
+    if (was === 'tank' || params.garment === 'tank') {
+      params.neckStyle = 'round';
+      params.neckDepth = neckRange()[2];
+    }
     syncControls();
     scheduleRebuild();
     requestAnimationFrame(() => {
@@ -1192,8 +1211,10 @@ const lib = new Map();
 const dress = { pieces: {}, apps: [], free: false };
 const SLOTS = ['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR', 'collar', 'tape', 'label'];
 const APP_PIECES = ['front', 'back', 'sleeveL', 'sleeveR'];
+// Nombre de una pieza (en el tank top, el cuello es el vivo del escote).
+const pieceLabel = (k) => (k === 'collar' && built.measures.deepNeck ? 'Vivo del escote' : PIECE_LABELS[k]);
 // ¿Tiene la prenda esa pieza? (La musculosa no tiene mangas ni puños.)
-const hasPiece = (k) => k === 'tape' || k === 'label' || !!built.geos[k];
+const hasPiece = (k) => (k === 'tape' ? !built.measures.deepNeck : k === 'label' || !!built.geos[k]);
 const APP_AS = { emb: 'Bordado', vin: 'Vinilo', print: 'Sublimado' };
 const CREST_NAME = /escudo|crest|badge|emblema|insignia|parche/i;
 const BRAND_NAME = /marca|logo|brand|sponsor/i;
@@ -1420,7 +1441,7 @@ function autoAssign(items) {
     }
     const keys = pieceKeys(item.name);
     for (const k of keys) dress.pieces[k] = { id: item.id, fit: { scale: 1, dx: 0, dy: 0 } };
-    if (keys.length) placed.push(keys.map((k) => PIECE_LABELS[k].toLowerCase()).join(' y '));
+    if (keys.length) placed.push(keys.map((k) => pieceLabel(k).toLowerCase()).join(' y '));
   }
   return placed;
 }
@@ -1498,13 +1519,13 @@ function renderSlots() {
   slotList.replaceChildren(
     ...SLOTS.filter((k) => hasPiece(k) && !(CUFF_SLEEVE[k] && params.cuff === 'none')).map((k) => {
       const item = dress.pieces[k] && lib.get(dress.pieces[k].id);
-      const li = el('li', { className: `slot${item ? '' : ' empty'}`, title: item ? item.name : `Soltá una imagen para ${PIECE_LABELS[k].toLowerCase()}` }, item ? el('img', { className: 'slot-img', src: item.url, alt: '' }) : el('span', { className: 'slot-img' }), el('span', { className: 'slot-name', textContent: PIECE_LABELS[k] }));
+      const li = el('li', { className: `slot${item ? '' : ' empty'}`, title: item ? item.name : `Soltá una imagen para ${pieceLabel(k).toLowerCase()}` }, item ? el('img', { className: 'slot-img', src: item.url, alt: '' }) : el('span', { className: 'slot-img' }), el('span', { className: 'slot-name', textContent: pieceLabel(k) }));
       li.dataset.piece = k;
       li.setAttribute('aria-selected', String(selected?.piece === k));
       li.tabIndex = 0;
       if (item)
         li.append(
-          closeButton(`Quitar la imagen de ${PIECE_LABELS[k].toLowerCase()}`, () => {
+          closeButton(`Quitar la imagen de ${pieceLabel(k).toLowerCase()}`, () => {
             delete dress.pieces[k];
             renderSlots();
             renderDress([k]);
@@ -1564,7 +1585,7 @@ function renderApps() {
       });
       paintRange(range);
       const size = el('div', { className: 'control' }, el('span', { className: 'label', textContent: 'Ancho' }), out, range);
-      const li = el('li', { className: 'app' }, el('img', { src: item.url, alt: '' }), el('div', { className: 'app-main' }, el('span', { className: 'app-name', textContent: `${item.name} · ${ZONES[a.zone]?.label || PIECE_LABELS[a.piece]}` }), seg, size));
+      const li = el('li', { className: 'app' }, el('img', { src: item.url, alt: '' }), el('div', { className: 'app-main' }, el('span', { className: 'app-name', textContent: `${item.name} · ${ZONES[a.zone]?.label || pieceLabel(a.piece)}` }), seg, size));
       li.setAttribute('aria-selected', String(selected?.app === a.uid));
       li.append(
         closeButton(`Quitar ${item.name}`, () => {
@@ -1610,7 +1631,7 @@ function drawEditor() {
   const sz = all[k];
   const p = dress.pieces[k];
   const item = p && lib.get(p.id);
-  document.getElementById('editor-title').textContent = `${PIECE_LABELS[k]}${item ? ` · ${item.name}` : ''}`;
+  document.getElementById('editor-title').textContent = `${pieceLabel(k)}${item ? ` · ${item.name}` : ''}`;
   document.getElementById('ed-scale-row').hidden = !item;
   document.getElementById('ed-center').hidden = !item;
   if (item) {
@@ -1853,7 +1874,7 @@ function pieceAt(x, y) {
   if (x < r.left || x > r.right || y < r.top || y > r.bottom) return null;
   pointer.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
   raycaster.setFromCamera(pointer, camera);
-  const targets = [...clothMeshes, ...rigs.flatMap((rig) => rig.userData.inner.children.filter((m) => m.userData.piece === 'tape' || (m.userData.piece === 'label' && m.visible)))];
+  const targets = [...clothMeshes, ...rigs.flatMap((rig) => rig.userData.inner.children.filter((m) => (m.userData.piece === 'tape' || m.userData.piece === 'label') && m.visible))];
   const hit = raycaster.intersectObjects(targets, false)[0];
   if (!hit) return null;
   let key = hit.object.userData.piece;
@@ -1912,7 +1933,7 @@ document.addEventListener('pointermove', (e) => {
   highlight(t && !t.slot ? t.key : null);
   const asApp = t && !t.slot && libDrag.item.app && t.at && APP_PIECES.includes(t.key) && hasPiece(t.key);
   const zone = asApp && !dress.free ? (t.key === 'front' ? (t.at[0] >= 0 ? 'chestL' : 'chestR') : t.key === 'back' ? 'back' : null) : null;
-  tip.textContent = t ? (zone ? ZONES[zone].label : asApp ? `Aplicación en ${PIECE_LABELS[t.key].toLowerCase()}` : PIECE_LABELS[t.key]) : 'Soltá sobre una pieza';
+  tip.textContent = t ? (zone ? ZONES[zone].label : asApp ? `Aplicación en ${pieceLabel(t.key).toLowerCase()}` : pieceLabel(t.key)) : 'Soltá sobre una pieza';
 });
 function endLibDrag(e) {
   if (!libDrag || e.pointerId !== libDrag.id) return;
@@ -2334,7 +2355,7 @@ function sheetPose(aspect, fill = 0.86) {
 }
 function sheetSpec() {
   const w = WEAVES[fabric.weave] || WEAVES.mesh;
-  return [...(sleeveless() ? ['Musculosa'] : []), w.label, fabric.finish === 'satin' ? 'satinada' : 'mate', FOUT.weight(fabric.weight), `calce ${OUT.fit(params.fit).toLowerCase()}`, `largo ${fmtCm(params.length)}`, `cuello ${params.neckStyle === 'v' ? 'en V' : 'redondo'}`].join(' · ');
+  return [...(sleeveless() ? [garmentOf() === 'tank' ? 'Tank top' : 'Musculosa'] : []), w.label, fabric.finish === 'satin' ? 'satinada' : 'mate', FOUT.weight(fabric.weight), `calce ${OUT.fit(params.fit).toLowerCase()}`, `largo ${fmtCm(params.length)}`, `cuello ${params.neckStyle === 'v' ? 'en V' : 'redondo'}`].join(' · ');
 }
 function drawHeader(g, x, y, size) {
   const css = getComputedStyle(document.documentElement);

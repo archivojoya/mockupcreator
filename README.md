@@ -65,8 +65,10 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
 - **Prenda**: camiseta, musculosa, básquet o tank top.
   - **Musculosa** (de varón): el mismo molde de la camiseta sin mangas (la
     misma sisa y los mismos hombros); en cada sisa va un puño como el de las
-    mangas (tira doble de 2,4 cm, del color de los puños) que sigue la tela
-    y, en la punta del hombro, baja como alrededor del brazo. Colgada, la
+    mangas (tira doble de 2,4 cm, del color de los puños). Con cuerpo sale
+    hacia el costado, del lado del brazo (de frente y de espalda se ve como
+    una franja a lo largo de la sisa), y en la cresta del hombro baja como
+    alrededor del brazo; colgada sigue la tela, apenas levantada. Colgada, la
     percha llega más cerca de la punta del hombro.
   - **Básquet**: la musculosa de sisa grande (baja 4,5 cm más, entra más en
     el frente y la espalda, y el hombro termina antes).
@@ -186,6 +188,11 @@ Cómo se arma (`src/camiseta/shirt.js`):
 - **Mangas**: de la sisa a un ruedo circular alrededor del eje del brazo, con
   puño aparte. La musculosa lleva un puño cosido al borde de cada sisa; el
   tank top, un vivo.
+- **Puños de sisa y vivos**: con cuerpo, donde el borde de la sisa va
+  vertical salen hacia el costado (siguiendo la tela quedaban detrás del
+  borde); arriba y en la axila siguen la tela y el giro se reparte a lo largo
+  del borde. La cola que entra por dentro de la prenda va hacia el punto de
+  la tela de al lado (una recta asomaba donde la tela se curva).
 - **Espalda nadadora** (tank top): la sisa es un hueco más ancho en la espalda
   que en el frente, y las filas no van a la misma altura en todas las
   columnas. En el frente, la de arriba de la sisa queda a lo ancho de la tira
@@ -194,7 +201,9 @@ Cómo se arma (`src/camiseta/shirt.js`):
   llegar casi verticales a la columna del centro: así la sisa es una C. Las
   esquinas del frente se redondean en la grilla antes de ubicar cada punto;
   las de la punta de atrás, no (ahí la grilla se apiña en la columna y se
-  pisaría), y el tramo vertical se curva apenas para empalmar sin esquina. El
+  pisaría), y el tramo vertical se curva apenas para empalmar sin esquina.
+  Sobre el hombro el borde se redondea visto de costado (el frente sube
+  empinado y la espalda sigue casi plana: la punta quedaba levantada). El
   busto es un relieve sobre el frente que la tela cruza de un pecho al otro
   sin meterse.
 - **Cuello y dobladillos**: tira acanalada sobre el escote; ruedo y puños se dan

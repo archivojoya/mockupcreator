@@ -89,6 +89,10 @@ function monotone(xs, ys) {
 // nadadora (las sisas de atrás, en C, dejan una columna en el centro); vivos
 // finos en el escote y las sisas.
 const ARM_BAND = 0.024; // ancho del puño de la sisa
+const ARM_OUT = 0.85; // cuánto sale hacia el costado el puño de la sisa (con cuerpo)
+const ARM_LIFT = 0.3; // y cuánto se levanta de la tela colgada
+const ARM_TWIST = 16; // pasadas con que se reparte el giro del puño en la axila
+const ARM_CREST = 0.6; // cuánto baja hacia el centro de la sisa en la cresta del hombro
 const TANK = {
   neck: { a: 0.1, b: 0.075, bB: 0.04, c: -0.012 },
   dropB: 0.04, // escote de atrás
@@ -392,6 +396,7 @@ const RACER_E = 2.2;
 const RACER_C = 0.99; // qué tan vertical llegan los bordes de atrás a la unión (1 = del todo)
 const RACER_K = 0.4; // cuánto de elipse lleva el borde de arriba (0 = recto)
 const RACER_KB = 0.6; // y el de abajo
+const RACER_ROUND = 0.012; // radio con que se redondea el borde sobre el hombro
 const RACER_D = 0.6; // columnas que se curva hacia afuera en las puntas el tramo vertical
 function buildRacerTorso(M) {
   const N = ROWS_LOW + ROWS_ARM + ROWS_TOP;
@@ -463,6 +468,32 @@ function buildRacerTorso(M) {
     const w = smooth(clamp01((phi - thJ) / (Math.PI - thJ)));
     if (s > S / 2) tTop[s] = tOfY(phi, lerp(yT + (yS - yT) * arc(u, RACER_K), yTC, w));
     tPit[s] = tOfY(phi, lerp(yJ - (yJ - M.pitY) * arc(u, RACER_KB), yPC, w));
+  }
+  // Sobre el hombro el borde de arriba se redondea (visto de costado): el
+  // frente sube empinado siguiendo el escote hondo y la espalda, alta, sigue
+  // casi plana; sin esto la punta del hombro queda levantada en pico y la
+  // cola del vivo asoma por la tela.
+  const ez = [];
+  const ey = [];
+  for (let s = 0; s <= S; s++) {
+    torsoPoint(M, (s / S) * Math.PI, tTop[s], P);
+    ez.push(P[2]);
+    ey.push(P[1]);
+  }
+  const z0 = ez[S / 2];
+  for (let s = 0; s <= S; s++) {
+    const keep = smoothstep(2, 4, Math.abs(ez[s] - z0) / RACER_ROUND);
+    if (keep >= 1) continue;
+    let sw = 0;
+    let sy = 0;
+    for (let j = 0; j <= S; j++) {
+      const dz = (ez[j] - ez[s]) / RACER_ROUND;
+      if (Math.abs(dz) > 3) continue;
+      const wj = Math.exp(-dz * dz) * Math.abs(ez[Math.min(S, j + 1)] - ez[Math.max(0, j - 1)]);
+      sw += wj;
+      sy += wj * ey[j];
+    }
+    tTop[s] = tOfY((s / S) * Math.PI, lerp(sy / sw, ey[s], keep));
   }
   const tOf = (i, th) => {
     const tp = look(tPit, th);
@@ -1378,17 +1409,19 @@ function buildLip(ring, height, closed) {
   return { pos, uv, idx: orient(pos, idx, (x, y, z) => [x - center.x, y - center.y, z - center.z]) };
 }
 
-// Puño de la sisa (musculosa): una tira doble cosida al borde que sigue la
-// tela hacia el hueco de la sisa (hacia su centro se veía metido para
-// adentro), salvo en la punta del hombro: ahí seguir la tela lo sacaría
-// hacia afuera como una aleta, así que va bajando hacia el centro de la
-// sisa, como alrededor del brazo. Cara de afuera, borde redondeado y cara de
-// adentro, que sigue un poco por dentro de la prenda. Colgada, la sisa se
-// aplasta: el puño sigue la tela en toda la vuelta (`hang`, la forma de
+// Puño de la sisa (musculosa): una tira doble cosida al borde. Con cuerpo,
+// donde el borde va vertical (adelante y atrás) sale hacia el costado, del
+// lado del brazo: siguiendo la tela hacia el hueco quedaba detrás del borde y
+// de frente se veía metido para adentro. Arriba y en la axila sigue la tela,
+// y en la cresta del hombro baja a medias hacia el centro de la sisa, como
+// alrededor del brazo. Cara de afuera, borde redondeado y cara de adentro,
+// que sigue un poco por dentro de la prenda. Colgada, la sisa se aplasta: el
+// puño sigue la tela en toda la vuelta, apenas levantado (`hang`, la forma de
 // reposo con la que lo acompaña la simulación). El vivo del tank top
-// (`flat`, angosto) sigue la tela siempre. `ring`: [posiciones, punto del
-// borde, punto de la tela que le sigue hacia adentro de la pieza, normales],
-// desde la axila (el hombro queda a mitad de la vuelta).
+// (`flatOnly`, angosto) sale igual hacia el costado pero no baja en el
+// hombro. `ring`: [posiciones, punto del borde, punto de la tela que le sigue
+// hacia adentro de la pieza, normales], desde la axila (el hombro queda a
+// mitad de la vuelta).
 function buildArmBand(ring, h, flatOnly = false) {
   const n = ring.length;
   const th = 0.0032;
@@ -1418,18 +1451,33 @@ function buildArmBand(ring, h, flatOnly = false) {
     const d = new THREE.Vector3().crossVectors(tans[k], nrm[k]).normalize();
     return d.dot(new THREE.Vector3().subVectors(e, ins[k])) < 0 ? d.negate() : d;
   });
-  const smoothRing = (a) => {
-    for (let pass = 0; pass < 4; pass++) a = a.map((_, k) => a[(k - 1 + n) % n].clone().add(a[(k + 1) % n]).addScaledVector(a[k], 2).normalize());
+  const smoothRing = (a, passes = 4) => {
+    for (let pass = 0; pass < passes; pass++) a = a.map((_, k) => a[(k - 1 + n) % n].clone().add(a[(k + 1) % n]).addScaledVector(a[k], 2).normalize());
     return a;
   };
   flat = smoothRing(flat);
+  // Con cuerpo, donde el borde va vertical (adelante y atrás de la sisa) el
+  // puño sale hacia el costado, del lado del brazo: siguiendo la tela se
+  // metería detrás del borde y de frente no se vería. Arriba y en la axila
+  // sigue la tela.
+  const side = Math.sign(center.x) || 1;
+  const out = smoothRing(
+    E.map((e, k) => {
+      const l = new THREE.Vector3(side, 0, 0).addScaledVector(tans[k], -side * tans[k].x).normalize();
+      return flat[k].clone().lerp(l, ARM_OUT * tans[k].y * tans[k].y).normalize();
+    }),
+    ARM_TWIST,
+  );
   const cum = [0];
   for (let k = 1; k < n; k++) cum.push(cum[k - 1] + E[k].distanceTo(E[k - 1]));
   const per = cum[n - 1] + E[0].distanceTo(E[n - 1]);
   ups = smoothRing(ups).map((d, k) => {
-    const w = 1 - smoothstep(0.06, 0.22, Math.abs(cum[k] / per - 0.5));
-    return flat[k].clone().lerp(d, w).normalize();
+    const w = ARM_CREST * (1 - smoothstep(0.03, 0.14, Math.abs(cum[k] / per - 0.5)));
+    return out[k].clone().lerp(d, w).normalize();
   });
+  // Colgada, un poco levantado de la tela: tiene cuerpo y no se esconde.
+  const lift = flat.map((d, k) => d.clone().addScaledVector(nrm[k], ARM_LIFT).normalize());
+  const tail = E.map((e, k) => Object.assign(new THREE.Vector3().subVectors(ins[k], e), { len: e.distanceTo(ins[k]) || 1e-6 }));
   const outOf = (d, k) => {
     const o = new THREE.Vector3().crossVectors(tans[k], d).normalize();
     return o.dot(nrm[k]) < 0 ? o.negate() : o;
@@ -1445,11 +1493,15 @@ function buildArmBand(ring, h, flatOnly = false) {
     let v = 0;
     for (let j = 0; j < P; j++) {
       if (j > 0) v += Math.hypot(prof[j][0] - prof[j - 1][0], prof[j][1] - prof[j - 1][1]);
-      // (La cola de la cara de adentro, que entra en la prenda, sigue la tela:
-      // en el hombro el puño baja y la cola atravesaría la tela.)
-      for (const [arr, d0] of [[pos, flatOnly ? flat[k] : ups[k]], [hang, flat[k]]]) {
-        const d = prof[j][0] < 0 ? flat[k] : d0;
-        q.copy(E[k]).addScaledVector(d, prof[j][0]).addScaledVector(outOf(d, k), prof[j][1]).toArray(arr, (j * SW + i) * 3);
+      // (La cola de la cara de adentro, que entra en la prenda, va hacia el
+      // punto de la tela de al lado, no derecha: donde la tela se curva, como
+      // sobre el hombro, una recta saldría por encima y se vería.)
+      for (const [arr, d0] of [[pos, flatOnly ? out[k] : ups[k]], [hang, lift[k]]]) {
+        if (prof[j][0] < 0) {
+          const c = tail[k];
+          q.copy(E[k]).addScaledVector(c, Math.min(-prof[j][0], c.len) / c.len).addScaledVector(outOf(flat[k], k), prof[j][1]);
+        } else q.copy(E[k]).addScaledVector(d0, prof[j][0]).addScaledVector(outOf(d0, k), prof[j][1]);
+        q.toArray(arr, (j * SW + i) * 3);
       }
       uv[(j * SW + i) * 2] = u;
       uv[(j * SW + i) * 2 + 1] = v;

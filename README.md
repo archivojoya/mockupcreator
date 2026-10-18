@@ -62,18 +62,20 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   en la barra y la percha gira debajo. Colgada, la tela se simula en vivo: al pasar el mouse
   se empuja y se balancea, y después se acomoda sola (en el celular, con un
   toque).
-- **Prenda**: camiseta, musculosa o tank top.
-  - **Musculosa** (de varón): la misma camiseta sin mangas; la sisa baja
-    4,5 cm más y entra más en el frente y la espalda, y en cada sisa va un
-    puño como el de las mangas (tira doble de 2,4 cm, del color de los
-    puños) que entra en el hueco hacia su centro. Colgada, el puño queda
-    acostado sobre la tela y la percha llega más cerca de la punta del hombro.
+- **Prenda**: camiseta, musculosa, básquet o tank top.
+  - **Musculosa** (de varón): el mismo molde de la camiseta sin mangas (la
+    misma sisa y los mismos hombros); en cada sisa va un puño como el de las
+    mangas (tira doble de 2,4 cm, del color de los puños) que sigue la tela
+    y, en la punta del hombro, baja como alrededor del brazo. Colgada, la
+    percha llega más cerca de la punta del hombro.
+  - **Básquet**: la musculosa de sisa grande (baja 4,5 cm más, entra más en
+    el frente y la espalda, y el hombro termina antes).
   - **Tank top** (de mujer): cuerpo con busto, cintura y cadera; escote
-    redondo ancho y hondo (13 cm de entrada, de 9 a 18); tiras de 4,5 cm;
-    espalda nadadora (la sisa de atrás entra casi hasta el centro: las tiras
-    bajan siguiendo el escote de atrás hasta juntarse, y desde ahí la sisa
-    baja hasta el costado); vivos finos de un mismo color en el escote y las
-    sisas. No lleva tapacostura.
+    redondo ancho y hondo (13 cm de entrada, de 9 a 18); tiras de 4,2 cm;
+    espalda nadadora (escote de atrás de 8,5 cm; las tiras bajan siguiendo
+    el escote hasta juntarse en una franja angosta de 9 cm de alto, y desde
+    ahí la sisa se abre hasta el costado); vivos finos de un mismo color en
+    el escote y las sisas. No lleva tapacostura.
   Sin mangas se ocultan el largo, la apertura, el puño y el color de las
   mangas, y sus piezas en la personalización.
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura

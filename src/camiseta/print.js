@@ -164,9 +164,12 @@ export function coverRect(size, iw, ih, fit = {}, bleed = 0) {
 }
 // Lienzos de una pieza (su recuadro a pieceK px/mm): `print` con la imagen de
 // fondo (si hay) y lo que va estampado; `emb` y `vin` con lo bordado y lo que
-// va en vinilo (null si no hay). Cada aplicación: { img, x, y (centro, mm de
-// estampado), w (ancho, mm), as ('print' | 'emb' | 'vin') }. `rect`: dónde
-// quedó el fondo (px), y `box`: el recuadro de las aplicaciones en relieve.
+// va en vinilo (null si no hay). El fondo: { img, fit } y, si no cubre su
+// propio recuadro, `cover` (el recuadro que cubre) y `shift` (mm hacia abajo:
+// el puño, sin puño, sigue a la manga). Cada aplicación: { img, x, y
+// (centro, mm de estampado), w (ancho, mm), as ('print' | 'emb' | 'vin') }.
+// `rect`: dónde quedó el fondo (px), y `box`: el recuadro de las
+// aplicaciones en relieve.
 export function pieceCanvases(key, size, base, apps = []) {
   const pc = PIECES.find((p) => p.key === key);
   const k = pieceK(key);
@@ -181,8 +184,8 @@ export function pieceCanvases(key, size, base, apps = []) {
   const px = (x, y) => [(pc.ax + x) * k, (pc.ay + y) * k];
   const out = { print: make(), emb: null, vin: null, k, rect: [0, 0, W, H], box: null };
   if (base) {
-    const r = coverRect(size, base.img.width, base.img.height, base.fit, BLEED);
-    const [x, y] = px(r.x, r.y);
+    const r = coverRect(base.cover || size, base.img.width, base.img.height, base.fit, BLEED);
+    const [x, y] = px(r.x, r.y + (base.shift || 0));
     const ctx = out.print.getContext('2d');
     ctx.drawImage(base.img, x, y, r.w * k, r.h * k);
     // El cuello da la vuelta: lo que pasa de una punta sigue en la otra.

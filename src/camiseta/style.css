@@ -115,11 +115,29 @@ body {
     transform: translateX(-50%);
   }
 }
+.shot {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  font: 600 14px/1 var(--display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--panel);
+  background: var(--ink);
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+.shot:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
 .hint {
   position: absolute;
   bottom: 14px;
-  left: 0;
-  right: 0;
+  left: 190px;
+  right: 190px;
   margin: 0;
   text-align: center;
   font-size: 12.5px;
@@ -670,6 +688,9 @@ button:focus-visible {
 }
 
 @media (max-width: 820px) {
+  .hint {
+    display: none;
+  }
   html,
   body {
     height: auto;

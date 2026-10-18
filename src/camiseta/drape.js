@@ -78,6 +78,11 @@ const SEAM_K = 0.5;
 // colgada la camiseta queda plana y, sin esto, la V se hacía mucho más honda
 // que puesta (9 cm → 17; con esto, 12; el redondo, 8,5 → 11,8).
 const V_EASE = 0.4;
+// Ese escote más corto acerca las puntas de los hombros: el escote de atrás,
+// con su largo de siempre, quedaba sobrado (la tira de atrás ondulada y la
+// espalda fruncida desde el cuello, en percha y con broches). Se acorta
+// también, menos, en el mismo aplanado.
+const V_BACK_EASE = 0.7;
 // La tira acanalada es más firme que la tela: sus uniones se resuelven
 // estas veces más en cada iteración (casi no se estira con el peso del pecho).
 const BAND_PASSES = 4;
@@ -578,7 +583,7 @@ export class HangingShirt {
     // pieza toma su largo en la pieza aplanada (las de la costura, el
     // promedio de las dos). En V, el escote del frente se acorta como la
     // tira (V_EASE) en el mismo aplanado: la tela de alrededor se acomoda
-    // plana, sin fruncirse bajo la V.
+    // plana, sin fruncirse bajo la V; y el de atrás, menos (V_BACK_EASE).
     const flatSum = new Map();
     for (const key of ['front', 'back']) {
       const m = map[key];
@@ -599,7 +604,8 @@ export class HangingShirt {
           if (cellOk(i, j)) tri.push(a, a + 1, a + WC, a + 1, a + WC + 1, a + WC);
         }
       const top = NC * WC;
-      const ease = key === 'front' && built.measures.vNeck ? (p, q) => (p >= top && q >= top ? V_EASE : 1) : null;
+      const e = built.measures.vNeck ? (key === 'front' ? V_EASE : V_BACK_EASE) : 1;
+      const ease = e !== 1 ? (p, q) => (p >= top && q >= top ? e : 1) : null;
       const X = flattenPanel(pos3, tri, WC, NC + 1, X0, FLAT_REST, ease);
       const cellOf = new Map();
       m.forEach((id, v) => id >= 0 && cellOf.set(id, v));

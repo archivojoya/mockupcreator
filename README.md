@@ -45,8 +45,13 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   el mouse. **Pecho**, **Espalda alta** y **Cuello** llevan la cámara cerca de
   la tela (el pecho y el escote de la de la izquierda, la espalda de la de la
   derecha), aunque estén colgadas o giradas; **Etiqueta** (si hay una) va a
-  la del ruedo. **Girar solas** gira cada una
-  sobre su eje. El mouse empuja la tela de cualquiera de las dos.
+  la del ruedo. **Girar solas** gira cada una sobre su eje (lenta, media o
+  rápida). El mouse empuja la tela de cualquiera de las dos.
+- **Descargar muestra** (abajo a la derecha del escenario) baja una lámina PNG
+  de 3000 px con el fondo del estudio: las dos camisetas (frente y espalda,
+  aunque estén giradas) y, si los tiene, de cerca cada bordado o vinilo, el
+  tapacostura y la etiqueta, con sus nombres; arriba, la tela, el calce, el
+  largo y el cuello. Se dibuja aparte, sin mover la vista.
 
 - **Presentación**: con cuerpo (forma fija, como puesta), en percha o con
   broches. La percha es de madera, plana y paralela a la camiseta, con el arco
@@ -59,7 +64,10 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   se empuja y se balancea, y después se acomoda sola (en el celular, con un
   toque).
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
-  de mangas, cuello (redondo o en V) y profundidad del escote. La malla se rehace
+  de mangas, puño (con puño, o sin puño: la manga sigue hasta el borde con su
+  color y su diseño, sin costura), cuello (redondo o en V) y profundidad del
+  escote. De entrada: calce ajustado, 62 cm de largo, manga de 18 cm, 30° de
+  apertura, cuello redondo con 7,5 cm de escote. La malla se rehace
   al instante. El cuello en V tiene el mismo ancho que el redondo; sus patas
   bajan de cada hombro a la punta apenas abombadas hacia afuera (como el
   redondo, pero en punta); adelante la tira va acostada sobre el pecho, con el
@@ -67,13 +75,12 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   también se respeta colgada.
 - **Tela**: siete tejidos (malla deportiva, piqué, panal, jersey liso,
   acanalada, jacquard con rayas tono sobre tono y microperforada con zonas
-  caladas a los costados y bajo los brazos), más tres controles:
-  - **Calidad**: económica (brillo plástico, tejido y teñido desparejos,
-    bolitas, costuras fruncidas), estándar o premium (mate con un brillo suave
-    y parejo, relieve nítido).
+  caladas a los costados y bajo los brazos), más dos controles:
+  - **Acabado**: mate (de entrada: sin brillo satinado y con el teñido apenas
+    irregular, que es lo que se ve serio y real) o satinado (brillo suave en
+    los bordes).
   - **Peso** (120 a 220 g/m²): colgada, la tela pesada hace pliegues más amplios,
     guarda más volumen y el mouse la mueve menos.
-  - **Jaspeado**: hilos de otro tono a lo largo de las pasadas (melange).
   De lejos el relieve es más chico que un píxel: se pasa a aspereza, así la
   tela no se ve plástica. Una textura grande con irregularidades evita que se
   note la repetición.
@@ -104,9 +111,14 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     tela aplanada como se corta), así lo que se dibuja recto queda recto en
     la camiseta, con cuerpo y colgada.
   - **Escudo y marcas**: una imagen con fondo transparente (o con escudo,
-    marca o logo en el nombre) que se suelta sobre el frente, la espalda o
-    una manga queda como aplicación en ese punto: bordada, en vinilo o
-    sublimada, con su ancho. Se mueve arrastrándola sobre la camiseta (en
+    marca o logo en el nombre) es una aplicación: bordada, en vinilo o
+    sublimada, con su ancho. Va a lugares fijos: soltada en el frente, a la
+    franja del pecho, del lado más cercano (5 cm en su lado más largo; sólo
+    se corre de costado); en la espalda, centrada arriba (20 cm; sólo sube o
+    baja). Cada lugar lleva una (otra la reemplaza). Mientras se arrastra, la
+    franja y los lugares se marcan sobre la camiseta y en la pieza plana. Con
+    **Ubicación libre**, va donde se suelta (también en las mangas) y se
+    mueve para cualquier lado. Se mueve arrastrándola sobre la camiseta (en
     Personalización) o en la pieza plana. Si llega por el nombre, va al
     pecho (el escudo a la izquierda de quien la lleva, bordado; la marca al
     otro lado, en vinilo). El bordado sube 1,1 mm con el borde redondeado,
@@ -114,8 +126,8 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     y hilo con brillo; el vinilo es liso, semimate, con un borde fino y más
     reflejo.
   - **Tapacostura**: una tira fina por dentro de la espalda, de hombro a
-    hombro: cubre los últimos 7 mm de la cara de adentro del cuello, envuelve
-    su borde y baja pegada a la tela. Su imagen (unos 21 × 0,8 cm) se lee
+    hombro: cubre los últimos 7 mm de la cara de adentro del cuello y
+    envuelve su borde. Su imagen (unos 21 × 0,8 cm) se lee
     derecho desde adentro y se ve entera de frente, por el escote; sin
     imagen va lisa, del color del cuello.
   - **Etiqueta**: una etiqueta tejida de 1,6 × 2,1 cm cosida por afuera bajo
@@ -133,9 +145,10 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
 - **Ficha**: contorno de pecho, ancho de hombros, largo, boca de manga y tela.
 - **Configuración sin tocar código**: si la página trae un bloque
   `<script type="application/json" id="camiseta-config">` con `params`
-  (incluido `neckStyle`: `round` o `v`), `colors`, `fabric` (`weave`,
-  `quality`, `weight`, `heather`), `light` (`studio`, `soft`, `contrast` o
-  `day`), `mode` (`body`, `hanger` o `clips`), `spin`, `uvmap` o `design`
+  (incluidos `neckStyle`: `round` o `v`, y `cuff`: `band` o `none`), `colors`,
+  `fabric` (`weave`, `finish`: `matte` o `satin`, `weight`), `light`
+  (`studio`, `soft`, `contrast` o `day`), `mode` (`body`, `hanger` o
+  `clips`), `spin` (`false`, `slow`, `medium` o `fast`), `uvmap` o `design`
   (lista de `{ name, text }`: cada imagen como SVG, que puede llevar adentro
   un PNG o JPG; la pieza sale del nombre, y un escudo o una marca van al
   pecho), arranca con esos valores (y "Restablecer todo" vuelve a ellos).

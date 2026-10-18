@@ -19,12 +19,13 @@
 import * as THREE from 'three';
 
 export const DEFAULTS = {
-  fit: 0.5, // 0 ajustada · 0.5 regular · 1 holgada
-  length: 0.72, // del hombro al ruedo
-  sleeveLength: 0.21, // de la punta del hombro al ruedo de la manga
-  sleeveAngle: 40, // apertura de las mangas, grados desde la vertical
-  neckDepth: 0.085, // profundidad del escote delantero
+  fit: 0.15, // 0 ajustada · 0.5 regular · 1 holgada
+  length: 0.62, // del hombro al ruedo
+  sleeveLength: 0.18, // de la punta del hombro al ruedo de la manga
+  sleeveAngle: 30, // apertura de las mangas, grados desde la vertical
+  neckDepth: 0.075, // profundidad del escote delantero
   neckStyle: 'round', // 'round' redondo · 'v' en V
+  cuff: 'band', // 'band' con puño · 'none' sin puño (la manga sigue hasta el borde)
 };
 
 // Resolución de las mallas.
@@ -624,7 +625,7 @@ export function buildShirt(params) {
   // Normales, costuras soldadas y marcas de costura.
   for (const part of Object.values(parts)) part.nrm = computeNormals(part.pos, part.idx);
   weldNormals([parts.front, parts.back, parts.sleeveL, parts.sleeveR, parts.cuffL, parts.cuffR]);
-  seamMarks(parts, N, W);
+  seamMarks(parts, N, W, params.cuff === 'none');
   zoneMarks(parts, M, W);
 
   const geos = {};
@@ -1129,7 +1130,9 @@ function zoneMarks(parts, M, W) {
 
 // Marcas de costura por vértice: x = distancia a la costura más cercana
 // (hundido de la costura), y = distancia al borde con pespunte (ruedos).
-function seamMarks(parts, N, W) {
+// Sin puño (`noCuff`), entre la manga y el puño no hay costura: la manga
+// sigue, con la costura de abajo del brazo, hasta el borde.
+function seamMarks(parts, N, W, noCuff = false) {
   const set = (part, f) => {
     const n = part.pos.length / 3;
     part.seam = new Float32Array(n * 2);
@@ -1184,7 +1187,7 @@ function seamMarks(parts, N, W) {
       const per = p.uv[(r * SW + SW - 1) * 2];
       const u = p.uv[v * 2];
       const vEnd = p.uv[(SLEEVE_ROWS * SW + k) * 2 + 1];
-      return [Math.min(p.uv[v * 2 + 1], u, per - u, vEnd - p.uv[v * 2 + 1]), 1];
+      return [Math.min(p.uv[v * 2 + 1], u, per - u, noCuff ? Infinity : vEnd - p.uv[v * 2 + 1]), 1];
     });
   }
   for (const key of ['cuffL', 'cuffR']) {
@@ -1193,7 +1196,9 @@ function seamMarks(parts, N, W) {
     set(p, (v) => {
       const k = v % SW;
       const vEnd = p.uv[(CUFF_ROWS * SW + k) * 2 + 1];
-      return [p.uv[v * 2 + 1] - p.uv[k * 2 + 1], vEnd - p.uv[v * 2 + 1]];
+      const u = p.uv[v * 2];
+      const per = p.uv[(Math.floor(v / SW) * SW + SW - 1) * 2];
+      return [noCuff ? Math.min(u, per - u) : p.uv[v * 2 + 1] - p.uv[k * 2 + 1], vEnd - p.uv[v * 2 + 1]];
     });
   }
   set(parts.collar, () => [1, 1]);

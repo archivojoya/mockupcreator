@@ -38,9 +38,8 @@ const VIEWS = [
   { turn: [Math.PI / 2, -Math.PI / 2], gap: 0.22 },
 ];
 const PAIR_MARGIN = 0.025;
-// Giro de cada camiseta con el puntero (radianes por píxel) y sola (rad/s).
+// Giro de cada camiseta con el puntero (radianes por píxel).
 const SPIN_PX = 0.009;
-const SPIN_SPEED = 0.17;
 
 const stage = document.getElementById('stage');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false });
@@ -139,9 +138,6 @@ const shared = {
   feature: { value: 0.002 },
   roughAdd: { value: 0.05 },
   irregular: { value: 0 },
-  pills: { value: 0 },
-  pucker: { value: 0 },
-  heather: { value: 0 },
   zoneOn: { value: 0 },
   zoneNormal: { value: flatDetail },
   zoneDetail: { value: flatDetail },
@@ -170,6 +166,12 @@ function fabricMaterial(rib) {
     appColor: { value: blankTex },
     appShape: { value: blankTex },
     appTransform: { value: new THREE.Matrix3() },
+    // Guías de las ubicaciones de logos (en m de estampado): la franja por
+    // donde se corren y los dos lugares.
+    guideOn: { value: 0 },
+    guideTrack: { value: new THREE.Vector4() },
+    guideA: { value: new THREE.Vector4() },
+    guideB: { value: new THREE.Vector4() },
   };
   m.userData = { rib, own };
   m.onBeforeCompile = (shader) => {
@@ -186,12 +188,22 @@ varying vec2 vCloth;
 varying float vZone;
 uniform sampler2D detailMap, macroMap, zoneNormal, zoneDetail;
 uniform vec2 detailTile, zoneTile;
-uniform float macroTile, feature, roughAdd, irregular, pills, pucker, heather, zoneOn;
+uniform float macroTile, feature, roughAdd, irregular, zoneOn;
 uniform vec3 insideColor;
 uniform sampler2D appColor, appShape;
 uniform float appOn;
+uniform float guideOn;
+uniform vec4 guideTrack, guideA, guideB;
 varying vec2 vAppUv;
 varying vec2 vPrint;
+// Borde de un rectángulo (x0, y0, x1, y1) de ancho w, cortado en guiones.
+float guideEdge(vec2 q, vec4 r, float w) {
+  if (r.z <= r.x) return 0.0;
+  vec2 d = abs(q - 0.5 * (r.xy + r.zw)) - 0.5 * (r.zw - r.xy);
+  float o = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+  float dash = step(0.5, fract((q.x + q.y) / 0.008));
+  return (1.0 - smoothstep(0.0, w, abs(o))) * dash;
+}
 void main() {
   // De lejos el relieve es más chico que un píxel: se pasa a aspereza (así
   // la tela no se ve plástica).
@@ -201,11 +213,9 @@ void main() {
   vec3 macro = texture2D(macroMap, vCloth / macroTile).rgb;
   vec3 macro2 = texture2D(macroMap, vCloth / (macroTile * 1.618) + vec2(0.37, 0.71)).rgb;
   macro.r = 0.5 * (macro.r + macro2.r);
-  macro.b = max(macro.b, macro2.b);
   vec4 det = texture2D(detailMap, vCloth / detailTile);
   float inZone = zoneOn * vZone;
   if (inZone > 0.001) det = mix(det, texture2D(zoneDetail, vCloth / zoneTile), inZone);
-  float pill = smoothstep(0.35, 0.8, macro.g) * pills;
   // Aplicaciones de esta pieza (sólo por fuera): bordado (tipo 1) o vinilo
   // (tipo 0,5), y la sombra que deja el bordado alrededor.
   vec4 appC = texture2D(appColor, vAppUv);
@@ -228,8 +238,7 @@ void main() {
   float sGap = smoothstep(0.0, 0.06, fract(sAlong)) * smoothstep(1.0, 0.94, fract(sAlong));
   float sHash = fract(sin(dot(vec2(sRow, floor(sAlong)), vec2(12.9898, 78.233))) * 43758.5453);
   float sBump = sin(3.1416 * fract(sRowPh)) * sGap;
-  float sRidge = cos(3.1416 * fract(sRowPh)) * sGap * sFade;
-  pill *= 1.0 - appA;`,
+  float sRidge = cos(3.1416 * fract(sRowPh)) * sGap * sFade;`,
       )
       .replace(
         '#include <map_fragment>',
@@ -241,24 +250,26 @@ void main() {
   diffuseColor.rgb = gl_FrontFacing ? mix(diffuseColor.rgb, sampledDiffuseColor.rgb, sampledDiffuseColor.a) : insideColor;
 #endif
   diffuseColor.rgb = mix(diffuseColor.rgb, appC.rgb, appA);
+  if (guideOn > 0.5 && gl_FrontFacing) {
+    vec4 t = guideTrack;
+    float inT = step(t.x, vPrint.x) * step(vPrint.x, t.z) * step(t.y, vPrint.y) * step(vPrint.y, t.w);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.33, 0.41), 0.22 * inT);
+    float w = max(length(fwidth(vPrint)) * 1.5, 0.0008);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), 0.9 * max(guideEdge(vPrint, guideA, w), guideEdge(vPrint, guideB, w)));
+  }
   diffuseColor.rgb *= 1.0 - 0.3 * aoEmb * (1.0 - appA);
   diffuseColor.rgb *= 1.0 + embW * sFade * (0.16 * (sBump - 0.64) + 0.08 * (sHash - 0.5));`,
       )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-  // Tono del tejido, hilos jaspeados, irregularidad del teñido y bolitas.
+  // Tono del tejido e irregularidad del teñido.
   diffuseColor.rgb *= mix(0.5 + det.r, 1.0, appA);
-  diffuseColor.rgb = mix(diffuseColor.rgb, mix(diffuseColor.rgb, vec3(0.78), 0.55), heather * macro.b * (1.0 - appA));
   diffuseColor.rgb *= 1.0 + (macro.r - 0.5) * (0.05 + 0.12 * irregular);
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.15 + 0.025, pill * 0.7);
-  // Costuras: un hundido fino y la tela apenas levantada al lado (fruncida
-  // en la tela económica).
+  // Costuras: un hundido fino y la tela apenas levantada al lado.
   float groove = 1.0 - smoothstep(0.0005, 0.0016, vSeam.x);
   float ridge = smoothstep(0.0016, 0.0028, vSeam.x) * (1.0 - smoothstep(0.0028, 0.0055, vSeam.x));
   diffuseColor.rgb *= 1.0 - 0.34 * groove + 0.05 * ridge;
-  float nearSeam = 1.0 - smoothstep(0.003, 0.013, vSeam.x);
-  diffuseColor.rgb *= 1.0 + pucker * nearSeam * 0.08 * sin((vCloth.x + vCloth.y) * 6.2832 / 0.011);
   // Pespunte doble del ruedo y de los puños.
   float line = max(1.0 - smoothstep(0.0002, 0.00055, abs(vSeam.y - 0.0125)), 1.0 - smoothstep(0.0002, 0.00055, abs(vSeam.y - 0.0185)));
   float dash = smoothstep(0.25, 0.35, fract(vCloth.x / 0.004)) * (1.0 - smoothstep(0.75, 0.85, fract(vCloth.x / 0.004)));
@@ -269,7 +280,7 @@ void main() {
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-  roughnessFactor = clamp(roughnessFactor + (det.g - 0.5) * 0.5 + roughAdd * fabricBlur + pill * 0.15, 0.04, 1.0);
+  roughnessFactor = clamp(roughnessFactor + (det.g - 0.5) * 0.5 + roughAdd * fabricBlur, 0.04, 1.0);
   // El hilo del bordado tiene brillo; el vinilo es liso y semimate.
   roughnessFactor = mix(roughnessFactor, 0.5, embW);
   roughnessFactor = mix(roughnessFactor, 0.34, vinW);`,
@@ -303,41 +314,37 @@ void main() {
   return m;
 }
 
-// Cómo devuelve la luz según la calidad: económica (brillo plástico),
-// estándar y premium (mate con un brillo suave y parejo). El algodón tiene
-// algo más de pelusa (brillo suave) que el poliéster.
-const FINISH = [
-  { roughness: 0.68, specularIntensity: 0.48, sheen: 0.12, sheenRoughness: 0.8 },
-  { roughness: 0.9, specularIntensity: 0.15, sheen: 0.35, sheenRoughness: 0.75 },
-  { roughness: 0.87, specularIntensity: 0.2, sheen: 0.62, sheenRoughness: 0.55 },
-];
+// Acabado: mate (casi sin brillo satinado, con el teñido apenas irregular:
+// es lo que se ve serio y real) o satinado (brillo suave en los bordes). El
+// algodón tiene algo más de pelusa (brillo suave) que el poliéster.
+const FINISH = {
+  matte: { roughness: 0.68, specularIntensity: 0.48, sheen: 0.12, sheenRoughness: 0.8, irregular: 1, relief: 0.85 },
+  satin: { roughness: 0.87, specularIntensity: 0.2, sheen: 0.62, sheenRoughness: 0.55, irregular: 0, relief: 1.15 },
+};
+const LOOK = ['roughness', 'specularIntensity', 'sheen', 'sheenRoughness'];
 const unit = (x) => Math.min(1, Math.max(0, x));
 function applyFabric() {
   const w = WEAVES[fabric.weave] || WEAVES.mesh;
   const t = weaveTextures(WEAVES[fabric.weave] ? fabric.weave : 'mesh');
-  const q = unit(fabric.quality);
+  const fin = FINISH[fabric.finish] || FINISH.matte;
   shared.feature.value = w.feature;
   shared.roughAdd.value = w.roughAdd;
-  shared.irregular.value = unit((0.5 - q) * 2);
-  shared.pills.value = unit((0.35 - q) / 0.35);
-  shared.pucker.value = unit((0.4 - q) / 0.4);
-  shared.heather.value = unit(fabric.heather);
+  shared.irregular.value = fin.irregular;
   shared.zoneOn.value = t.zone ? 1 : 0;
   if (t.zone) {
     shared.zoneNormal.value = t.zone.normal;
     shared.zoneDetail.value = t.zone.detail;
     shared.zoneTile.value.set(...w.zone.tile);
   }
-  const [a, b, f] = q < 0.5 ? [FINISH[0], FINISH[1], q * 2] : [FINISH[1], FINISH[2], q * 2 - 1];
   const cotton = w.fiber === 'cotton' ? 1 : 0;
   for (const mesh of Object.values(meshes)) {
     const m = mesh.material;
-    for (const k of Object.keys(a)) m[k] = a[k] + (b[k] - a[k]) * f;
+    for (const k of LOOK) m[k] = fin[k];
     m.sheen += 0.08 * cotton;
     m.roughness = Math.min(1, m.roughness + 0.02 * cotton);
     if (m.userData.rib) continue;
     m.normalMap = t.normal;
-    const s = w.scale * (0.85 + 0.3 * q);
+    const s = w.scale * fin.relief;
     m.normalScale.set(s, s);
     m.userData.own.detailMap.value = t.detail;
     m.userData.own.detailTile.value.set(...w.tile);
@@ -350,10 +357,8 @@ function applyFabric() {
 // Configuración opcional escrita en la página (así se adapta la camiseta sin
 // tocar el código): <script type="application/json" id="camiseta-config">
 // { "params": {...}, "colors": {...}, "fabric": {...}, "light": "studio",
-//   "mode": "hanger", "spin": false, "uvmap": false,
-//   "design": [{ "name": "frente.svg", "text": "<svg…>" }, …] (o la plantilla
-//   completa como texto), "kinds": { "crest": "emb", "brand": "vin",
-//   "number": "print", "name": "print" } }
+//   "mode": "hanger", "spin": "slow", "uvmap": false,
+//   "design": [{ "name": "frente.png", "text": "<svg…>" }, …] }
 const CONFIG = (() => {
   try {
     return JSON.parse(document.getElementById('camiseta-config')?.textContent || '{}');
@@ -361,17 +366,24 @@ const CONFIG = (() => {
     return {};
   }
 })();
-// Tela: tejido (ver WEAVES en fabric.js), calidad (0 económica · 0,5
-// estándar · 1 premium), peso (0 liviana · 1 pesada) y jaspeado (0 a 1).
-const FABRIC = { weave: 'mesh', quality: 0.5, weight: 0.5, heather: 0 };
+// Tela: tejido (ver WEAVES en fabric.js), acabado ('matte' mate · 'satin'
+// satinado) y peso (0 liviana · 1 pesada).
+const FABRIC = { weave: 'mesh', finish: 'matte', weight: 0.5 };
 const BASE_PARAMS = { ...DEFAULTS, ...CONFIG.params };
 const BASE_COLORS = { ...COLORS, ...CONFIG.colors };
 const BASE_FABRIC = { ...FABRIC, ...CONFIG.fabric };
 const BASE_LIGHT = CONFIG.light in LIGHTS ? CONFIG.light : 'studio';
+// Velocidad de giro (rad/s) de cada nivel; en la configuración, `spin` es
+// false/true (media) o 'slow', 'medium', 'fast'.
+const SPIN_SPEEDS = [0, 0.3, 0.6, 1.1];
+function spinLevel(v) {
+  if (v === true) return 2;
+  return { slow: 1, medium: 2, fast: 3 }[v] || 0;
+}
 const params = { ...BASE_PARAMS };
 const colors = { ...BASE_COLORS };
 const fabric = { ...BASE_FABRIC };
-const view = { spin: !!CONFIG.spin, uvmap: !!CONFIG.uvmap, mode: 'body', light: BASE_LIGHT, pair: 0, tab: 'ajustes' }; // body: con cuerpo · hanger: en percha · clips: con broches
+const view = { spin: spinLevel(CONFIG.spin), uvmap: !!CONFIG.uvmap, mode: 'body', light: BASE_LIGHT, pair: 0, tab: 'ajustes' }; // body: con cuerpo · hanger: en percha · clips: con broches
 
 // Cada camiseta (con su percha o sus broches) cuelga de su soporte, que la
 // ubica y la gira sobre el eje del gancho; adentro (`inner`), las
@@ -523,17 +535,12 @@ let built = null;
 let drape = null;
 
 // Tapacostura: una tira fina por dentro de la espalda, sobre la costura del
-// cuello, de hombro a hombro, como se cose de verdad: cubre TAPE_FACE de la
-// cara de adentro del cuello (por delante de ella, TAPE_OUT), envuelve su
-// borde y baja hasta quedar pegada a la tela de la espalda (TAPE_IN),
-// TAPE_DOWN por debajo de ese borde. El diseño va en la parte que cubre el
-// cuello (la que se ve de frente, por el escote); lo que baja a la tela sigue
-// el color de su borde de abajo. Sigue al cuello y a la tela, puesta o
-// colgada. Mirada desde adentro, su diseño se lee derecho.
+// cuello, de hombro a hombro: cubre TAPE_FACE de la cara de adentro del
+// cuello (por delante de ella, TAPE_OUT) y termina envolviendo su borde. Se
+// ve de frente, por el escote, y sigue al cuello puesta o colgada. Mirada
+// desde adentro, su diseño se lee derecho.
 const TAPE_FACE = 0.007;
 const TAPE_OUT = 0.0006; // por delante de la cara de adentro del cuello
-const TAPE_IN = 0.0012; // separación de la tela
-const TAPE_DOWN = [0.0005, 0.0015];
 const tapeMat = new THREE.MeshStandardMaterial({ roughness: 0.72, side: THREE.DoubleSide });
 const tape = { geo: new THREE.BufferGeometry(), cols: null, W: 0, N: 0, len: 0, w: 0 };
 for (const rig of rigs) {
@@ -542,7 +549,7 @@ for (const rig of rigs) {
   m.userData.piece = 'tape';
   rig.userData.inner.add(m);
 }
-const TAPE_ROWS = 2 + TAPE_DOWN.length;
+const TAPE_ROWS = 2;
 function buildTape() {
   const pos = built.geos.back.attributes.position.array;
   const C = built.layout.cols;
@@ -581,34 +588,11 @@ function dist3(p, a, q, b) {
   return Math.hypot(p[a * 3] - q[b * 3], p[a * 3 + 1] - q[b * 3 + 1], p[a * 3 + 2] - q[b * 3 + 2]);
 }
 function updateTape() {
-  const pos = built.geos.back.attributes.position.array;
   const nor = built.geos.back.attributes.normal.array;
   const cpos = built.geos.collar.attributes.position.array;
   const P = tape.geo.attributes.position.array;
   const Nn = tape.geo.attributes.normal.array;
   const { W, N } = tape;
-  const n = [0, 0, 0];
-  const q = [0, 0, 0];
-  // Punto de la columna j a una distancia d de la costura, separado de la
-  // tela hacia adentro.
-  const onBack = (i, j, d, off) => {
-    let r = N;
-    let acc = 0;
-    for (; r > 1; r--) {
-      const l = dist3(pos, r * W + j, pos, (r - 1) * W + j);
-      if (acc + l >= d) break;
-      acc += l;
-    }
-    const a = r * W + j;
-    const c = a - W;
-    const f = Math.min(1, (d - acc) / (dist3(pos, a, pos, c) || 1));
-    for (let k = 0; k < 3; k++) n[k] = nor[a * 3 + k] + (nor[c * 3 + k] - nor[a * 3 + k]) * f;
-    const l = Math.hypot(...n) || 1;
-    for (let k = 0; k < 3; k++) {
-      P[i * 3 + k] = pos[a * 3 + k] + (pos[c * 3 + k] - pos[a * 3 + k]) * f - (n[k] / l) * off;
-      Nn[i * 3 + k] = -n[k] / l;
-    }
-  };
   for (let j = 0; j < W; j++) {
     const { bot, top } = tape.cols[j];
     // Sobre el cuello: TAPE_FACE arriba del borde y envolviéndolo, por
@@ -623,23 +607,6 @@ function updateTape() {
         Nn[i * 3 + k] = -nor[s * 3 + k] / l;
       }
     });
-    // Sobre la tela: desde el punto de la columna más cercano al borde (puesta
-    // o colgada, el cuello se corre un poco respecto de la tela).
-    let best = Infinity;
-    let de = 0;
-    let acc = 0;
-    for (let r = N; r > N - 12; r--) {
-      const a = r * W + j;
-      const len = dist3(pos, a, pos, a - W);
-      for (let k = 0; k <= 8; k++) {
-        const t = k / 8;
-        for (let c = 0; c < 3; c++) q[c] = pos[a * 3 + c] + (pos[(a - W) * 3 + c] - pos[a * 3 + c]) * t - cpos[bot * 3 + c];
-        const dd = Math.hypot(...q);
-        if (dd < best) [best, de] = [dd, acc + len * t];
-      }
-      acc += len;
-    }
-    TAPE_DOWN.forEach((down, k) => onBack((2 + k) * W + j, j, de + down, TAPE_IN));
   }
   tape.geo.attributes.position.needsUpdate = true;
   tape.geo.attributes.normal.needsUpdate = true;
@@ -838,6 +805,7 @@ function applyLook() {
   document.querySelector('[data-zoom="label"]').hidden = !design.labelTex;
   for (const [k, mesh] of Object.entries(meshes)) {
     const def = PARTS[k];
+    const color = colors[def.color === 'cuffs' && params.cuff === 'none' ? 'sleeves' : def.color];
     const m = mesh.material;
     const app = !view.uvmap && design.app[k];
     m.userData.own.appOn.value = app ? 1 : 0;
@@ -846,7 +814,7 @@ function applyLook() {
     if (app) m.userData.own.appTransform.value.copy(app.matrix);
     if (!view.uvmap && design.textures[k]) {
       m.map = design.textures[k];
-      m.color.set(colors[def.color]);
+      m.color.set(color);
       m.userData.own.insideColor.value.copy(design.inside[k] || m.color);
     } else if (view.uvmap && def.label) {
       const uv = mesh.geometry.attributes.uv.array;
@@ -869,7 +837,7 @@ function applyLook() {
       m.userData.own.insideColor.value.set('#cfcac0');
     } else {
       m.map = null;
-      m.color.set(view.uvmap ? '#cfcac0' : colors[def.color]);
+      m.color.set(view.uvmap ? '#cfcac0' : color);
       if (!view.uvmap && design.inside[def.lining]) m.color.copy(design.inside[def.lining]);
     }
     m.needsUpdate = true;
@@ -890,12 +858,10 @@ const OUT = {
 // Tela (fuera de la forma: cambiarla no rehace la camiseta, salvo el peso
 // colgada).
 const FOUT = {
-  quality: (v) => (v < 0.3 ? 'Económica' : v < 0.7 ? 'Estándar' : 'Premium'),
   weight: (v) => `${Math.round(120 + 100 * v)} g/m²`,
-  heather: (v) => (v < 0.05 ? 'Sin jaspeado' : v < 0.5 ? 'Suave' : 'Marcado'),
 };
 // Escote según el tipo de cuello: mínimo, máximo y valor al elegirlo.
-const NECK = { round: [0.055, 0.12, 0.085], v: [0.07, 0.13, 0.09] };
+const NECK = { round: [0.055, 0.12, 0.075], v: [0.07, 0.13, 0.09] };
 const sliders = {};
 const fabricSliders = {};
 function setFill(input) {
@@ -918,7 +884,11 @@ function syncControls() {
     setFill(input);
   }
   neckButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.neck === (params.neckStyle === 'v' ? 'v' : 'round'))));
+  cuffButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cuff === (params.cuff === 'none' ? 'none' : 'band'))));
+  document.getElementById('sw-cuffs').hidden = params.cuff === 'none';
   weaveButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.weave === fabric.weave)));
+  finishButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.finish === (fabric.finish === 'satin' ? 'satin' : 'matte'))));
+  spinButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.spin === view.spin)));
   document.getElementById('weave-note').textContent = (WEAVES[fabric.weave] || WEAVES.mesh).note;
   lightButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.light === view.light)));
   for (const [k, id] of Object.entries({ body: 'c-body', sleeves: 'c-sleeves', collar: 'c-collar', cuffs: 'c-cuffs' })) document.getElementById(id).value = colors[k];
@@ -951,6 +921,18 @@ neckButtons.forEach((b) =>
     params.neckStyle = b.dataset.neck;
     params.neckDepth = NECK[params.neckStyle][2];
     syncControls();
+    scheduleRebuild();
+  }),
+);
+// Puño: con puño, o sin puño (la manga sigue hasta el borde, con su color y
+// su diseño).
+const cuffButtons = [...document.querySelectorAll('[data-cuff]')];
+cuffButtons.forEach((b) =>
+  b.addEventListener('click', () => {
+    if ((params.cuff === 'none' ? 'none' : 'band') === b.dataset.cuff) return;
+    params.cuff = b.dataset.cuff;
+    syncControls();
+    renderSlots();
     scheduleRebuild();
   }),
 );
@@ -989,6 +971,16 @@ for (const k of Object.keys(FOUT)) {
     if (k === 'weight' && hanging()) scheduleRebuild();
   });
 }
+// Acabado de la tela.
+const finishButtons = [...document.querySelectorAll('[data-finish]')];
+finishButtons.forEach((b) =>
+  b.addEventListener('click', () => {
+    fabric.finish = b.dataset.finish;
+    syncControls();
+    applyFabric();
+    updateSpec();
+  }),
+);
 // Luz.
 const lightButtons = [...document.querySelectorAll('[data-light]')];
 function setLight(name) {
@@ -1004,10 +996,15 @@ for (const [k, id] of Object.entries({ body: 'c-body', sleeves: 'c-sleeves', col
     applyLook();
   });
 }
-document.getElementById('spin').addEventListener('change', (e) => {
-  view.spin = e.target.checked;
-  requestRender();
-});
+// Girar solas: no, lenta, media o rápida.
+const spinButtons = [...document.querySelectorAll('[data-spin]')];
+spinButtons.forEach((b) =>
+  b.addEventListener('click', () => {
+    view.spin = +b.dataset.spin;
+    syncControls();
+    requestRender();
+  }),
+);
 document.getElementById('uvmap').addEventListener('change', (e) => {
   view.uvmap = e.target.checked;
   applyLook();
@@ -1158,15 +1155,29 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 // van bordadas, en vinilo o sublimadas). Las de la configuración (`session`)
 // no se guardan.
 const lib = new Map();
-const dress = { pieces: {}, apps: [] };
+const dress = { pieces: {}, apps: [], free: false };
 const SLOTS = ['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR', 'collar', 'tape', 'label'];
 const APP_PIECES = ['front', 'back', 'sleeveL', 'sleeveR'];
 const APP_AS = { emb: 'Bordado', vin: 'Vinilo', print: 'Sublimado' };
 const CREST_NAME = /escudo|crest|badge|emblema|insignia|parche/i;
 const BRAND_NAME = /marca|logo|brand|sponsor/i;
-// Un escudo o una marca que llegan por el nombre (sin soltarlos): al pecho,
-// el escudo a la izquierda de quien la lleva (a la derecha mirándola).
-const APP_SPOT = { crest: { x: 95, y: 110, w: 75, as: 'emb' }, brand: { x: -95, y: 110, w: 70, as: 'vin' } };
+// Lugares de los logos (mm en el molde plano, desde su punto más alto y su
+// centro; x crece hacia la izquierda de quien la lleva), tomados de diseños
+// reales: la franja del pecho, con un lugar a cada lado (logos de 5 cm que
+// sólo se corren de costado), y la espalda, centrada arriba (20 cm, sólo
+// sube o baja). `size`: el lado más largo del logo al ponerlo.
+// Cada lugar lleva un logo. Con ubicación libre (`dress.free`), van donde se
+// sueltan y se mueven para cualquier lado.
+const ZONES = {
+  chestL: { piece: 'front', x: 78, y: 172, size: 50, axis: 'x', label: 'Pecho izquierdo' },
+  chestR: { piece: 'front', x: -78, y: 172, size: 50, axis: 'x', label: 'Pecho derecho' },
+  back: { piece: 'back', x: 0, y: 100, size: 200, axis: 'y', label: 'Espalda' },
+};
+const BAND = 35; // media altura de la franja del pecho
+const BACK_RANGE = [30, 450]; // por dónde sube o baja el de la espalda
+const FREE_W = 70; // ancho de una aplicación libre al soltarla
+// El escudo va bordado; una marca o un logo, en vinilo.
+const appAs = (name) => (BRAND_NAME.test(name) ? 'vin' : 'emb');
 const SLOT_COLOR = { front: 'body', back: 'body', sleeveL: 'sleeves', sleeveR: 'sleeves', cuffL: 'cuffs', cuffR: 'cuffs', collar: 'collar', tape: 'collar' };
 let store = null;
 const designNote = document.getElementById('design-note');
@@ -1251,11 +1262,23 @@ function renderPiece(k, sz) {
     design.app[k].shape.dispose();
     delete design.app[k];
   }
-  const apps = dress.apps.filter((a) => a.piece === k && lib.has(a.id)).map((a) => ({ ...a, img: lib.get(a.id).img }));
-  if (!item && !apps.length) return;
-  const c = pieceCanvases(k, sz[k], item ? { img: item.img, fit: p.fit } : null, apps);
+  const apps = dress.apps.filter((a) => a.piece === k && lib.has(a.id)).map((a) => {
+    const [x, y] = appXY(a, sz);
+    return { ...a, x, y, img: lib.get(a.id).img };
+  });
+  let base = item ? { img: item.img, fit: p.fit, cover: coverBox(k, sz) } : null;
+  // Sin puño, el puño lleva lo que sigue de la manga (corrido hasta el ruedo
+  // de la manga).
+  const sk = CUFF_SLEEVE[k];
+  if (sk && params.cuff === 'none') {
+    const sp = dress.pieces[sk];
+    const si = sp && lib.get(sp.id);
+    base = si ? { img: si.img, fit: sp.fit, cover: coverBox(sk, sz), shift: -(sz[sk].top + sz[sk].h) } : null;
+  }
+  if (!base && !apps.length) return;
+  const c = pieceCanvases(k, sz[k], base, apps);
   design.textures[k] = printTexture(k, c.print, aniso);
-  if (item) design.inside[k] = dominantColor(c.print, c.rect);
+  if (base) design.inside[k] = dominantColor(c.print, c.rect);
   const app = (c.emb || c.vin) && buildApplique(k, c.emb, c.vin, c.k, c.box);
   if (app) design.app[k] = app;
 }
@@ -1264,11 +1287,20 @@ function disposeLabel() {
   design.labelTex?.normal.dispose();
   design.labelTex = null;
 }
+// Sin puño, la manga cubre también el alto del puño, que la continúa.
+const CUFF_SLEEVE = { cuffL: 'sleeveL', cuffR: 'sleeveR' };
+const SLEEVE_CUFF = { sleeveL: 'cuffL', sleeveR: 'cuffR' };
+function coverBox(k, sz) {
+  const cuff = SLEEVE_CUFF[k];
+  return cuff && params.cuff === 'none' ? { ...sz[k], h: sz[k].h + sz[cuff].h } : sz[k];
+}
 // Rehace las texturas de las piezas que se piden (todas, si no) y guarda.
 function renderDress(keys = SLOTS) {
   if (hasDress()) ensureFlat();
   const sz = sizesNow();
-  for (const k of keys) renderPiece(k, sz);
+  const all = new Set(keys);
+  for (const k of keys) if (SLEEVE_CUFF[k]) all.add(SLEEVE_CUFF[k]);
+  for (const k of all) renderPiece(k, sz);
   designClear.hidden = !hasDress();
   applyLook();
   saveDress();
@@ -1293,7 +1325,7 @@ function saveDress() {
   saveTimer = setTimeout(() => {
     const keep = (id) => lib.has(id) && !lib.get(id).session;
     const pieces = Object.fromEntries(Object.entries(dress.pieces).filter(([, p]) => keep(p.id)));
-    store.putState('dress', { pieces, apps: dress.apps.filter((a) => keep(a.id)) }).catch(() => {});
+    store.putState('dress', { pieces, apps: dress.apps.filter((a) => keep(a.id)), free: dress.free }).catch(() => {});
   }, 400);
 }
 
@@ -1341,8 +1373,9 @@ function autoAssign(items) {
   for (const item of items) {
     const kind = CREST_NAME.test(item.name) ? 'crest' : BRAND_NAME.test(item.name) ? 'brand' : null;
     if (kind) {
-      if (!dress.apps.some((a) => a.id === item.id)) dress.apps.push({ uid: newId(), id: item.id, piece: 'front', ...APP_SPOT[kind] });
-      placed.push(`${kind === 'crest' ? 'escudo' : 'marca'} al pecho`);
+      const zone = kind === 'crest' ? 'chestL' : 'chestR';
+      if (!dress.apps.some((a) => a.id === item.id)) zoneApp(item, zone);
+      placed.push(`${kind === 'crest' ? 'escudo' : 'marca'} al ${ZONES[zone].label.toLowerCase()}`);
       continue;
     }
     const keys = pieceKeys(item.name);
@@ -1376,9 +1409,11 @@ function assign(id, k, at = null) {
   const item = lib.get(id);
   if (!item) return;
   if (item.app && at && APP_PIECES.includes(k)) {
-    const kind = BRAND_NAME.test(item.name) ? 'brand' : 'crest';
-    const a = { uid: newId(), id, piece: k, x: at[0], y: at[1], w: APP_SPOT[kind].w, as: APP_SPOT[kind].as };
-    dress.apps.push(a);
+    // Al pecho (el lado más cercano) o a la espalda, salvo ubicación libre.
+    const zone = dress.free ? null : k === 'front' ? (at[0] >= 0 ? 'chestL' : 'chestR') : k === 'back' ? 'back' : null;
+    let a;
+    if (zone) a = zoneApp(item, zone);
+    else dress.apps.push((a = { uid: newId(), id, piece: k, zone: null, x: at[0], y: at[1], w: FREE_W, as: appAs(item.name) }));
     selected = { app: a.uid };
   } else {
     dress.pieces[k] = { id, fit: { scale: 1, dx: 0, dy: 0 } };
@@ -1421,7 +1456,7 @@ function renderLibrary() {
 }
 function renderSlots() {
   slotList.replaceChildren(
-    ...SLOTS.map((k) => {
+    ...SLOTS.filter((k) => !(CUFF_SLEEVE[k] && params.cuff === 'none')).map((k) => {
       const item = dress.pieces[k] && lib.get(dress.pieces[k].id);
       const li = el('li', { className: `slot${item ? '' : ' empty'}`, title: item ? item.name : `Soltá una imagen para ${PIECE_LABELS[k].toLowerCase()}` }, item ? el('img', { className: 'slot-img', src: item.url, alt: '' }) : el('span', { className: 'slot-img' }), el('span', { className: 'slot-name', textContent: PIECE_LABELS[k] }));
       li.dataset.piece = k;
@@ -1453,6 +1488,12 @@ function renderSlots() {
     }),
   );
 }
+const freeBox = document.getElementById('free-place');
+freeBox.addEventListener('change', () => {
+  dress.free = freeBox.checked;
+  saveDress();
+  drawEditor();
+});
 function renderApps() {
   document.getElementById('apps-empty').hidden = dress.apps.length > 0;
   appList.replaceChildren(
@@ -1483,7 +1524,7 @@ function renderApps() {
       });
       paintRange(range);
       const size = el('div', { className: 'control' }, el('span', { className: 'label', textContent: 'Ancho' }), out, range);
-      const li = el('li', { className: 'app' }, el('img', { src: item.url, alt: '' }), el('div', { className: 'app-main' }, el('span', { className: 'app-name', textContent: `${item.name} · ${PIECE_LABELS[a.piece]}` }), seg, size));
+      const li = el('li', { className: 'app' }, el('img', { src: item.url, alt: '' }), el('div', { className: 'app-main' }, el('span', { className: 'app-name', textContent: `${item.name} · ${ZONES[a.zone]?.label || PIECE_LABELS[a.piece]}` }), seg, size));
       li.setAttribute('aria-selected', String(selected?.app === a.uid));
       li.append(
         closeButton(`Quitar ${item.name}`, () => {
@@ -1525,7 +1566,8 @@ function drawEditor() {
   editor.hidden = !k;
   if (!k) return;
   flatNow();
-  const sz = sizesNow()[k];
+  const all = sizesNow();
+  const sz = all[k];
   const p = dress.pieces[k];
   const item = p && lib.get(p.id);
   document.getElementById('editor-title').textContent = `${PIECE_LABELS[k]}${item ? ` · ${item.name}` : ''}`;
@@ -1566,7 +1608,7 @@ function drawEditor() {
   g.fill(outline);
   const drawImg = (img, r) => g.drawImage(img, r.x * s + ox, r.y * s + oy, r.w * s, r.h * s);
   if (item) {
-    const r = coverRect(sz, item.img.width, item.img.height, p.fit, k === 'tape' || k === 'label' ? 0 : BLEED);
+    const r = coverRect(coverBox(k, all), item.img.width, item.img.height, p.fit, k === 'tape' || k === 'label' ? 0 : BLEED);
     g.globalAlpha = 0.28;
     drawImg(item.img, r);
     g.globalAlpha = 1;
@@ -1576,10 +1618,33 @@ function drawEditor() {
     if (sz.wrap) for (const d of [-1, 1]) drawImg(item.img, { ...r, x: r.x + d * sz.wrap });
     g.restore();
   }
+  // Lugares de los logos: la franja (o el recorrido de la espalda) y los
+  // lugares, punteados.
+  if (!dress.free && (k === 'front' || k === 'back')) {
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    const box = (x0b, y0b, x1b, y1b) => [x0b * s + ox, y0b * s + oy, (x1b - x0b) * s, (y1b - y0b) * s];
+    g.save();
+    g.clip(outline);
+    g.fillStyle = accent;
+    g.globalAlpha = 0.18;
+    if (k === 'front') g.fillRect(...box(-sz.w / 2, sz.top + ZONES.chestL.y - BAND, sz.w / 2, sz.top + ZONES.chestL.y + BAND));
+    else g.fillRect(...box(-2, sz.top + BACK_RANGE[0], 2, sz.top + BACK_RANGE[1]));
+    g.restore();
+    g.setLineDash([3 * dpr, 3 * dpr]);
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = dpr;
+    for (const zk of k === 'front' ? ['chestL', 'chestR'] : ['back']) {
+      const z = ZONES[zk];
+      const h = z.size / 2;
+      const hy = zk === 'back' ? 30 : h;
+      g.strokeRect(...box(z.x - h, sz.top + z.y - hy, z.x + h, sz.top + z.y + hy));
+    }
+    g.setLineDash([]);
+  }
   for (const a of dress.apps) {
     if (a.piece !== k || !lib.has(a.id)) continue;
     const img = lib.get(a.id).img;
-    const r = appRect(a, img);
+    const r = appRect(a, img, all);
     drawImg(img, r);
     if (selected?.app === a.uid) {
       g.setLineDash([4 * dpr, 3 * dpr]);
@@ -1593,18 +1658,82 @@ function drawEditor() {
   g.lineWidth = 1.2 * dpr;
   g.stroke(outline);
 }
-const appRect = (a, img) => {
+// Centro de una aplicación: con lugar, el eje que no se mueve sale del lugar
+// (así sigue en su franja aunque cambie el largo o el calce).
+function appXY(a, sz) {
+  const z = ZONES[a.zone];
+  if (!z) return [a.x, a.y];
+  return z.axis === 'x' ? [a.x, sz[z.piece].top + z.y] : [z.x, a.y];
+}
+function appRect(a, img, sz) {
+  const [x, y] = appXY(a, sz);
   const h = (a.w * img.height) / img.width;
-  return { x: a.x - a.w / 2, y: a.y - h / 2, w: a.w, h };
-};
-function appAt(k, x, y) {
+  return { x: x - a.w / 2, y: y - h / 2, w: a.w, h };
+}
+function appAt(k, x, y, sz = sizesNow()) {
   for (let i = dress.apps.length - 1; i >= 0; i--) {
     const a = dress.apps[i];
     if (a.piece !== k || !lib.has(a.id)) continue;
-    const r = appRect(a, lib.get(a.id).img);
+    const r = appRect(a, lib.get(a.id).img, sz);
     if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return a;
   }
   return null;
+}
+// Un logo en su lugar (reemplaza al que hubiera).
+function zoneApp(item, zone) {
+  flatNow();
+  const sz = sizesNow();
+  const z = ZONES[zone];
+  dress.apps = dress.apps.filter((a) => a.zone !== zone);
+  const a = { uid: newId(), id: item.id, piece: z.piece, zone, x: z.x, y: sz[z.piece].top + z.y, w: z.size * Math.min(1, item.img.width / item.img.height), as: appAs(item.name) };
+  dress.apps.push(a);
+  return a;
+}
+// Mover una aplicación a (x, y): con lugar, sólo por su eje y sin salirse;
+// con ubicación libre, el lugar se suelta.
+function moveApp(a, x, y, sz) {
+  if (a.zone && dress.free) {
+    [a.x, a.y] = appXY(a, sz);
+    a.zone = null;
+  }
+  const z = ZONES[a.zone];
+  if (!z) [a.x, a.y] = [x, y];
+  else if (z.axis === 'x') {
+    const side = Math.sign(z.x);
+    const lo = a.w / 2 + 5;
+    const hi = Math.max(lo, sz[z.piece].w / 2 - a.w / 2 - 40);
+    a.x = side * Math.min(hi, Math.max(lo, side * x));
+  } else {
+    const top = sz[z.piece].top;
+    a.y = Math.min(top + BACK_RANGE[1], Math.max(top + BACK_RANGE[0], y));
+  }
+}
+// Guías de los lugares sobre la camiseta (mientras se arrastra un logo).
+function setGuides(on, only = null) {
+  if (on) flatNow();
+  const sz = sizesNow();
+  const m = (v) => v / 1000;
+  for (const k of ['front', 'back']) {
+    const o = meshes[k].material.userData.own;
+    const show = on && !dress.free && (!only || only === k);
+    o.guideOn.value = show ? 1 : 0;
+    if (!show) continue;
+    const top = sz[k].top;
+    if (k === 'front') {
+      const y = top + ZONES.chestL.y;
+      const h = ZONES.chestL.size / 2;
+      o.guideTrack.value.set(m(-sz.front.w / 2), m(y - BAND), m(sz.front.w / 2), m(y + BAND));
+      o.guideA.value.set(m(ZONES.chestL.x - h), m(y - h), m(ZONES.chestL.x + h), m(y + h));
+      o.guideB.value.set(m(ZONES.chestR.x - h), m(y - h), m(ZONES.chestR.x + h), m(y + h));
+    } else {
+      const h = ZONES.back.size / 2;
+      const y = top + ZONES.back.y;
+      o.guideTrack.value.set(m(-2), m(top + BACK_RANGE[0]), m(2), m(top + BACK_RANGE[1]));
+      o.guideA.value.set(m(-h), m(y - 30), m(h), m(y + 30));
+      o.guideB.value.set(0, 0, 0, 0);
+    }
+  }
+  requestRender();
 }
 const edPoint = (e) => {
   const r = edCanvas.getBoundingClientRect();
@@ -1622,14 +1751,14 @@ edCanvas.addEventListener('pointerdown', (e) => {
     selected = { app: a.uid };
     renderApps();
   }
-  edDrag = { id: e.pointerId, a, x, y, start: a ? [a.x, a.y] : [p.fit.dx, p.fit.dy] };
+  edDrag = { id: e.pointerId, a, x, y, start: a ? appXY(a, sizesNow()) : [p.fit.dx, p.fit.dy] };
   edCanvas.setPointerCapture(e.pointerId);
 });
 edCanvas.addEventListener('pointermove', (e) => {
   if (!edDrag || e.pointerId !== edDrag.id) return;
   const [x, y] = edPoint(e);
   const [dx, dy] = [x - edDrag.x, y - edDrag.y];
-  if (edDrag.a) [edDrag.a.x, edDrag.a.y] = [edDrag.start[0] + dx, edDrag.start[1] + dy];
+  if (edDrag.a) moveApp(edDrag.a, edDrag.start[0] + dx, edDrag.start[1] + dy, sizesNow());
   else {
     const f = dress.pieces[edView.k]?.fit;
     if (!f) return;
@@ -1698,7 +1827,7 @@ function highlight(k) {
   if (lit === k) return;
   const mats = (key) => (key === 'tape' ? [tapeMat] : key === 'label' ? [labelMat] : key && meshes[key] ? [meshes[key].material] : []);
   for (const m of mats(lit)) m.emissive.setRGB(0, 0, 0);
-  for (const m of mats(k)) m.emissive.setRGB(0.16, 0.16, 0.16);
+  for (const m of mats(k)) m.emissive.setRGB(0.05, 0.05, 0.05);
   lit = k;
   requestRender();
 }
@@ -1729,7 +1858,10 @@ document.addEventListener('pointermove', (e) => {
     document.body.classList.add('dragging');
     ghost.src = libDrag.item.url;
     document.body.append(ghost, tip);
-    if (libDrag.item.app) flatNow();
+    if (libDrag.item.app) {
+      flatNow();
+      setGuides(true);
+    }
   }
   ghost.style.left = tip.style.left = `${e.clientX}px`;
   ghost.style.top = tip.style.top = `${e.clientY}px`;
@@ -1738,12 +1870,14 @@ document.addEventListener('pointermove', (e) => {
   slotList.querySelectorAll('.slot').forEach((s) => s.classList.toggle('target', s === t?.slot));
   highlight(t && !t.slot ? t.key : null);
   const asApp = t && !t.slot && libDrag.item.app && t.at && APP_PIECES.includes(t.key);
-  tip.textContent = t ? (asApp ? `Aplicación en ${PIECE_LABELS[t.key].toLowerCase()}` : PIECE_LABELS[t.key]) : 'Soltá sobre una pieza';
+  const zone = asApp && !dress.free ? (t.key === 'front' ? (t.at[0] >= 0 ? 'chestL' : 'chestR') : t.key === 'back' ? 'back' : null) : null;
+  tip.textContent = t ? (zone ? ZONES[zone].label : asApp ? `Aplicación en ${PIECE_LABELS[t.key].toLowerCase()}` : PIECE_LABELS[t.key]) : 'Soltá sobre una pieza';
 });
 function endLibDrag(e) {
   if (!libDrag || e.pointerId !== libDrag.id) return;
   const { item, on, target } = libDrag;
   libDrag = null;
+  setGuides(false);
   document.body.classList.remove('dragging');
   ghost.remove();
   tip.remove();
@@ -1785,7 +1919,9 @@ function grabApp(e) {
   const a = t && t.at && appAt(t.key, ...t.at);
   if (!a) return false;
   flatNow();
-  appDrag = { id: e.pointerId, a, off: [a.x - t.at[0], a.y - t.at[1]] };
+  const [ax, ay] = appXY(a, sizesNow());
+  appDrag = { id: e.pointerId, a, off: [ax - t.at[0], ay - t.at[1]] };
+  if (a.zone) setGuides(true, a.piece);
   dom.setPointerCapture(e.pointerId);
   if (selected?.app !== a.uid) {
     selected = { app: a.uid };
@@ -1800,8 +1936,7 @@ dom.addEventListener('pointermove', (e) => {
     if (e.pointerId !== appDrag.id) return;
     const t = pieceAt(e.clientX, e.clientY);
     if (!t || t.key !== appDrag.a.piece || !t.at) return;
-    appDrag.a.x = t.at[0] + appDrag.off[0];
-    appDrag.a.y = t.at[1] + appDrag.off[1];
+    moveApp(appDrag.a, t.at[0] + appDrag.off[0], t.at[1] + appDrag.off[1], sizesNow());
     scheduleRender(appDrag.a.piece);
     drawEditor();
     return;
@@ -1820,7 +1955,10 @@ dom.addEventListener('pointermove', (e) => {
 });
 let hoverAt = 0;
 const endAppDrag = (e) => {
-  if (appDrag && e.pointerId === appDrag.id) appDrag = null;
+  if (!appDrag || e.pointerId !== appDrag.id) return;
+  appDrag = null;
+  setGuides(false);
+  renderApps();
 };
 dom.addEventListener('pointerup', endAppDrag);
 dom.addEventListener('pointercancel', endAppDrag);
@@ -1887,6 +2025,8 @@ async function initLibrary() {
     if (saved) {
       for (const [k, p] of Object.entries(saved.pieces || {})) if (SLOTS.includes(k) && lib.has(p.id)) dress.pieces[k] = p;
       dress.apps = (saved.apps || []).filter((a) => lib.has(a.id) && APP_PIECES.includes(a.piece));
+      dress.free = !!saved.free;
+      freeBox.checked = dress.free;
     }
   }
   renderLibrary();
@@ -1951,7 +2091,7 @@ function updateSpec() {
   document.getElementById('s-shoulders').textContent = fmtCm(M.shA * 2);
   document.getElementById('s-length').textContent = fmtCm(M.L);
   document.getElementById('s-sleeve').textContent = fmtCm(Math.PI * 2 * M.sleeve.rHem);
-  document.getElementById('s-fabric').textContent = `${(WEAVES[fabric.weave] || WEAVES.mesh).label} · ${FOUT.weight(fabric.weight)}`;
+  document.getElementById('s-fabric').textContent = `${(WEAVES[fabric.weave] || WEAVES.mesh).label} · ${fabric.finish === 'satin' ? 'satinada' : 'mate'} · ${FOUT.weight(fabric.weight)}`;
 }
 
 // Vistas: frente y espalda, o los dos perfiles. Giran las camisetas (por el
@@ -2002,7 +2142,12 @@ const ZOOMS = {
   neck: { rig: 0, key: 'back', below: 0.012, dist: 0.34, from: 'front' },
 };
 function zoomTo(name) {
-  if (name === 'label') return zoomLabel();
+  const pose = name === 'label' ? labelPose() : zoomPose(name);
+  flyTo(pose.target, pose.position);
+  zoomButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.zoom === name)));
+}
+// Dónde mira la cámara en cada acercamiento (`dist`: a qué distancia).
+function zoomPose(name, dist = ZOOMS[name].dist) {
   const z = ZOOMS[name];
   const mesh = (z.rig ? twins : meshes)[z.key];
   const g = mesh.geometry;
@@ -2027,19 +2172,17 @@ function zoomTo(name) {
     n.normalize().add(new THREE.Vector3(0, 0.3, 0));
   } else n.y = Math.max(n.y, 0) + 0.12;
   n.normalize();
-  flyTo(p, p.clone().addScaledVector(n, z.dist));
-  zoomButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.zoom === name)));
+  return { target: p, position: p.clone().addScaledVector(n, dist) };
 }
 // Etiqueta: de frente a su cara de afuera, apenas de arriba.
-function zoomLabel() {
+function labelPose(dist = 0.2) {
   const m = label.meshes[0];
   m.updateWorldMatrix(true, false);
   const p = new THREE.Vector3(0, LABEL_H * 0.45, LABEL_OFF).applyMatrix4(m.matrixWorld);
   const n = new THREE.Vector3(0, 0, 1).transformDirection(m.matrixWorld);
   n.y = Math.max(n.y, 0) + 0.25;
   n.normalize();
-  flyTo(p, p.clone().addScaledVector(n, 0.2));
-  zoomButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.zoom === 'label')));
+  return { target: p, position: p.clone().addScaledVector(n, dist) };
 }
 zoomButtons.forEach((b) => b.addEventListener('click', () => zoomTo(b.dataset.zoom)));
 viewButtons[0].setAttribute('aria-pressed', 'true');
@@ -2049,6 +2192,262 @@ controls.addEventListener('start', () => {
   turn = null;
   fly = null;
 });
+
+// ---------- muestra ----------
+
+// Lámina para mandar: las camisetas sobre el fondo del estudio y, si los
+// llevan, de cerca el bordado o el vinilo, el tapacostura y la etiqueta. Se
+// dibuja aparte (la vista no cambia) y se baja como PNG. Publicada en
+// claude.ai, la descarga pasa por la capacidad `downloads` (la persona
+// confirma); sola o en desarrollo, un enlace de descarga común.
+const downloadsP = window.claude?.use ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+const SHEET_LAYOUTS = ['side', 'bottom', 'editorial'];
+let sheetLayout = 'side';
+
+// El fondo del escenario (el mismo degradado).
+function studioBackground(g, x, y, w, h) {
+  const css = getComputedStyle(document.documentElement);
+  const r = 0.7 * w;
+  const grad = g.createRadialGradient(0, 0, 0, 0, 0, r);
+  grad.addColorStop(0, css.getPropertyValue('--stage-hi').trim());
+  grad.addColorStop(1, css.getPropertyValue('--stage-lo').trim());
+  g.save();
+  g.beginPath();
+  g.rect(x, y, w, h);
+  g.clip();
+  g.translate(x + w * 0.5, y + h * 0.42);
+  g.scale(1, (0.75 * h) / r);
+  g.fillStyle = grad;
+  g.fillRect(-2 * r, -2 * r, 4 * r, 4 * r);
+  g.restore();
+}
+// Las camisetas como de entrada (frente y espalda) mientras se dibuja la
+// lámina; después vuelven a como estaban.
+function withPairView(fn) {
+  const saved = rigs.map((r) => [r.position.x, r.rotation.y, r.visible]);
+  const curls = supports.map((sp) => sp.curl.visible);
+  const size = renderer.getSize(new THREE.Vector2());
+  const ratio = renderer.getPixelRatio();
+  const cam = { pos: camera.position.clone(), quat: camera.quaternion.clone(), aspect: camera.aspect, fov: camera.fov };
+  rigs.forEach((rig, j) => {
+    rig.rotation.y = VIEWS[0].turn[j];
+    rig.position.x = (j ? 1 : -1) * VIEWS[0].gap;
+  });
+  syncCurls();
+  scene.updateMatrixWorld(true);
+  renderer.setPixelRatio(1);
+  camera.fov = 28;
+  try {
+    return fn();
+  } finally {
+    rigs.forEach((rig, j) => ([rig.position.x, rig.rotation.y, rig.visible] = saved[j]));
+    supports.forEach((sp, j) => (sp.curl.visible = curls[j]));
+    syncCurls();
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(size.x, size.y, false);
+    Object.assign(camera, { aspect: cam.aspect, fov: cam.fov });
+    camera.position.copy(cam.pos);
+    camera.quaternion.copy(cam.quat);
+    camera.updateProjectionMatrix();
+    requestRender();
+  }
+}
+// La escena desde `pose` en un lienzo de w × h; `only`: una sola camiseta;
+// `bg`: con el fondo del estudio (si no, transparente).
+function shoot(w, h, pose, { only = null, bg = true } = {}) {
+  rigs.forEach((rig, j) => (rig.visible = only === null || only === j));
+  supports.forEach((sp, j) => (sp.curl.visible = hanging() && (only === null || only === j)));
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  camera.position.copy(pose.position);
+  camera.lookAt(pose.target);
+  camera.updateMatrixWorld();
+  renderer.render(scene, camera);
+  const c = document.createElement('canvas');
+  [c.width, c.height] = [w, h];
+  const g = c.getContext('2d');
+  if (bg) studioBackground(g, 0, 0, w, h);
+  g.drawImage(renderer.domElement, 0, 0, w, h);
+  return c;
+}
+// Poses de la lámina: las dos camisetas, una sola, y de cerca cada
+// aplicación (la normal de la tela en su centro).
+// Distancia para que entre un ancho y un alto (m, a cada lado del centro) en
+// un cuadro de esa proporción, con un poco de aire.
+function fitDistance(halfW, halfH, aspect) {
+  const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  return Math.max(halfW / (t * aspect), halfH / t) * 1.08;
+}
+function pairPose(aspect) {
+  const c = new THREE.Vector3(0, view.mode === 'body' ? CENTER.y : HANG_Y + 0.04, 0);
+  const g = VIEWS[0].gap;
+  const d = fitDistance(2 * g - PAIR_MARGIN, view.mode === 'body' ? 0.46 : 0.58, aspect);
+  return { target: c, position: c.clone().add(new THREE.Vector3(0, (CAM_OFF.y * d) / CAM_OFF.z, d)) };
+}
+function singlePose(j, aspect) {
+  const c = new THREE.Vector3(rigs[j].position.x, view.mode === 'body' ? CENTER.y : HANG_Y + 0.04, 0);
+  const d = fitDistance(VIEWS[0].gap - PAIR_MARGIN, view.mode === 'body' ? 0.46 : 0.58, aspect);
+  return { target: c, position: c.clone().add(new THREE.Vector3(0, (CAM_OFF.y * d) / CAM_OFF.z, d)) };
+}
+function appPose(a, dist = 0.17) {
+  const sz = sizesNow();
+  const [ax, ay] = appXY(a, sz);
+  const mesh = (a.piece === 'back' ? twins : meshes)[a.piece];
+  const g = mesh.geometry;
+  const uv = g.attributes.uv1.array;
+  let best = 0;
+  let bd = Infinity;
+  for (let i = 0; i < uv.length / 2; i++) {
+    const d = (uv[i * 2] * 1000 - ax) ** 2 + (uv[i * 2 + 1] * 1000 - ay) ** 2;
+    if (d < bd) [bd, best] = [d, i];
+  }
+  mesh.updateWorldMatrix(true, false);
+  const p = new THREE.Vector3().fromArray(g.attributes.position.array, best * 3).applyMatrix4(mesh.matrixWorld);
+  const n = new THREE.Vector3().fromArray(g.attributes.normal.array, best * 3).transformDirection(mesh.matrixWorld);
+  n.y = Math.max(n.y, 0) + 0.15;
+  n.normalize();
+  return { target: p, position: p.clone().addScaledVector(n, dist) };
+}
+// Detalles que van en la lámina: cada aplicación bordada o en vinilo, el
+// tapacostura y la etiqueta (si tienen diseño).
+function sheetDetails() {
+  const out = [];
+  for (const a of dress.apps) {
+    if (a.as === 'print' || !lib.has(a.id)) continue;
+    out.push({ pose: () => appPose(a), caption: `${ZONES[a.zone]?.label || PIECE_LABELS[a.piece]} · ${a.as === 'emb' ? 'bordado' : 'vinilo'}` });
+  }
+  if (design.tapeTex) out.push({ pose: () => zoomPose('neck', 0.2), caption: 'Tapacostura' });
+  if (design.labelTex) out.push({ pose: () => labelPose(0.13), caption: 'Etiqueta tejida' });
+  return out.slice(0, 4);
+}
+function sheetSpec() {
+  const w = WEAVES[fabric.weave] || WEAVES.mesh;
+  return [w.label, fabric.finish === 'satin' ? 'satinada' : 'mate', FOUT.weight(fabric.weight), `calce ${OUT.fit(params.fit).toLowerCase()}`, `largo ${fmtCm(params.length)}`, `cuello ${params.neckStyle === 'v' ? 'en V' : 'redondo'}`].join(' · ');
+}
+// Un detalle: recuadro redondeado con su foto y el texto abajo.
+function drawTile(g, img, x, y, s, caption) {
+  const css = getComputedStyle(document.documentElement);
+  const r = s * 0.06;
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,0.22)';
+  g.shadowBlur = s * 0.05;
+  g.shadowOffsetY = s * 0.015;
+  g.beginPath();
+  g.roundRect(x, y, s, s, r);
+  g.fillStyle = css.getPropertyValue('--stage-hi').trim();
+  g.fill();
+  g.restore();
+  g.save();
+  g.beginPath();
+  g.roundRect(x, y, s, s, r);
+  g.clip();
+  g.drawImage(img, x, y, s, s);
+  g.restore();
+  g.fillStyle = css.getPropertyValue('--ink').trim();
+  g.font = `600 ${Math.round(s * 0.065)}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'top';
+  g.fillText(caption.toUpperCase(), x + s / 2, y + s + s * 0.04);
+}
+function drawHeader(g, x, y, size) {
+  const css = getComputedStyle(document.documentElement);
+  g.textAlign = 'left';
+  g.textBaseline = 'top';
+  g.fillStyle = css.getPropertyValue('--ink').trim();
+  g.font = `700 ${size}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+  g.fillText(document.querySelector('.title h1').textContent.toUpperCase(), x, y);
+  g.fillStyle = css.getPropertyValue('--muted').trim();
+  g.font = `400 ${Math.round(size * 0.42)}px Barlow, "Helvetica Neue", Arial, sans-serif`;
+  g.fillText(sheetSpec(), x, y + size * 1.12);
+}
+// La lámina, con una de tres disposiciones: 'side' (las dos camisetas y los
+// detalles a la derecha), 'bottom' (los detalles en una fila abajo) o
+// 'editorial' (el frente grande, la espalda y los detalles al costado).
+function makeSheet(layout = sheetLayout) {
+  if (hasDress()) ensureFlat();
+  if (drape) {
+    let f = 0;
+    while (!drape.sleeping && f < 900) {
+      drape.step(1 / 60);
+      f++;
+    }
+    drape.updateMeshes();
+  }
+  const details = sheetDetails();
+  return withPairView(() => {
+    const W = 3000;
+    const H = layout === 'bottom' && details.length ? 2150 : 1800;
+    const sheet = document.createElement('canvas');
+    [sheet.width, sheet.height] = [W, H];
+    const g = sheet.getContext('2d');
+    studioBackground(g, 0, 0, W, H);
+    const M = 90;
+    drawHeader(g, M, M * 0.8, 68);
+    const shots = details.map((d) => shoot(800, 800, d.pose()));
+    if (layout === 'editorial') {
+      // El frente grande, la espalda más chica y atrás, los detalles en una
+      // columna a la derecha.
+      const n = shots.length;
+      const s = n ? Math.min(560, (H - 2 * M - 40 - (n - 1) * 100) / n) : 0;
+      const right = n ? W - M - s - 60 : W - 40;
+      g.drawImage(shoot(1250, 1610, singlePose(0, 1250 / 1610), { only: 0, bg: false }), 10, 190);
+      const bw = Math.round(right - 1180);
+      g.drawImage(shoot(bw, 1300, singlePose(1, bw / 1300), { only: 1, bg: false }), 1180, 460);
+      shots.forEach((c, i) => drawTile(g, c, W - M - s, M + 40 + i * (s + 100), s, details[i].caption));
+    } else if (layout === 'bottom' && shots.length) {
+      g.drawImage(shoot(W, 1350, pairPose(W / 1350), { bg: false }), 0, 170);
+      const s = 520;
+      const gap = 70;
+      const x0 = (W - shots.length * s - (shots.length - 1) * gap) / 2;
+      shots.forEach((c, i) => drawTile(g, c, x0 + i * (s + gap), 1530, s, details[i].caption));
+    } else {
+      // Las dos camisetas y los detalles a la derecha (en dos columnas si son
+      // más de dos).
+      const n = shots.length;
+      const cols = n > 2 ? 2 : 1;
+      const rows = Math.ceil(n / cols);
+      const s = n ? Math.min(cols === 2 ? 520 : 700, (H - 2 * M - 60 - (rows - 1) * 110) / rows) : 0;
+      const colW = n ? cols * s + (cols - 1) * 50 : 0;
+      const mainW = W - colW - (n ? M + 40 : 0);
+      g.drawImage(shoot(mainW, H - 170, pairPose(mainW / (H - 170)), { bg: false }), 0, 170);
+      const x0 = W - M - colW;
+      const y0 = (H - (rows * s + (rows - 1) * 110)) / 2;
+      shots.forEach((c, i) => drawTile(g, c, x0 + (i % cols) * (s + 50), y0 + Math.floor(i / cols) * (s + 110), s, details[i].caption));
+    }
+    return sheet;
+  });
+}
+async function downloadSheet() {
+  const btn = document.getElementById('shot');
+  btn.disabled = true;
+  btn.textContent = 'Armando…';
+  try {
+    await Promise.all([document.fonts.load('700 68px "Barlow Condensed"'), document.fonts.load('400 28px Barlow')]).catch(() => {});
+    const sheet = makeSheet();
+    const blob = await new Promise((ok) => sheet.toBlob(ok, 'image/png'));
+    const name = 'muestra-camiseta.png';
+    const dl = await downloadsP;
+    if (dl) {
+      try {
+        await dl.save({ filename: name, data: blob });
+        return;
+      } catch (e) {
+        if (['declined', 'rate_limited', 'too_large'].includes(e?.code)) return;
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = el('a', { href: url, download: name });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Descargar muestra';
+  }
+}
+document.getElementById('shot').addEventListener('click', downloadSheet);
 
 // ---------- dibujo ----------
 
@@ -2097,7 +2496,7 @@ renderer.setAnimationLoop((now) => {
       spinVel[j] *= 0.92;
       needsRender = true;
     } else if (view.spin && !turn) {
-      rig.rotation.y += SPIN_SPEED / 60;
+      rig.rotation.y += SPIN_SPEEDS[view.spin] / 60;
       needsRender = true;
     }
   });
@@ -2114,7 +2513,6 @@ renderer.setAnimationLoop((now) => {
 syncControls();
 applyLights(view.light);
 applyFabric();
-document.getElementById('spin').checked = view.spin;
 document.getElementById('uvmap').checked = view.uvmap;
 if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
 else rebuild();
@@ -2128,4 +2526,4 @@ try {
 showTab(tabs.some((t) => t.dataset.tab === savedTab) ? savedTab : 'ajustes');
 initLibrary();
 
-window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, zoomTo, setMode, design, drape: () => drape, lib, dress, addImages, assign, renderDress, showTab, pieceAt };
+window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, zoomTo, setMode, design, drape: () => drape, lib, dress, addImages, assign, renderDress, showTab, pieceAt, sizesNow, appXY, makeSheet };

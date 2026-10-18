@@ -21,6 +21,7 @@
           <button type="button" data-zoom="neck" aria-pressed="false">Cuello</button>
           <button type="button" data-zoom="label" aria-pressed="false" hidden>Etiqueta</button>
         </div>
+        <button type="button" class="shot" id="shot">Descargar muestra</button>
         <p class="hint">Arrastrá sobre una camiseta para girarla · rueda o pellizco para acercar</p>
       </section>
 
@@ -67,6 +68,13 @@
               <input id="sleeveAngle" type="range" min="30" max="65" step="1" />
             </div>
             <div class="control">
+              <span class="label" id="cuff-label">Puño</span>
+              <div class="seg" role="group" aria-labelledby="cuff-label">
+                <button type="button" data-cuff="band" aria-pressed="true">Con puño</button>
+                <button type="button" data-cuff="none" aria-pressed="false">Sin puño</button>
+              </div>
+            </div>
+            <div class="control">
               <span class="label" id="neckStyle-label">Cuello</span>
               <div class="seg" role="group" aria-labelledby="neckStyle-label">
                 <button type="button" data-neck="round" aria-pressed="true">Redondo</button>
@@ -85,19 +93,16 @@
             <div class="weaves" role="group" aria-label="Tejido"></div>
             <p id="weave-note" class="note"></p>
             <div class="control">
-              <label for="quality">Calidad</label>
-              <output id="quality-out" for="quality"></output>
-              <input id="quality" type="range" min="0" max="1" step="0.01" />
+              <span class="label" id="finish-label">Acabado</span>
+              <div class="seg" role="group" aria-labelledby="finish-label">
+                <button type="button" data-finish="matte" aria-pressed="true">Mate</button>
+                <button type="button" data-finish="satin" aria-pressed="false">Satinado</button>
+              </div>
             </div>
             <div class="control">
               <label for="weight">Peso</label>
               <output id="weight-out" for="weight"></output>
               <input id="weight" type="range" min="0" max="1" step="0.01" />
-            </div>
-            <div class="control">
-              <label for="heather">Jaspeado</label>
-              <output id="heather-out" for="heather"></output>
-              <input id="heather" type="range" min="0" max="1" step="0.01" />
             </div>
           </section>
 
@@ -112,7 +117,15 @@
                 <button type="button" data-light="day" aria-pressed="false">Día</button>
               </div>
             </div>
-            <label class="toggle"><input id="spin" type="checkbox" /> Girar solas</label>
+            <div class="control">
+              <span class="label" id="spin-label">Girar solas</span>
+              <div class="seg" role="group" aria-labelledby="spin-label">
+                <button type="button" data-spin="0" aria-pressed="true">No</button>
+                <button type="button" data-spin="1" aria-pressed="false">Lenta</button>
+                <button type="button" data-spin="2" aria-pressed="false">Media</button>
+                <button type="button" data-spin="3" aria-pressed="false">Rápida</button>
+              </div>
+            </div>
             <label class="toggle"><input id="uvmap" type="checkbox" /> Mapa de estampado</label>
             <button id="reset" type="button" class="reset">Restablecer todo</button>
           </section>
@@ -136,7 +149,7 @@
               <label class="swatch"><input id="c-body" type="color" /><span>Cuerpo</span></label>
               <label class="swatch"><input id="c-sleeves" type="color" /><span>Mangas</span></label>
               <label class="swatch"><input id="c-collar" type="color" /><span>Cuello</span></label>
-              <label class="swatch"><input id="c-cuffs" type="color" /><span>Puños</span></label>
+              <label class="swatch" id="sw-cuffs"><input id="c-cuffs" type="color" /><span>Puños</span></label>
             </div>
             <p class="note">Con un diseño cargado, la pieza muestra el diseño; el color queda donde la imagen es transparente.</p>
           </section>
@@ -175,7 +188,9 @@
 
           <section class="group" aria-labelledby="g-apps">
             <h2 id="g-apps">Escudo y marcas</h2>
-            <p class="note" id="apps-empty">Soltá un escudo o una marca (PNG con fondo transparente) sobre la camiseta. Después se pueden mover arrastrándolos sobre la camiseta.</p>
+            <p class="note">Un logo (PNG con fondo transparente) que se suelta en el frente va a la franja del pecho, del lado más cercano, con 5 cm; en la espalda, arriba al centro, con 20 cm. Cada lugar lleva uno. Se corren arrastrándolos sobre la camiseta: los del pecho de costado y el de la espalda hacia arriba o abajo.</p>
+            <label class="toggle"><input id="free-place" type="checkbox" /> Ubicación libre</label>
+            <p class="note" id="apps-empty">Todavía no hay escudo ni marcas.</p>
             <ul class="apps" id="apps"></ul>
           </section>
 

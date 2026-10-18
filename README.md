@@ -80,59 +80,66 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
 - **Luz**: estudio, pareja (luz amplia de frente: lo que mira de frente se ve
   con el color elegido tal cual, para comparar colores), contraste (rasante,
   marca el relieve y los pliegues) y día (sol cálido y cielo azulado).
-- **Colores** por parte: cuerpo, mangas, cuello y puños.
-- **Diseño propio** (`src/camiseta/print.js`): se cargan uno o varios SVG
-  (o PNG, JPG o WebP) con sólo el diseño de cada pieza (frente, espalda,
-  manga, puño, cuello, tapacostura o etiqueta: lo
-  dice el nombre del archivo, o el de cada capa si vienen todas en un
-  archivo; manga y puño van a los dos lados salvo que digan izquierda o
-  derecha). **Medidas para diseñar** da el ancho y el alto de cada pieza para
-  la camiseta tal como está. La página ubica cada diseño en su molde,
-  centrado y arriba (el cuello, centrado en el medio de atrás y dando la
-  vuelta): si el SVG dice su tamaño en unidades reales (mm, cm, in, pt) va a
-  ese tamaño; si no, se agranda o achica hasta cubrir la pieza. Cargar otra
-  pieza la reemplaza sólo a ella, y al cambiar una medida los diseños se
-  vuelven a ubicar. Frente y espalda son un molde común: la tela aplanada
-  como se corta (hombros rectos, sin la curva del cuerpo), así lo que se
-  dibuja recto queda recto en la camiseta, con cuerpo y colgada.
-  - **Escudo, marca, dorsal y nombre**: dentro del diseño, un grupo (o
-    capa) llamado "escudo" va bordado (o sublimado, desde el panel); los
-    llamados "marca" (o "logo"), "dorsal" (o "número") y "nombre" van
-    sublimados o en vinilo termoadhesivo. El sponsor va con el resto del
-    diseño. El bordado sube 1,1 mm con el borde redondeado, deja una sombra
-    alrededor y tiene puntadas de relleno (se ven al acercar) y hilo con
-    brillo; el vinilo es liso, semimate, con un borde fino y más reflejo.
+- **Panel en tres solapas**: **Ajustes** (forma, tela, luz y ficha),
+  **Colores** y **Personalización**. La presentación (con cuerpo, en percha,
+  con broches) queda arriba, en todas. La página recuerda la última solapa.
+- **Colores** por parte: cuerpo, mangas, cuello y puños (con un diseño
+  cargado, el color queda donde la imagen es transparente).
+- **Personalización** (`src/camiseta/print.js`, `src/camiseta/library.js`):
+  - **Biblioteca**: se agregan imágenes (PNG, JPG, WebP o SVG) con el botón o
+    arrastrándolas desde la computadora (a la biblioteca o directo sobre una
+    pieza). Queda guardada en el navegador (IndexedDB), con lo que tiene
+    puesto la camiseta, y vuelve al abrir la página.
+  - **Una imagen por pieza**: se arrastra una miniatura hasta una pieza de
+    cualquiera de las dos camisetas (se resalta la pieza a la que va) o hasta
+    su casillero (frente, espalda, cada manga, cada puño, cuello, tapacostura,
+    etiqueta). También se puede tocar la miniatura y después la pieza (en el
+    celular la biblioteca queda lejos). Si el nombre del archivo dice la
+    pieza, va sola. La imagen cubre la pieza, centrada (si tiene su misma
+    proporción, la cubre justo; si no, sobra a los costados o abajo).
+  - **Mover y agrandar**: al elegir un casillero se ve la pieza plana (como
+    se corta, vista desde afuera) con su imagen y lo que sobra apenas
+    marcado; arrastrar la mueve, la rueda o **Tamaño** la agrandan o achican,
+    y **Centrar** vuelve a cubrirla. Frente y espalda son un molde común (la
+    tela aplanada como se corta), así lo que se dibuja recto queda recto en
+    la camiseta, con cuerpo y colgada.
+  - **Escudo y marcas**: una imagen con fondo transparente (o con escudo,
+    marca o logo en el nombre) que se suelta sobre el frente, la espalda o
+    una manga queda como aplicación en ese punto: bordada, en vinilo o
+    sublimada, con su ancho. Se mueve arrastrándola sobre la camiseta (en
+    Personalización) o en la pieza plana. Si llega por el nombre, va al
+    pecho (el escudo a la izquierda de quien la lleva, bordado; la marca al
+    otro lado, en vinilo). El bordado sube 1,1 mm con el borde redondeado,
+    deja una sombra alrededor y tiene puntadas de relleno (se ven al acercar)
+    y hilo con brillo; el vinilo es liso, semimate, con un borde fino y más
+    reflejo.
   - **Tapacostura**: una tira fina por dentro de la espalda, de hombro a
     hombro: cubre los últimos 7 mm de la cara de adentro del cuello, envuelve
-    su borde y baja pegada a la tela. Un archivo con "tapacostura" en el
-    nombre lleva su diseño (unos 21 × 0,8 cm, se lee derecho desde adentro;
-    se ve entero de frente, por el escote); si no, va lisa del color del
-    cuello.
-  - **Etiqueta**: una etiqueta tejida de 1,6 × 2,1 cm cosida por afuera
-    bajo el pespunte del ruedo, abajo a la derecha del frente (a 6 cm del
-    costado), que envuelve el borde y sigue por dentro, como las de verdad.
-    Aparece al cargar un archivo con "etiqueta" en el nombre: su diseño se
-    teje (los colores principales en una grilla de hilos de 0,25 mm, con
-    bordes escalonados) y la trama marca relieve (hilos horizontales en el
-    fondo, en diagonal en el dibujo). Sigue al ruedo colgada; el
-    acercamiento **Etiqueta** la muestra de cerca.
+    su borde y baja pegada a la tela. Su imagen (unos 21 × 0,8 cm) se lee
+    derecho desde adentro y se ve entera de frente, por el escote; sin
+    imagen va lisa, del color del cuello.
+  - **Etiqueta**: una etiqueta tejida de 1,6 × 2,1 cm cosida por afuera bajo
+    el pespunte del ruedo, abajo a la derecha del frente (a 6 cm del
+    costado), que envuelve el borde y sigue por dentro. Aparece con una
+    imagen: se teje (los colores principales en una grilla de hilos de
+    0,25 mm, con bordes escalonados) y la trama marca relieve. Sigue al ruedo
+    colgada; el acercamiento **Etiqueta** la muestra de cerca.
   - **Revés**: por dentro no se ve el estampado; la tela es lisa, del color
-    que más hay en el diseño de cada pieza.
-  - **Plantilla completa** (opcional) baja un SVG a escala 1:1 (mm) con
-    todas las piezas en sus recuadros (contorno, centro, grilla de 5 cm y
-    cruz de anclaje); lo que se dibuja dentro de cada recuadro va a esa pieza.
-  Antes de exportar: textos a contornos, imágenes incrustadas, colores RGB.
+    que más hay en la imagen de cada pieza.
+  - **Medidas para diseñar** da el ancho y el alto de cada pieza para la
+    camiseta tal como está. Para que se vea nítida de cerca, conviene
+    exportar con unos 2 px por mm (el frente, unos 1200 × 1600 px).
 - **Mapa de estampado**: muestra una grilla de 5 cm con el nombre de cada pieza.
 - **Ficha**: contorno de pecho, ancho de hombros, largo, boca de manga y tela.
 - **Configuración sin tocar código**: si la página trae un bloque
   `<script type="application/json" id="camiseta-config">` con `params`
   (incluido `neckStyle`: `round` o `v`), `colors`, `fabric` (`weave`,
   `quality`, `weight`, `heather`), `light` (`studio`, `soft`, `contrast` o
-  `day`), `mode` (`body`, `hanger` o `clips`), `spin`, `uvmap`, `design`
-  (lista de `{ name, text }` con el SVG de cada pieza, o la plantilla
-  completa como texto) o `kinds` (`{ "crest": "emb", "brand": "vin",
-  "number": "print", "name": "print" }`: bordado, vinilo o estampado),
-  arranca con esos valores (y "Restablecer todo" vuelve a ellos).
+  `day`), `mode` (`body`, `hanger` o `clips`), `spin`, `uvmap` o `design`
+  (lista de `{ name, text }`: cada imagen como SVG, que puede llevar adentro
+  un PNG o JPG; la pieza sale del nombre, y un escudo o una marca van al
+  pecho), arranca con esos valores (y "Restablecer todo" vuelve a ellos).
+  Esas imágenes no se guardan en la biblioteca.
 
 Cómo se arma (`src/camiseta/shirt.js`):
 

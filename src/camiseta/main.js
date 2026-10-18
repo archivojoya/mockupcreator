@@ -5,7 +5,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS, flattenPrint } from './shirt.js';
 import { makeHanger, makeClipHanger, HangingShirt, RAIL_R } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
-import { templateSVG, readDesign, printTexture, readPieces, isolateLayer, placePiece, placeTape, placeLabel, pieceSizes, buildApplique, KINDS } from './print.js';
+import { printTexture, pieceSizes, pieceCanvases, pieceOutline, coverRect, BLEED, placeTape, placeLabel, buildApplique, pieceKeys, PIECE_LABELS, PIECES } from './print.js';
+import { openStore, decodeImage, transparency, newId } from './library.js';
 import './style.css';
 
 const COLORS = { body: '#c81e3a', sleeves: '#c81e3a', collar: '#17191d', cuffs: '#17191d' };
@@ -370,7 +371,7 @@ const BASE_LIGHT = CONFIG.light in LIGHTS ? CONFIG.light : 'studio';
 const params = { ...BASE_PARAMS };
 const colors = { ...BASE_COLORS };
 const fabric = { ...BASE_FABRIC };
-const view = { spin: !!CONFIG.spin, uvmap: !!CONFIG.uvmap, mode: 'body', light: BASE_LIGHT, pair: 0 }; // body: con cuerpo · hanger: en percha · clips: con broches
+const view = { spin: !!CONFIG.spin, uvmap: !!CONFIG.uvmap, mode: 'body', light: BASE_LIGHT, pair: 0, tab: 'ajustes' }; // body: con cuerpo · hanger: en percha · clips: con broches
 
 // Cada camiseta (con su percha o sus broches) cuelga de su soporte, que la
 // ubica y la gira sobre el eje del gancho; adentro (`inner`), las
@@ -401,6 +402,7 @@ for (const [k, def] of Object.entries(PARTS)) {
   [mesh, twin].forEach((m, i) => {
     m.castShadow = m.receiveShadow = true;
     m.userData.rig = rigs[i].userData.inner;
+    m.userData.piece = k === 'hem' ? 'hem' : def.lining || k;
     rigs[i].userData.inner.add(m);
   });
   meshes[k] = mesh;
@@ -408,14 +410,9 @@ for (const [k, def] of Object.entries(PARTS)) {
 }
 const clothMeshes = [...Object.values(meshes), ...Object.values(twins)];
 const uvMaps = {};
-// Diseño cargado: una textura de estampado por pieza.
-// `mode`: 'template' (la plantilla completa) o 'pieces' (un diseño por
-// pieza, ubicado por la página).
-// `parts`: por pieza, los lienzos de lo estampado y de cada aplicación
-// (escudo, marca, dorsal, nombre); `kinds`: cómo va cada una (bordado,
-// vinilo o estampado).
-const KIND_NAMES = KINDS.map(([kind]) => kind);
-const design = { textures: {}, found: [], inside: {}, pieces: {}, tape: null, tapeTex: null, label: null, labelTex: null, mode: null, parts: {}, app: {}, kinds: { crest: 'emb', brand: 'print', number: 'print', name: 'print' } };
+// Diseño: por pieza, la textura de estampado, el color del revés y las
+// aplicaciones con relieve; las texturas del tapacostura y de la etiqueta.
+const design = { textures: {}, inside: {}, app: {}, tapeTex: null, labelTex: null };
 // Color que más hay en el diseño de una pieza (lo transparente cuenta como
 // el color de la pieza: null). Es el color del revés de la tela.
 function dominantColor(canvas, rect = [0, 0, canvas.width, canvas.height]) {
@@ -456,13 +453,17 @@ function ensureFlat() {
   flattenPrint(built, lastFlat);
   lastFlat = built;
 }
+// Sin cancelar el recálculo pendiente si ya está aplanado.
+function flatNow() {
+  if (!built.flatPrint) ensureFlat();
+}
 function followFlat() {
-  if (!Object.keys(design.textures).length && !sizesBox.open) return;
+  if (!hasDress() && !sizesBox.open) return;
   if (lastFlat) for (const k of ['front', 'back']) built.geos[k].attributes.uv1.array.set(lastFlat.geos[k].attributes.uv1.array);
   clearTimeout(flatTimer);
   flatTimer = setTimeout(() => {
     ensureFlat();
-    if (design.mode === 'pieces') layoutPieces();
+    if (hasDress()) renderDress();
     fillSizes();
     requestRender();
   }, 180);
@@ -538,6 +539,7 @@ const tape = { geo: new THREE.BufferGeometry(), cols: null, W: 0, N: 0, len: 0, 
 for (const rig of rigs) {
   const m = new THREE.Mesh(tape.geo, tapeMat);
   m.receiveShadow = true;
+  m.userData.piece = 'tape';
   rig.userData.inner.add(m);
 }
 const TAPE_ROWS = 2 + TAPE_DOWN.length;
@@ -705,6 +707,7 @@ label.geo = labelGeometry();
 for (const rig of rigs) {
   const m = new THREE.Mesh(label.geo, labelMat);
   m.matrixAutoUpdate = false;
+  m.userData.piece = 'label';
   m.visible = false;
   m.castShadow = true;
   m.receiveShadow = true;
@@ -1022,12 +1025,7 @@ function setMode(mode) {
   controls.update();
   view.mode = mode;
   modeButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
-  document.querySelector('.hint').textContent =
-    mode === 'body'
-      ? 'Arrastrá sobre una camiseta para girarla · rueda o pellizco para acercar'
-      : matchMedia('(hover: none)').matches
-        ? 'Tocá la tela para moverla · arrastrá para girar cada camiseta'
-        : 'Pasá el mouse sobre la tela para moverla · arrastrá para girar cada camiseta';
+  updateHint();
   rebuild();
 }
 modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
@@ -1088,6 +1086,12 @@ dom.addEventListener('pointerdown', (e) => {
     drag.id = -1;
     return;
   }
+  // En Personalización, una imagen elegida de la biblioteca va a la pieza que
+  // se toca, y agarrar un escudo o una marca lo mueve.
+  if (dropArmed(e) || grabApp(e)) {
+    drag.id = -1;
+    return;
+  }
   if (turn) placeRigs(1);
   turn = null;
   fly = null;
@@ -1145,118 +1149,53 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   drape.breeze(hit.local(raycaster.ray.direction.clone().multiplyScalar(0.6)));
 });
 
-// Diseño: plantilla con todas las piezas (para la camiseta tal como está) y
-// carga del SVG diseñado sobre ella (botón o arrastrando el archivo).
+// ---------- personalización ----------
+
+// Biblioteca de imágenes (id → { id, name, img, url, app, session }) y lo que
+// lleva la camiseta: una imagen por pieza ({ id, fit: { scale, dx, dy } },
+// que cubre la pieza, agrandada y corrida en mm) y aplicaciones sueltas
+// ({ uid, id, piece, x, y, w, as }: centro y ancho en mm de estampado, y si
+// van bordadas, en vinilo o sublimadas). Las de la configuración (`session`)
+// no se guardan.
+const lib = new Map();
+const dress = { pieces: {}, apps: [] };
+const SLOTS = ['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR', 'collar', 'tape', 'label'];
+const APP_PIECES = ['front', 'back', 'sleeveL', 'sleeveR'];
+const APP_AS = { emb: 'Bordado', vin: 'Vinilo', print: 'Sublimado' };
+const CREST_NAME = /escudo|crest|badge|emblema|insignia|parche/i;
+const BRAND_NAME = /marca|logo|brand|sponsor/i;
+// Un escudo o una marca que llegan por el nombre (sin soltarlos): al pecho,
+// el escudo a la izquierda de quien la lleva (a la derecha mirándola).
+const APP_SPOT = { crest: { x: 95, y: 110, w: 75, as: 'emb' }, brand: { x: -95, y: 110, w: 70, as: 'vin' } };
+const SLOT_COLOR = { front: 'body', back: 'body', sleeveL: 'sleeves', sleeveR: 'sleeves', cuffL: 'cuffs', cuffR: 'cuffs', collar: 'collar', tape: 'collar' };
+let store = null;
 const designNote = document.getElementById('design-note');
 const designClear = document.getElementById('design-clear');
 const sizesBox = document.getElementById('design-sizes');
-const kindsBox = document.getElementById('design-kinds');
-kindsBox.addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-as]');
-  if (!b) return;
-  design.kinds[b.closest('[data-kind]').dataset.kind] = b.dataset.as;
-  compose();
-});
+const libGrid = document.getElementById('lib-grid');
+const slotList = document.getElementById('slots');
+const appList = document.getElementById('apps');
+const editor = document.getElementById('editor');
+const edCanvas = document.getElementById('editor-canvas');
+const edScale = document.getElementById('ed-scale');
+const fitOf = (k) => dress.pieces[k]?.fit;
+const hasDress = () => Object.keys(dress.pieces).length > 0 || dress.apps.length > 0;
+let selected = null; // { piece } o { app: uid }
+
 sizesBox.addEventListener('toggle', () => {
   if (!sizesBox.open) return;
   ensureFlat();
   fillSizes();
 });
-// Publicada en claude.ai, la descarga pasa por la capacidad `downloads` (la
-// persona confirma); sola o en desarrollo, un enlace de descarga común.
-const downloadsP = window.claude?.use ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
-async function download(name, text, type) {
-  const dl = await downloadsP;
-  if (dl) {
-    try {
-      await dl.save({ filename: name, data: text });
-      return;
-    } catch (e) {
-      if (e?.code === 'declined' || e?.code === 'rate_limited') return;
-    }
-  }
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+// Medidas de cada pieza (mm): las del molde, más el tapacostura y la
+// etiqueta (recuadros centrados).
+function sizesNow() {
+  return {
+    ...pieceSizes(built),
+    tape: { w: tape.len * 1000, h: tape.w * 1000, top: -tape.w * 500 },
+    label: { w: LABEL_W * 1000, h: LABEL_H * 1000, top: -LABEL_H * 500 },
+  };
 }
-document.getElementById('template').addEventListener('click', () => {
-  ensureFlat();
-  download('plantilla-camiseta.svg', templateSVG(built, params, colors), 'image/svg+xml');
-});
-function disposeLabel() {
-  design.labelTex?.color.dispose();
-  design.labelTex?.normal.dispose();
-  design.labelTex = null;
-}
-function clearDesign() {
-  for (const t of Object.values(design.textures)) t.dispose();
-  for (const a of Object.values(design.app)) a.color.dispose(), a.shape.dispose();
-  design.textures = {};
-  design.found = [];
-  design.inside = {};
-  design.pieces = {};
-  design.parts = {};
-  design.app = {};
-  design.mode = null;
-  design.tape = null;
-  design.tapeTex?.dispose();
-  design.tapeTex = null;
-  design.label = null;
-  disposeLabel();
-  designClear.hidden = true;
-  kindsBox.hidden = true;
-}
-// Arma las texturas de cada pieza: lo estampado (más el escudo o las marcas
-// si van estampados) y las aplicaciones (bordado y vinilo) con su relieve.
-function compose() {
-  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-  for (const t of Object.values(design.textures)) t.dispose();
-  for (const a of Object.values(design.app)) a.color.dispose(), a.shape.dispose();
-  design.textures = {};
-  design.app = {};
-  const has = {};
-  for (const [k, p] of Object.entries(design.parts)) {
-    let print = p.print;
-    const by = { emb: [], vin: [], print: [] };
-    for (const kind of KIND_NAMES)
-      if (p[kind]) {
-        has[kind] = true;
-        by[design.kinds[kind]].push(p[kind]);
-      }
-    if (by.print.length) {
-      print = document.createElement('canvas');
-      print.width = p.print.width;
-      print.height = p.print.height;
-      const ctx = print.getContext('2d');
-      ctx.drawImage(p.print, 0, 0);
-      for (const c of by.print) ctx.drawImage(c, 0, 0);
-    }
-    design.textures[k] = printTexture(k, print, aniso);
-    design.inside[k] = dominantColor(print, p.rect);
-    const merge = (list) => {
-      if (list.length < 2) return list[0] || null;
-      const c = document.createElement('canvas');
-      c.width = list[0].width;
-      c.height = list[0].height;
-      for (const x of list) c.getContext('2d').drawImage(x, 0, 0);
-      return c;
-    };
-    const app = buildApplique(k, merge(by.emb), merge(by.vin), p.k);
-    if (app) design.app[k] = app;
-  }
-  for (const kind of KIND_NAMES) {
-    kindsBox.querySelector(`[data-kind="${kind}"]`).hidden = !has[kind];
-    kindsBox.querySelectorAll(`[data-kind="${kind}"] button`).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.as === design.kinds[kind])));
-  }
-  kindsBox.hidden = !Object.keys(has).length;
-  applyLook();
-}
-// Medidas de cada pieza para diseñar (para la camiseta tal como está).
 const SIZE_ROWS = [
   ['front', 'Frente'],
   ['back', 'Espalda'],
@@ -1269,174 +1208,732 @@ const SIZE_ROWS = [
 const cmUp = (mm, d = 0) => (Math.ceil(mm / 10 ** (1 - d)) / 10 ** d).toFixed(d).replace('.', ',');
 function fillSizes() {
   if (!sizesBox.open) return;
-  const sz = { ...pieceSizes(built), tape: { w: tape.len * 1000, h: tape.w * 1000 }, label: { w: LABEL_W * 1000, h: LABEL_H * 1000 } };
+  const sz = sizesNow();
   sizesBox.querySelector('dl').innerHTML = SIZE_ROWS.map(([k, label]) => {
     const d = sz[k].h < 50 ? 1 : 0;
     return `<div><dt>${label}</dt><dd>${cmUp(sz[k].w)} × ${cmUp(sz[k].h, d)} cm</dd></div>`;
   }).join('');
 }
-// Diseños por pieza: cada uno a su lugar en el molde. Si mientras tanto se
-// rehízo la camiseta, se descarta (lo hace la vuelta siguiente).
-let layoutGen = 0;
-async function layoutPieces() {
-  const gen = ++layoutGen;
-  ensureFlat();
-  const sz = pieceSizes(built);
-  const notes = [];
-  const placed = {};
-  for (const [k, p] of Object.entries(design.pieces)) {
-    try {
-      placed[k] = await placePiece(k, p, sz[k]);
-    } catch {
-      notes.push(`${p.name}: no se pudo dibujar`);
-    }
-    if (gen !== layoutGen) return;
-  }
-  design.parts = Object.fromEntries(Object.entries(placed).map(([k, r]) => [k, r]));
-  compose();
-  const seen = new Set();
-  for (const [k, p] of Object.entries(design.pieces)) {
-    if (seen.has(p) || !placed[k]) continue;
-    seen.add(p);
-    const r = placed[k];
-    notes.push(`${p.keys.map((x) => PIECE_NAMES[x]).join(' y ')}: ${cmUp(r.w)} × ${cmUp(r.h, r.h < 50 ? 1 : 0)} cm${r.real ? '' : ' (ajustado a la pieza)'}`);
-  }
-  if (design.tape) {
-    const t = design.tape;
-    try {
-      const canvas = await placeTape(t, tape.len * 1000, tape.w * 1000);
-      if (gen !== layoutGen) return;
+
+// Texturas de una pieza (o del tapacostura o la etiqueta) con su imagen y
+// sus aplicaciones.
+function renderPiece(k, sz) {
+  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  const p = dress.pieces[k];
+  const item = p && lib.get(p.id);
+  if (k === 'tape' || k === 'label') {
+    if (k === 'tape') {
       design.tapeTex?.dispose();
-      design.tapeTex = new THREE.CanvasTexture(canvas);
+      design.tapeTex = null;
+      if (!item) return;
+      design.tapeTex = new THREE.CanvasTexture(placeTape(item.img, sz.tape.w, sz.tape.h, p.fit));
       design.tapeTex.colorSpace = THREE.SRGBColorSpace;
-      design.tapeTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-      notes.push(`tapacostura: ${cmUp(tape.len * 1000)} × ${cmUp(tape.w * 1000, 1)} cm`);
-      applyLook();
-    } catch {
-      notes.push(`${t.name}: no se pudo dibujar`);
-    }
-  }
-  if (design.label) {
-    const l = design.label;
-    try {
-      const r = await placeLabel(l, LABEL_W * 1000, LABEL_H * 1000);
-      if (gen !== layoutGen) return;
+      design.tapeTex.anisotropy = aniso;
+    } else {
       disposeLabel();
+      if (!item) return;
+      const r = placeLabel(item.img, sz.label.w, sz.label.h, p.fit);
       const tex = (c, srgb) => {
         const t = new THREE.CanvasTexture(c);
         if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-        t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+        t.anisotropy = aniso;
         return t;
       };
       design.labelTex = { color: tex(r.color, true), normal: tex(r.normal, false) };
-      notes.push(`etiqueta: ${cmUp(LABEL_W * 1000, 1)} × ${cmUp(LABEL_H * 1000, 1)} cm${r.real ? '' : ' (ajustada)'}`);
-    } catch {
-      notes.push(`${l.name}: no se pudo dibujar`);
     }
-  }
-  design.found = Object.keys(placed);
-  if (design.tape) design.found.push('tape');
-  if (design.labelTex) design.found.push('label');
-  designClear.hidden = !design.found.length;
-  designNote.textContent = notes.length ? `${notes.join(' · ')}.` : '';
-  applyLook();
-}
-const PIECE_NAMES = { front: 'frente', back: 'espalda', sleeveL: 'manga izquierda', sleeveR: 'manga derecha', cuffL: 'puño izquierdo', cuffR: 'puño derecho', collar: 'cuello', tape: 'tapacostura', label: 'etiqueta' };
-async function loadFiles(files) {
-  designNote.textContent = 'Leyendo…';
-  const { pieces, template, unknown } = readPieces(files);
-  if (template) return loadDesign(template, 'la plantilla');
-  if (!pieces.length) {
-    designNote.textContent = `No sé a qué pieza va ${unknown.join(', ')}: poné en el nombre del archivo (o de la capa) frente, espalda, manga, puño, cuello, tapacostura o etiqueta.`;
     return;
   }
-  if (design.mode !== 'pieces') clearDesign();
-  design.mode = 'pieces';
-  for (const p of pieces) {
-    if (p.layer) {
-      const iso = isolateLayer(p);
-      if (!iso) continue;
-      Object.assign(p, iso, { doc: null, layer: null });
-    }
-    if (p.keys.includes('tape')) design.tape = p;
-    else if (p.keys.includes('label')) design.label = p;
-    else for (const k of p.keys) design.pieces[k] = p;
+  design.textures[k]?.dispose();
+  delete design.textures[k];
+  delete design.inside[k];
+  if (design.app[k]) {
+    design.app[k].color.dispose();
+    design.app[k].shape.dispose();
+    delete design.app[k];
   }
-  if (view.uvmap) {
-    view.uvmap = false;
-    document.getElementById('uvmap').checked = false;
-  }
-  await layoutPieces();
-  if (unknown.length) designNote.textContent += ` No sé a qué pieza va ${unknown.join(', ')}.`;
+  const apps = dress.apps.filter((a) => a.piece === k && lib.has(a.id)).map((a) => ({ ...a, img: lib.get(a.id).img }));
+  if (!item && !apps.length) return;
+  const c = pieceCanvases(k, sz[k], item ? { img: item.img, fit: p.fit } : null, apps);
+  design.textures[k] = printTexture(k, c.print, aniso);
+  if (item) design.inside[k] = dominantColor(c.print, c.rect);
+  const app = (c.emb || c.vin) && buildApplique(k, c.emb, c.vin, c.k, c.box);
+  if (app) design.app[k] = app;
 }
-async function loadDesign(text, name = 'diseño') {
-  designNote.textContent = `Leyendo ${name}…`;
-  try {
-    const r = await readDesign(text);
-    const found = r.found;
-    clearDesign();
-    ensureFlat();
-    design.mode = 'template';
-    for (const [k, c] of Object.entries(r.canvases)) design.parts[k] = { print: c, k: r.k[k], ...Object.fromEntries(KIND_NAMES.map((kind) => [kind, r[kind][k]])) };
-    compose();
-    design.found = found;
-    designClear.hidden = !found.length;
-    designNote.textContent = found.length ? `Diseño en: ${found.join(', ')}.` : 'El SVG no tiene nada dentro de los recuadros de la plantilla.';
-    if (view.uvmap) {
-      view.uvmap = false;
-      document.getElementById('uvmap').checked = false;
-    }
-  } catch (e) {
-    designNote.textContent = e.message || 'No se pudo leer el SVG.';
-  }
+function disposeLabel() {
+  design.labelTex?.color.dispose();
+  design.labelTex?.normal.dispose();
+  design.labelTex = null;
+}
+// Rehace las texturas de las piezas que se piden (todas, si no) y guarda.
+function renderDress(keys = SLOTS) {
+  if (hasDress()) ensureFlat();
+  const sz = sizesNow();
+  for (const k of keys) renderPiece(k, sz);
+  designClear.hidden = !hasDress();
   applyLook();
+  saveDress();
 }
-const designFile = document.getElementById('design-file');
-document.getElementById('design-load').addEventListener('click', () => designFile.click());
-// Los SVG se leen tal cual; una imagen (PNG, JPG, WebP) va dentro de un SVG
-// de su tamaño en píxeles.
-const RASTER = /^image\/(png|jpeg|webp)$/;
-async function rasterSVG(file) {
-  const url = await new Promise((ok, fail) => {
-    const r = new FileReader();
-    r.onload = () => ok(r.result);
-    r.onerror = fail;
-    r.readAsDataURL(file);
+// Mientras se arrastra algo, una vez por cuadro.
+const pendingKeys = new Set();
+let renderFrame = 0;
+function scheduleRender(k) {
+  pendingKeys.add(k);
+  if (renderFrame) return;
+  renderFrame = requestAnimationFrame(() => {
+    renderFrame = 0;
+    const keys = [...pendingKeys];
+    pendingKeys.clear();
+    renderDress(keys);
   });
-  const img = new Image();
-  img.src = url;
-  await img.decode();
-  const [w, h] = [img.naturalWidth, img.naturalHeight];
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><image width="${w}" height="${h}" preserveAspectRatio="none" href="${url}" xlink:href="${url}"/></svg>`;
 }
-const readFiles = async (list) =>
-  Promise.all(
-    [...list]
-      .filter((f) => /\.svg$/i.test(f.name) || f.type === 'image/svg+xml' || RASTER.test(f.type))
-      .map(async (f) => ({ name: f.name, text: RASTER.test(f.type) ? await rasterSVG(f) : await f.text() })),
+let saveTimer = 0;
+function saveDress() {
+  if (!store) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const keep = (id) => lib.has(id) && !lib.get(id).session;
+    const pieces = Object.fromEntries(Object.entries(dress.pieces).filter(([, p]) => keep(p.id)));
+    store.putState('dress', { pieces, apps: dress.apps.filter((a) => keep(a.id)) }).catch(() => {});
+  }, 400);
+}
+
+// ---------- biblioteca ----------
+
+const IMAGE_TYPE = /^image\/(png|jpeg|webp|svg\+xml)$/;
+const IMAGE_NAME = /\.(png|jpe?g|webp|svg)$/i;
+// Agrega imágenes (File, o { name, blob }) a la biblioteca. Las que dicen su
+// pieza en el nombre van a esa pieza; un escudo o una marca, al pecho.
+async function addImages(files, { session = false } = {}) {
+  const added = [];
+  const bad = [];
+  for (const f of files) {
+    const blob = f.blob || f;
+    if (!IMAGE_TYPE.test(blob.type) && !IMAGE_NAME.test(f.name)) {
+      bad.push(f.name);
+      continue;
+    }
+    let dec;
+    try {
+      dec = await decodeImage(blob);
+    } catch {
+      bad.push(f.name);
+      continue;
+    }
+    const app = CREST_NAME.test(f.name) || BRAND_NAME.test(f.name) || transparency(dec.img) > 0.3;
+    const item = { id: newId(), name: f.name, img: dec.img, url: dec.url, app, session };
+    lib.set(item.id, item);
+    if (!session && store) store.put({ id: item.id, name: item.name, type: blob.type, blob, added: Date.now(), app }).catch(() => {});
+    added.push(item);
+  }
+  const placed = autoAssign(added);
+  renderLibrary();
+  renderSlots();
+  renderApps();
+  const notes = [];
+  if (added.length) notes.push(`${added.length === 1 ? 'Una imagen agregada' : `${added.length} imágenes agregadas`}${placed.length ? ` (${placed.join(', ')})` : ''}`);
+  if (bad.length) notes.push(`no se pudo leer ${bad.join(', ')} (tiene que ser PNG, JPG, WebP o SVG)`);
+  designNote.textContent = notes.length ? `${notes.join(' · ')}.` : '';
+  if (placed.length) renderDress();
+  return added;
+}
+function autoAssign(items) {
+  const placed = [];
+  for (const item of items) {
+    const kind = CREST_NAME.test(item.name) ? 'crest' : BRAND_NAME.test(item.name) ? 'brand' : null;
+    if (kind) {
+      if (!dress.apps.some((a) => a.id === item.id)) dress.apps.push({ uid: newId(), id: item.id, piece: 'front', ...APP_SPOT[kind] });
+      placed.push(`${kind === 'crest' ? 'escudo' : 'marca'} al pecho`);
+      continue;
+    }
+    const keys = pieceKeys(item.name);
+    for (const k of keys) dress.pieces[k] = { id: item.id, fit: { scale: 1, dx: 0, dy: 0 } };
+    if (keys.length) placed.push(keys.map((k) => PIECE_LABELS[k].toLowerCase()).join(' y '));
+  }
+  return placed;
+}
+function removeImage(id) {
+  const item = lib.get(id);
+  if (!item) return;
+  lib.delete(id);
+  if (armed === item) arm(null);
+  if (!item.session) store?.remove(id).catch(() => {});
+  setTimeout(() => URL.revokeObjectURL(item.url), 1000);
+  const keys = new Set();
+  for (const [k, p] of Object.entries(dress.pieces))
+    if (p.id === id) {
+      delete dress.pieces[k];
+      keys.add(k);
+    }
+  dress.apps = dress.apps.filter((a) => a.id !== id || (keys.add(a.piece), false));
+  renderLibrary();
+  renderSlots();
+  renderApps();
+  if (keys.size) renderDress([...keys]);
+}
+// Una imagen a una pieza (de fondo) o, si es un escudo o una marca y cae en
+// el frente, la espalda o una manga, como aplicación en ese punto (mm).
+function assign(id, k, at = null) {
+  const item = lib.get(id);
+  if (!item) return;
+  if (item.app && at && APP_PIECES.includes(k)) {
+    const kind = BRAND_NAME.test(item.name) ? 'brand' : 'crest';
+    const a = { uid: newId(), id, piece: k, x: at[0], y: at[1], w: APP_SPOT[kind].w, as: APP_SPOT[kind].as };
+    dress.apps.push(a);
+    selected = { app: a.uid };
+  } else {
+    dress.pieces[k] = { id, fit: { scale: 1, dx: 0, dy: 0 } };
+    selected = { piece: k };
+  }
+  renderSlots();
+  renderApps();
+  renderDress([k]);
+  drawEditor();
+}
+
+function el(tag, props = {}, ...children) {
+  const e = Object.assign(document.createElement(tag), props);
+  e.append(...children.filter(Boolean));
+  return e;
+}
+function closeButton(label, onClick) {
+  const b = el('button', { type: 'button', className: 'x', textContent: '×', title: label });
+  b.setAttribute('aria-label', label);
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  b.addEventListener('pointerdown', (e) => e.stopPropagation());
+  return b;
+}
+function renderLibrary() {
+  libGrid.replaceChildren(
+    ...[...lib.values()].map((item) => {
+      const t = el('div', { className: 'thumb', title: item.name }, el('img', { src: item.url, alt: '' }), el('span', { textContent: item.name }), item.app && el('em', { textContent: 'aplicación' }));
+      t.dataset.id = item.id;
+      t.tabIndex = 0;
+      if (armed === item) t.classList.add('armed');
+      t.append(closeButton(`Sacar ${item.name} de la biblioteca`, () => removeImage(item.id)));
+      t.addEventListener('pointerdown', (e) => startLibDrag(e, item));
+      t.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), arm(armed === item ? null : item)));
+      return t;
+    }),
   );
-designFile.addEventListener('change', async () => {
-  const files = await readFiles(designFile.files);
-  if (files.length) await loadFiles(files);
-  designFile.value = '';
+}
+function renderSlots() {
+  slotList.replaceChildren(
+    ...SLOTS.map((k) => {
+      const item = dress.pieces[k] && lib.get(dress.pieces[k].id);
+      const li = el('li', { className: `slot${item ? '' : ' empty'}`, title: item ? item.name : `Soltá una imagen para ${PIECE_LABELS[k].toLowerCase()}` }, item ? el('img', { className: 'slot-img', src: item.url, alt: '' }) : el('span', { className: 'slot-img' }), el('span', { className: 'slot-name', textContent: PIECE_LABELS[k] }));
+      li.dataset.piece = k;
+      li.setAttribute('aria-selected', String(selected?.piece === k));
+      li.tabIndex = 0;
+      if (item)
+        li.append(
+          closeButton(`Quitar la imagen de ${PIECE_LABELS[k].toLowerCase()}`, () => {
+            delete dress.pieces[k];
+            renderSlots();
+            renderDress([k]);
+            drawEditor();
+          }),
+        );
+      const pick = () => {
+        if (armed) {
+          const item = armed;
+          arm(null);
+          return assign(item.id, k);
+        }
+        selected = { piece: k };
+        renderSlots();
+        renderApps();
+        drawEditor();
+      };
+      li.addEventListener('click', pick);
+      li.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), pick()));
+      return li;
+    }),
+  );
+}
+function renderApps() {
+  document.getElementById('apps-empty').hidden = dress.apps.length > 0;
+  appList.replaceChildren(
+    ...dress.apps.map((a) => {
+      const item = lib.get(a.id);
+      if (!item) return '';
+      const seg = el('div', { className: 'seg' }, ...Object.entries(APP_AS).map(([as, label]) => el('button', { type: 'button', textContent: label })));
+      [...seg.children].forEach((b, i) => {
+        const as = Object.keys(APP_AS)[i];
+        b.setAttribute('aria-pressed', String(a.as === as));
+        b.addEventListener('click', () => {
+          a.as = as;
+          renderApps();
+          renderDress([a.piece]);
+        });
+      });
+      seg.setAttribute('role', 'group');
+      seg.setAttribute('aria-label', 'Cómo va');
+      const range = el('input', { type: 'range', min: 20, max: 300, step: 1, value: a.w });
+      const out = el('output', { textContent: `${cmUp(a.w, 1)} cm` });
+      range.setAttribute('aria-label', 'Ancho');
+      range.addEventListener('input', () => {
+        a.w = +range.value;
+        out.textContent = `${cmUp(a.w, 1)} cm`;
+        paintRange(range);
+        scheduleRender(a.piece);
+        drawEditor();
+      });
+      paintRange(range);
+      const size = el('div', { className: 'control' }, el('span', { className: 'label', textContent: 'Ancho' }), out, range);
+      const li = el('li', { className: 'app' }, el('img', { src: item.url, alt: '' }), el('div', { className: 'app-main' }, el('span', { className: 'app-name', textContent: `${item.name} · ${PIECE_LABELS[a.piece]}` }), seg, size));
+      li.setAttribute('aria-selected', String(selected?.app === a.uid));
+      li.append(
+        closeButton(`Quitar ${item.name}`, () => {
+          dress.apps = dress.apps.filter((x) => x !== a);
+          if (selected?.app === a.uid) selected = null;
+          renderApps();
+          renderDress([a.piece]);
+          drawEditor();
+        }),
+      );
+      li.addEventListener('click', (e) => {
+        if (e.target.closest('button, input')) return;
+        selected = { app: a.uid };
+        renderSlots();
+        renderApps();
+        drawEditor();
+      });
+      return li;
+    }),
+  );
+}
+function paintRange(input) {
+  input.style.setProperty('--fill', `${((input.value - input.min) / (input.max - input.min)) * 100}%`);
+}
+
+// ---------- editor de una pieza ----------
+
+// La pieza plana (como se corta, vista de afuera) con su imagen, lo que
+// sobra apenas marcado, y sus aplicaciones. Arrastrar mueve la imagen (o la
+// aplicación que se agarra); la rueda la agranda o la achica.
+let edView = null;
+function editorPiece() {
+  if (selected?.piece) return selected.piece;
+  const a = selected?.app && dress.apps.find((x) => x.uid === selected.app);
+  return a ? a.piece : null;
+}
+function drawEditor() {
+  const k = editorPiece();
+  editor.hidden = !k;
+  if (!k) return;
+  flatNow();
+  const sz = sizesNow()[k];
+  const p = dress.pieces[k];
+  const item = p && lib.get(p.id);
+  document.getElementById('editor-title').textContent = `${PIECE_LABELS[k]}${item ? ` · ${item.name}` : ''}`;
+  document.getElementById('ed-scale-row').hidden = !item;
+  document.getElementById('ed-center').hidden = !item;
+  if (item) {
+    edScale.value = p.fit.scale;
+    document.getElementById('ed-scale-out').textContent = `${Math.round(p.fit.scale * 100)} %`;
+    paintRange(edScale);
+  }
+  const loops = k === 'tape' || k === 'label' ? [[[-sz.w / 2, sz.top], [sz.w / 2, sz.top], [sz.w / 2, sz.top + sz.h], [-sz.w / 2, sz.top + sz.h]]] : pieceOutline(built, k);
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const l of loops)
+    for (const [x, y] of l) {
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
+      y0 = Math.min(y0, y);
+      y1 = Math.max(y1, y);
+    }
+  const pad = Math.max(x1 - x0, y1 - y0) * 0.06;
+  [x0, y0, x1, y1] = [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
+  const cssW = edCanvas.clientWidth || 276;
+  const cssH = Math.min(340, Math.max(60, (cssW * (y1 - y0)) / (x1 - x0)));
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  edCanvas.style.height = `${cssH}px`;
+  edCanvas.width = Math.round(cssW * dpr);
+  edCanvas.height = Math.round(cssH * dpr);
+  const s = Math.min(cssW / (x1 - x0), cssH / (y1 - y0)) * dpr;
+  const ox = (edCanvas.width - (x1 - x0) * s) / 2 - x0 * s;
+  const oy = (edCanvas.height - (y1 - y0) * s) / 2 - y0 * s;
+  edView = { k, s, ox, oy, dpr };
+  const g = edCanvas.getContext('2d');
+  g.clearRect(0, 0, edCanvas.width, edCanvas.height);
+  const outline = new Path2D();
+  for (const l of loops) l.forEach(([x, y], i) => (i ? outline.lineTo(x * s + ox, y * s + oy) : outline.moveTo(x * s + ox, y * s + oy)));
+  outline.closePath();
+  g.fillStyle = k === 'label' ? '#f4f1e8' : colors[SLOT_COLOR[k]];
+  g.fill(outline);
+  const drawImg = (img, r) => g.drawImage(img, r.x * s + ox, r.y * s + oy, r.w * s, r.h * s);
+  if (item) {
+    const r = coverRect(sz, item.img.width, item.img.height, p.fit, k === 'tape' || k === 'label' ? 0 : BLEED);
+    g.globalAlpha = 0.28;
+    drawImg(item.img, r);
+    g.globalAlpha = 1;
+    g.save();
+    g.clip(outline);
+    drawImg(item.img, r);
+    if (sz.wrap) for (const d of [-1, 1]) drawImg(item.img, { ...r, x: r.x + d * sz.wrap });
+    g.restore();
+  }
+  for (const a of dress.apps) {
+    if (a.piece !== k || !lib.has(a.id)) continue;
+    const img = lib.get(a.id).img;
+    const r = appRect(a, img);
+    drawImg(img, r);
+    if (selected?.app === a.uid) {
+      g.setLineDash([4 * dpr, 3 * dpr]);
+      g.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+      g.lineWidth = 1.5 * dpr;
+      g.strokeRect(r.x * s + ox, r.y * s + oy, r.w * s, r.h * s);
+      g.setLineDash([]);
+    }
+  }
+  g.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
+  g.lineWidth = 1.2 * dpr;
+  g.stroke(outline);
+}
+const appRect = (a, img) => {
+  const h = (a.w * img.height) / img.width;
+  return { x: a.x - a.w / 2, y: a.y - h / 2, w: a.w, h };
+};
+function appAt(k, x, y) {
+  for (let i = dress.apps.length - 1; i >= 0; i--) {
+    const a = dress.apps[i];
+    if (a.piece !== k || !lib.has(a.id)) continue;
+    const r = appRect(a, lib.get(a.id).img);
+    if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return a;
+  }
+  return null;
+}
+const edPoint = (e) => {
+  const r = edCanvas.getBoundingClientRect();
+  const { s, ox, oy, dpr } = edView;
+  return [((e.clientX - r.left) * dpr - ox) / s, ((e.clientY - r.top) * dpr - oy) / s];
+};
+let edDrag = null;
+edCanvas.addEventListener('pointerdown', (e) => {
+  if (!edView) return;
+  const [x, y] = edPoint(e);
+  const a = appAt(edView.k, x, y);
+  const p = dress.pieces[edView.k];
+  if (!a && !p) return;
+  if (a && selected?.app !== a.uid) {
+    selected = { app: a.uid };
+    renderApps();
+  }
+  edDrag = { id: e.pointerId, a, x, y, start: a ? [a.x, a.y] : [p.fit.dx, p.fit.dy] };
+  edCanvas.setPointerCapture(e.pointerId);
 });
+edCanvas.addEventListener('pointermove', (e) => {
+  if (!edDrag || e.pointerId !== edDrag.id) return;
+  const [x, y] = edPoint(e);
+  const [dx, dy] = [x - edDrag.x, y - edDrag.y];
+  if (edDrag.a) [edDrag.a.x, edDrag.a.y] = [edDrag.start[0] + dx, edDrag.start[1] + dy];
+  else {
+    const f = dress.pieces[edView.k]?.fit;
+    if (!f) return;
+    [f.dx, f.dy] = [edDrag.start[0] + dx, edDrag.start[1] + dy];
+  }
+  drawEditor();
+  scheduleRender(edView.k);
+});
+const endEdDrag = () => (edDrag = null);
+edCanvas.addEventListener('pointerup', endEdDrag);
+edCanvas.addEventListener('pointercancel', endEdDrag);
+edCanvas.addEventListener(
+  'wheel',
+  (e) => {
+    if (!edView) return;
+    const [x, y] = edPoint(e);
+    const a = appAt(edView.k, x, y);
+    const f = fitOf(edView.k);
+    if (!a && !f) return;
+    e.preventDefault();
+    const z = Math.exp(-e.deltaY * 0.0015);
+    if (a) a.w = Math.min(300, Math.max(20, a.w * z));
+    else f.scale = Math.min(3, Math.max(0.5, f.scale * z));
+    if (a) renderApps();
+    drawEditor();
+    scheduleRender(edView.k);
+  },
+  { passive: false },
+);
+edScale.addEventListener('input', () => {
+  const f = fitOf(editorPiece());
+  if (!f) return;
+  f.scale = +edScale.value;
+  drawEditor();
+  scheduleRender(editorPiece());
+});
+document.getElementById('ed-center').addEventListener('click', () => {
+  const f = fitOf(editorPiece());
+  if (!f) return;
+  Object.assign(f, { scale: 1, dx: 0, dy: 0 });
+  drawEditor();
+  renderDress([editorPiece()]);
+});
+window.addEventListener('resize', () => drawEditor());
+
+// ---------- arrastrar a la camiseta ----------
+
+// Pieza bajo el puntero (y su punto en mm de estampado), en cualquiera de
+// las dos camisetas: tela, tapacostura o etiqueta.
+function pieceAt(x, y) {
+  const r = dom.getBoundingClientRect();
+  if (x < r.left || x > r.right || y < r.top || y > r.bottom) return null;
+  pointer.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const targets = [...clothMeshes, ...rigs.flatMap((rig) => rig.userData.inner.children.filter((m) => m.userData.piece === 'tape' || (m.userData.piece === 'label' && m.visible)))];
+  const hit = raycaster.intersectObjects(targets, false)[0];
+  if (!hit) return null;
+  let key = hit.object.userData.piece;
+  if (key === 'hem') key = hit.object.userData.rig.worldToLocal(hit.point.clone()).z >= 0 ? 'front' : 'back';
+  const uv = hit.object.userData.piece === key && hit.uv1 ? [hit.uv1.x * 1000, hit.uv1.y * 1000] : null;
+  return { key, at: uv };
+}
+// Resaltado de la pieza a la que va lo que se arrastra.
+let lit = null;
+function highlight(k) {
+  if (lit === k) return;
+  const mats = (key) => (key === 'tape' ? [tapeMat] : key === 'label' ? [labelMat] : key && meshes[key] ? [meshes[key].material] : []);
+  for (const m of mats(lit)) m.emissive.setRGB(0, 0, 0);
+  for (const m of mats(k)) m.emissive.setRGB(0.16, 0.16, 0.16);
+  lit = k;
+  requestRender();
+}
+const ghost = el('img', { className: 'drag-ghost', alt: '' });
+const tip = el('div', { className: 'drop-tip' });
+let libDrag = null;
+function startLibDrag(e, item) {
+  if (e.button > 0) return;
+  // Sin esto el arrastre selecciona el texto del panel.
+  e.preventDefault();
+  libDrag = { item, id: e.pointerId, x: e.clientX, y: e.clientY, on: false, target: null };
+  e.currentTarget.setPointerCapture(e.pointerId);
+}
+function dropTarget(e) {
+  ghost.hidden = tip.hidden = true;
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  ghost.hidden = tip.hidden = false;
+  const slot = under?.closest('.slot');
+  if (slot) return { key: slot.dataset.piece, slot };
+  if (under !== dom) return null;
+  return pieceAt(e.clientX, e.clientY);
+}
+document.addEventListener('pointermove', (e) => {
+  if (!libDrag || e.pointerId !== libDrag.id) return;
+  if (!libDrag.on) {
+    if (Math.hypot(e.clientX - libDrag.x, e.clientY - libDrag.y) < 5) return;
+    libDrag.on = true;
+    document.body.classList.add('dragging');
+    ghost.src = libDrag.item.url;
+    document.body.append(ghost, tip);
+    if (libDrag.item.app) flatNow();
+  }
+  ghost.style.left = tip.style.left = `${e.clientX}px`;
+  ghost.style.top = tip.style.top = `${e.clientY}px`;
+  const t = dropTarget(e);
+  libDrag.target = t;
+  slotList.querySelectorAll('.slot').forEach((s) => s.classList.toggle('target', s === t?.slot));
+  highlight(t && !t.slot ? t.key : null);
+  const asApp = t && !t.slot && libDrag.item.app && t.at && APP_PIECES.includes(t.key);
+  tip.textContent = t ? (asApp ? `Aplicación en ${PIECE_LABELS[t.key].toLowerCase()}` : PIECE_LABELS[t.key]) : 'Soltá sobre una pieza';
+});
+function endLibDrag(e) {
+  if (!libDrag || e.pointerId !== libDrag.id) return;
+  const { item, on, target } = libDrag;
+  libDrag = null;
+  document.body.classList.remove('dragging');
+  ghost.remove();
+  tip.remove();
+  highlight(null);
+  slotList.querySelectorAll('.slot.target').forEach((s) => s.classList.remove('target'));
+  if (!on) {
+    arm(armed === item ? null : item);
+    return;
+  }
+  if (e.type === 'pointerup' && target) assign(item.id, target.key, target.slot ? null : target.at);
+}
+document.addEventListener('pointerup', endLibDrag);
+document.addEventListener('pointercancel', endLibDrag);
+
+// Tocar una miniatura y después una pieza (o su casillero) también la pone:
+// en el celular, la biblioteca queda lejos de la camiseta.
+let armed = null;
+function arm(item) {
+  armed = item;
+  libGrid.querySelectorAll('.thumb').forEach((t) => t.classList.toggle('armed', t.dataset.id === item?.id));
+  designNote.textContent = item ? `Tocá una pieza de la camiseta o un casillero para poner ${item.name} (o arrastrala).` : '';
+}
+document.addEventListener('keydown', (e) => e.key === 'Escape' && armed && arm(null));
+function dropArmed(e) {
+  if (!armed || view.tab !== 'perso') return false;
+  const t = pieceAt(e.clientX, e.clientY);
+  if (!t) return false;
+  const item = armed;
+  arm(null);
+  assign(item.id, t.key, t.at);
+  return true;
+}
+
+// Aplicaciones: en Personalización, arrastrar una sobre la camiseta la mueve.
+let appDrag = null;
+function grabApp(e) {
+  if (view.tab !== 'perso') return false;
+  const t = pieceAt(e.clientX, e.clientY);
+  const a = t && t.at && appAt(t.key, ...t.at);
+  if (!a) return false;
+  flatNow();
+  appDrag = { id: e.pointerId, a, off: [a.x - t.at[0], a.y - t.at[1]] };
+  dom.setPointerCapture(e.pointerId);
+  if (selected?.app !== a.uid) {
+    selected = { app: a.uid };
+    renderSlots();
+    renderApps();
+    drawEditor();
+  }
+  return true;
+}
+dom.addEventListener('pointermove', (e) => {
+  if (appDrag) {
+    if (e.pointerId !== appDrag.id) return;
+    const t = pieceAt(e.clientX, e.clientY);
+    if (!t || t.key !== appDrag.a.piece || !t.at) return;
+    appDrag.a.x = t.at[0] + appDrag.off[0];
+    appDrag.a.y = t.at[1] + appDrag.off[1];
+    scheduleRender(appDrag.a.piece);
+    drawEditor();
+    return;
+  }
+  // Sobre una aplicación, el puntero avisa que se puede mover (mirando cada
+  // tanto: buscar la pieza bajo el puntero cuesta).
+  if (view.tab !== 'perso' || e.buttons || e.pointerType !== 'mouse' || !dress.apps.length) {
+    dom.style.cursor = '';
+    return;
+  }
+  const now = performance.now();
+  if (now - hoverAt < 80) return;
+  hoverAt = now;
+  const t = pieceAt(e.clientX, e.clientY);
+  dom.style.cursor = t && t.at && appAt(t.key, ...t.at) ? 'move' : '';
+});
+let hoverAt = 0;
+const endAppDrag = (e) => {
+  if (appDrag && e.pointerId === appDrag.id) appDrag = null;
+};
+dom.addEventListener('pointerup', endAppDrag);
+dom.addEventListener('pointercancel', endAppDrag);
+
+// Archivos arrastrados desde la computadora: a la biblioteca (y, si caen
+// sobre una pieza, a esa pieza).
+const libDrop = document.getElementById('lib-drop');
+const libFile = document.getElementById('lib-file');
+document.getElementById('lib-add').addEventListener('click', () => libFile.click());
+libFile.addEventListener('change', async () => {
+  await addImages([...libFile.files]);
+  libFile.value = '';
+});
+const hasFiles = (e) => [...(e.dataTransfer?.items || [])].some((i) => i.kind === 'file');
+for (const zone of [stage, libDrop]) {
+  zone.addEventListener('dragover', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    zone.classList.add('dropping');
+  });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dropping'));
+  zone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    zone.classList.remove('dropping');
+    const t = zone === stage ? pieceAt(e.clientX, e.clientY) : null;
+    const added = await addImages([...e.dataTransfer.files]);
+    if (t && added.length === 1) assign(added[0].id, t.key, t.at);
+    if (added.length) showTab('perso');
+  });
+}
 designClear.addEventListener('click', () => {
-  clearDesign();
-  designNote.textContent = '';
-  applyLook();
+  dress.pieces = {};
+  dress.apps = [];
+  selected = null;
+  renderSlots();
+  renderApps();
+  drawEditor();
+  renderDress();
+  designNote.textContent = 'La camiseta quedó sin diseño; la biblioteca sigue.';
 });
-stage.addEventListener('dragover', (e) => {
-  if (![...e.dataTransfer.items].some((i) => i.kind === 'file')) return;
-  e.preventDefault();
-  stage.classList.add('dropping');
+
+// Al abrir: la biblioteca guardada y lo que tenía la camiseta (o, si la
+// página viene configurada con diseños, esos).
+async function initLibrary() {
+  store = await openStore();
+  const recs = store ? await store.images().catch(() => []) : [];
+  recs.sort((a, b) => a.added - b.added);
+  for (const rec of recs) {
+    try {
+      const dec = await decodeImage(rec.blob);
+      lib.set(rec.id, { id: rec.id, name: rec.name, img: dec.img, url: dec.url, app: !!rec.app, session: false });
+    } catch {
+      // Una imagen que ya no se puede leer queda afuera.
+    }
+  }
+  const cfg = Array.isArray(CONFIG.design) ? CONFIG.design.filter((d) => typeof d?.text === 'string' && typeof d?.name === 'string') : [];
+  if (cfg.length) {
+    await addImages(
+      cfg.map((d) => ({ name: d.name, blob: new Blob([d.text], { type: 'image/svg+xml' }) })),
+      { session: true },
+    );
+  } else {
+    const saved = store ? await store.getState('dress').catch(() => null) : null;
+    if (saved) {
+      for (const [k, p] of Object.entries(saved.pieces || {})) if (SLOTS.includes(k) && lib.has(p.id)) dress.pieces[k] = p;
+      dress.apps = (saved.apps || []).filter((a) => lib.has(a.id) && APP_PIECES.includes(a.piece));
+    }
+  }
+  renderLibrary();
+  renderSlots();
+  renderApps();
+  if (hasDress()) renderDress();
+}
+
+// ---------- solapas ----------
+
+const tabs = [...document.querySelectorAll('.tabs [role="tab"]')];
+function showTab(id) {
+  view.tab = id;
+  tabs.forEach((t) => {
+    const on = t.dataset.tab === id;
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+    document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+  });
+  updateHint();
+  if (id === 'perso') drawEditor();
+  try {
+    localStorage.setItem('camiseta-tab', id);
+  } catch {
+    // Sin almacenamiento: arranca siempre en Ajustes.
+  }
+}
+tabs.forEach((t, i) => {
+  t.addEventListener('click', () => showTab(t.dataset.tab));
+  t.addEventListener('keydown', (e) => {
+    const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!d) return;
+    const n = tabs[(i + d + tabs.length) % tabs.length];
+    showTab(n.dataset.tab);
+    n.focus();
+  });
 });
-stage.addEventListener('dragleave', () => stage.classList.remove('dropping'));
-stage.addEventListener('drop', async (e) => {
-  e.preventDefault();
-  stage.classList.remove('dropping');
-  const files = await readFiles(e.dataTransfer.files);
-  if (files.length) await loadFiles(files);
-});
+function updateHint() {
+  document.querySelector('.hint').textContent =
+    view.tab === 'perso'
+      ? 'Arrastrá una imagen de la biblioteca a una pieza · arrastrá un escudo para moverlo'
+      : view.mode === 'body'
+        ? 'Arrastrá sobre una camiseta para girarla · rueda o pellizco para acercar'
+        : matchMedia('(hover: none)').matches
+          ? 'Tocá la tela para moverla · arrastrá para girar cada camiseta'
+          : 'Pasá el mouse sobre la tela para moverla · arrastrá para girar cada camiseta';
+}
 
 document.getElementById('reset').addEventListener('click', () => {
   Object.assign(params, BASE_PARAMS);
@@ -1622,8 +2119,13 @@ document.getElementById('uvmap').checked = view.uvmap;
 if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
 else rebuild();
 resize();
-for (const k of KIND_NAMES) if (['emb', 'vin', 'print'].includes(CONFIG.kinds?.[k])) design.kinds[k] = CONFIG.kinds[k];
-if (typeof CONFIG.design === 'string' && CONFIG.design.includes('<svg')) loadFiles([{ name: 'diseño', text: CONFIG.design }]);
-else if (Array.isArray(CONFIG.design)) loadFiles(CONFIG.design.filter((d) => typeof d?.text === 'string'));
+let savedTab = 'ajustes';
+try {
+  savedTab = localStorage.getItem('camiseta-tab') || savedTab;
+} catch {
+  // Sin almacenamiento: Ajustes.
+}
+showTab(tabs.some((t) => t.dataset.tab === savedTab) ? savedTab : 'ajustes');
+initLibrary();
 
-window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, zoomTo, setMode, loadDesign, loadFiles, setKinds: (k) => (Object.assign(design.kinds, k), compose()), templateSVG: () => (ensureFlat(), templateSVG(built, params, colors)), design, drape: () => drape };
+window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, zoomTo, setMode, design, drape: () => drape, lib, dress, addImages, assign, renderDress, showTab, pieceAt };

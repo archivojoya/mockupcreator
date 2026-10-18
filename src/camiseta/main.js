@@ -2270,16 +2270,25 @@ function shoot(w, h, pose) {
   c.getContext('2d').drawImage(renderer.domElement, 0, 0, w, h);
   return c;
 }
-// Distancia para que entre un ancho y un alto (m, a cada lado del centro) en
-// un cuadro de esa proporción, con un poco de aire.
-function fitDistance(halfW, halfH, aspect) {
+// Pose de la lámina: mide lo que se ve de las dos camisetas (con los ganchos,
+// si cuelgan; la barra no) y acerca la cámara hasta que ocupan `fill` del
+// ancho o del alto del cuadro.
+function sheetPose(aspect, fill = 0.86) {
+  scene.updateMatrixWorld(true);
+  const pts = [];
+  const v = new THREE.Vector3();
+  for (const o of [...rigs, ...(hanging() ? supports.map((sp) => sp.curl) : [])]) {
+    o.traverseVisible((m) => {
+      const p = m.isMesh && m.geometry.attributes.position;
+      if (!p) return;
+      for (let i = 0; i < p.count; i++) pts.push(v.fromBufferAttribute(p, i).applyMatrix4(m.matrixWorld).toArray());
+    });
+  }
+  const box = new THREE.Box3().setFromArray(pts.flat());
+  const c = box.getCenter(new THREE.Vector3());
   const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  return Math.max(halfW / (t * aspect), halfH / t) * 1.08;
-}
-function pairPose(aspect) {
-  const c = new THREE.Vector3(0, view.mode === 'body' ? CENTER.y : HANG_Y + 0.04, 0);
-  const g = VIEWS[0].gap;
-  const d = fitDistance(2 * g - PAIR_MARGIN, view.mode === 'body' ? 0.46 : 0.58, aspect);
+  let d = 0;
+  for (const [x, y, z] of pts) d = Math.max(d, z - c.z + Math.abs(x - c.x) / (t * aspect * fill), z - c.z + Math.abs(y - c.y) / (t * fill));
   return { target: c, position: c.clone().add(new THREE.Vector3(0, (CAM_OFF.y * d) / CAM_OFF.z, d)) };
 }
 function sheetSpec() {
@@ -2319,7 +2328,7 @@ function makeSheet() {
     const M = 90;
     drawHeader(g, M, M * 0.8, 68);
     const [cw, ch] = [W - 40, H - 190];
-    g.drawImage(shoot(cw, ch, pairPose(cw / ch)), 20, 190);
+    g.drawImage(shoot(cw, ch, sheetPose(cw / ch)), 20, 190);
     return sheet;
   });
 }

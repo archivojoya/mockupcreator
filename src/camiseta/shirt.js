@@ -27,7 +27,7 @@ export const DEFAULTS = {
   neckDepth: 0.075, // profundidad del escote delantero
   neckStyle: 'round', // 'round' redondo · 'v' en V
   cuff: 'band', // 'band' con puño · 'none' sin puño (la manga sigue hasta el borde)
-  garment: 'tee', // 'tee' camiseta · 'muscle' musculosa (sin mangas) · 'tank' tank top (de mujer, espalda nadadora)
+  garment: 'tee', // 'tee' camiseta · 'muscle' musculosa (sin mangas) · 'basket' musculosa de básquet (sisa grande) · 'tank' tank top (de mujer, espalda nadadora)
 };
 
 // Resolución de las mallas.
@@ -81,9 +81,9 @@ function monotone(xs, ys) {
 }
 
 // Medidas del cuerpo de la prenda según los controles.
-// Musculosa: la sisa baja 4,5 cm más y el hombro de la tela termina antes (el
-// puño de la sisa sigue la línea del hombro hacia afuera), con la misma
-// pendiente.
+// Musculosa: el mismo molde de la camiseta sin mangas, con un puño en cada
+// sisa. La de básquet tiene la sisa grande: baja 4,5 cm más, entra más en el
+// frente y la espalda, y el hombro termina antes, con la misma pendiente.
 // Tank top (de mujer): cuerpo con busto, cintura y cadera; escote redondo
 // ancho y hondo; tiras de 4,5 cm; espalda nadadora (la sisa de atrás entra
 // casi hasta el centro y el escote de atrás baja en U hasta donde se juntan
@@ -91,19 +91,20 @@ function monotone(xs, ys) {
 const ARM_BAND = 0.024; // ancho del puño de la sisa
 const TANK = {
   neck: { a: 0.1, b: 0.075, bB: 0.04, c: -0.012 },
-  dropB: 0.15, // escote de atrás
-  strap: 0.045, // ancho de las tiras
-  racerGap: 0.045, // alto de la sisa de atrás donde se juntan las tiras
+  dropB: 0.085, // escote de atrás
+  strap: 0.042, // ancho de las tiras
+  racerGap: 0.09, // alto de la franja donde se juntan las tiras (borde de la sisa)
   binding: 0.009, // ancho de los vivos
   colsF: 14, // columnas de la sisa en el frente y en la espalda
-  colsB: 26,
+  colsB: 28,
 };
 export function measures(p) {
   const f = p.fit;
   const L = p.length;
-  const garment = p.garment === 'muscle' || p.garment === 'tank' ? p.garment : 'tee';
+  const garment = ['muscle', 'basket', 'tank'].includes(p.garment) ? p.garment : 'tee';
   const sleeveless = garment !== 'tee';
   const tank = garment === 'tank';
+  const basket = garment === 'basket';
   const M = {
     L,
     fit: f,
@@ -119,13 +120,13 @@ export function measures(p) {
     // espalda, no se mete hacia el cuello.
     deepNeck: tank,
     shY: -0.046, // altura de la punta del hombro
-    pitY: (tank ? -0.245 : sleeveless ? -0.25 : -0.205) - 0.03 * f, // altura de la axila
+    pitY: (tank ? -0.245 : basket ? -0.25 : -0.205) - 0.03 * f, // altura de la axila
     n: 2.35, // exponente de los cortes (2 = elipse)
     garment,
     sleeveless,
     armBand: tank ? TANK.binding : ARM_BAND,
-    armCols: tank ? TANK.colsF : sleeveless ? 12 : ARM_COLS, // sin mangas, la sisa entra más en el frente y la espalda
-    armColsB: tank ? TANK.colsB : sleeveless ? 12 : ARM_COLS,
+    armCols: tank ? TANK.colsF : basket ? 12 : ARM_COLS, // la de básquet entra más en el frente y la espalda
+    armColsB: tank ? TANK.colsB : basket ? 12 : ARM_COLS,
     racer: tank,
     strap: TANK.strap,
     racerGap: TANK.racerGap,
@@ -133,8 +134,8 @@ export function measures(p) {
     // abajo (más suelta, menos relieve y cae más derecho).
     bust: tank ? { x: 0.085, y: -0.245, h: 0.042 * (1 - 0.4 * f), sx: 0.045, sUp: 0.12, sDown: 0.05 + 0.07 * f } : null,
   };
-  const shA = tank ? M.neck.a + TANK.strap : sleeveless ? 0.188 + 0.026 * f : 0.214 + 0.032 * f; // medio ancho de hombros
-  if (sleeveless) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
+  const shA = tank ? M.neck.a + TANK.strap : basket ? 0.188 + 0.026 * f : 0.214 + 0.032 * f; // medio ancho de hombros
+  if (tank || basket) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
   const aC = 0.176 + 0.046 * f; // medio ancho y media profundidad del pecho
   const bC = 0.112 + 0.022 * f;
   // Tank top: pecho (sin el busto), cintura y cadera.
@@ -385,7 +386,7 @@ function buildTorso(M) {
 // tiras (si bajara hacia ahí, en la costura del costado quedaría una punta
 // que, colgada, arma bolsas bajo la sisa). Las esquinas del hueco se
 // redondean en la grilla (superelipse) antes de ubicar cada punto.
-const RACER_E = 4;
+const RACER_E = 2.2;
 function buildRacerTorso(M) {
   const N = ROWS_LOW + ROWS_ARM + ROWS_TOP;
   const i1 = ROWS_LOW;
@@ -440,16 +441,19 @@ function buildRacerTorso(M) {
   const hw = (AF + AB) / 2;
   const ic = (i1 + i2) / 2;
   const hh = (i2 - i1) / 2;
+  // Corrimiento (filas, columnas) que redondea la sisa centrada en jc; las
+  // dos sisas de una pieza se suman (una tras otra, la segunda torcería la
+  // primera y no quedarían iguales).
   const warp = (i, j, jc) => {
     const p = (j - jc) / hw;
     const q = (i - ic) / hh;
     const rho = Math.max(Math.abs(p), Math.abs(q));
     const r = Math.hypot(p, q);
-    if (rho >= 1.8 || r < 1e-9) return [i, j];
+    if (rho >= 1.8 || r < 1e-9) return [0, 0];
     const top = q > 0 ? clamp01((N - i) / (N - i2)) : 1;
     const R = ((Math.abs(p) / r) ** RACER_E + (Math.abs(q) / r) ** RACER_E) ** (-1 / RACER_E);
-    const k = lerp(1, (R * rho) / r, (1 - smoothstep(1, 1.8, rho)) * top);
-    return [ic + q * k * hh, jc + p * k * hw];
+    const k = lerp(1, (R * rho) / r, (1 - smoothstep(1, 1.8, rho)) * top) - 1;
+    return [q * k * hh, p * k * hw];
   };
   const panels = {};
   for (const key of ['front', 'back']) {
@@ -466,7 +470,11 @@ function buildRacerTorso(M) {
     for (let i = 0; i <= N; i++) {
       for (let j = 0; j <= COLS; j++) {
         let [ii, jj] = [i, j];
-        for (const jc of centers) [ii, jj] = warp(ii, jj, jc);
+        for (const jc of centers) {
+          const [di, dj] = warp(i, j, jc);
+          ii += di;
+          jj += dj;
+        }
         const th = th0 + (Math.PI * jj) / COLS;
         torsoPoint(M, th, tOf(ii, th), tmp);
         const k = i * W + j;
@@ -1326,15 +1334,17 @@ function buildLip(ring, height, closed) {
   return { pos, uv, idx: orient(pos, idx, (x, y, z) => [x - center.x, y - center.y, z - center.z]) };
 }
 
-// Puño de la sisa (musculosa): una tira doble cosida al borde que entra en el
-// hueco de la sisa hacia su centro, como un aro en la boca de la sisa (si
-// siguiera la tela, en el hombro saldría hacia afuera y los dos lados se
-// cruzarían en la punta): cara de afuera, borde redondeado y cara de
+// Puño de la sisa (musculosa): una tira doble cosida al borde que sigue la
+// tela hacia el hueco de la sisa (hacia su centro se veía metido para
+// adentro), salvo en la punta del hombro: ahí seguir la tela lo sacaría
+// hacia afuera como una aleta, así que va bajando hacia el centro de la
+// sisa, como alrededor del brazo. Cara de afuera, borde redondeado y cara de
 // adentro, que sigue un poco por dentro de la prenda. Colgada, la sisa se
-// aplasta y el aro quedaría de canto: ahí el puño sigue la tela (`hang`, la
-// forma de reposo con la que lo acompaña la simulación). El vivo del tank
-// top (`flat`, angosto) sigue la tela siempre. `ring`: [posiciones, punto del
-// borde, punto de la tela que le sigue hacia adentro de la pieza, normales].
+// aplasta: el puño sigue la tela en toda la vuelta (`hang`, la forma de
+// reposo con la que lo acompaña la simulación). El vivo del tank top
+// (`flat`, angosto) sigue la tela siempre. `ring`: [posiciones, punto del
+// borde, punto de la tela que le sigue hacia adentro de la pieza, normales],
+// desde la axila (el hombro queda a mitad de la vuelta).
 function buildArmBand(ring, h, flatOnly = false) {
   const n = ring.length;
   const th = 0.0032;
@@ -1368,8 +1378,14 @@ function buildArmBand(ring, h, flatOnly = false) {
     for (let pass = 0; pass < 4; pass++) a = a.map((_, k) => a[(k - 1 + n) % n].clone().add(a[(k + 1) % n]).addScaledVector(a[k], 2).normalize());
     return a;
   };
-  ups = smoothRing(ups);
   flat = smoothRing(flat);
+  const cum = [0];
+  for (let k = 1; k < n; k++) cum.push(cum[k - 1] + E[k].distanceTo(E[k - 1]));
+  const per = cum[n - 1] + E[0].distanceTo(E[n - 1]);
+  ups = smoothRing(ups).map((d, k) => {
+    const w = 1 - smoothstep(0.06, 0.22, Math.abs(cum[k] / per - 0.5));
+    return flat[k].clone().lerp(d, w).normalize();
+  });
   const outOf = (d, k) => {
     const o = new THREE.Vector3().crossVectors(tans[k], d).normalize();
     return o.dot(nrm[k]) < 0 ? o.negate() : o;
@@ -1385,7 +1401,12 @@ function buildArmBand(ring, h, flatOnly = false) {
     let v = 0;
     for (let j = 0; j < P; j++) {
       if (j > 0) v += Math.hypot(prof[j][0] - prof[j - 1][0], prof[j][1] - prof[j - 1][1]);
-      for (const [arr, d] of [[pos, flatOnly ? flat[k] : ups[k]], [hang, flat[k]]]) q.copy(E[k]).addScaledVector(d, prof[j][0]).addScaledVector(outOf(d, k), prof[j][1]).toArray(arr, (j * SW + i) * 3);
+      // (La cola de la cara de adentro, que entra en la prenda, sigue la tela:
+      // en el hombro el puño baja y la cola atravesaría la tela.)
+      for (const [arr, d0] of [[pos, flatOnly ? flat[k] : ups[k]], [hang, flat[k]]]) {
+        const d = prof[j][0] < 0 ? flat[k] : d0;
+        q.copy(E[k]).addScaledVector(d, prof[j][0]).addScaledVector(outOf(d, k), prof[j][1]).toArray(arr, (j * SW + i) * 3);
+      }
       uv[(j * SW + i) * 2] = u;
       uv[(j * SW + i) * 2 + 1] = v;
     }

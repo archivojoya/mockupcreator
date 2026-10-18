@@ -194,6 +194,11 @@ body {
   border-radius: 9px;
   padding: 3px;
 }
+/* Cuatro opciones (las prendas): en dos filas. */
+.seg.two-rows {
+  grid-auto-flow: row;
+  grid-template-columns: 1fr 1fr;
+}
 .seg button {
   font-size: 13px;
   letter-spacing: 0.04em;

@@ -952,10 +952,12 @@ neckButtons.forEach((b) =>
     scheduleRebuild();
   }),
 );
-// Prenda: camiseta, musculosa (sin mangas, con un puño en cada sisa) o tank
-// top (de mujer, espalda nadadora). Al entrar o salir del tank top el escote
-// vuelve al típico (el del tank top es redondo y mucho más hondo).
-const garmentOf = () => (params.garment === 'muscle' || params.garment === 'tank' ? params.garment : 'tee');
+// Prenda: camiseta, musculosa (el molde de la camiseta sin mangas, con un
+// puño en cada sisa), musculosa de básquet (sisa grande) o tank top (de
+// mujer, espalda nadadora). Al entrar o salir del tank top el escote vuelve
+// al típico (el del tank top es redondo y mucho más hondo).
+const GARMENT_NAMES = { muscle: 'Musculosa', basket: 'Musculosa de básquet', tank: 'Tank top' };
+const garmentOf = () => (params.garment in GARMENT_NAMES ? params.garment : 'tee');
 const sleeveless = () => garmentOf() !== 'tee';
 const neckRange = () => (params.garment === 'tank' ? NECK.tank : NECK[params.neckStyle] || NECK.round);
 const garmentButtons = [...document.querySelectorAll('[data-garment]')];
@@ -2355,7 +2357,7 @@ function sheetPose(aspect, fill = 0.86) {
 }
 function sheetSpec() {
   const w = WEAVES[fabric.weave] || WEAVES.mesh;
-  return [...(sleeveless() ? [garmentOf() === 'tank' ? 'Tank top' : 'Musculosa'] : []), w.label, fabric.finish === 'satin' ? 'satinada' : 'mate', FOUT.weight(fabric.weight), `calce ${OUT.fit(params.fit).toLowerCase()}`, `largo ${fmtCm(params.length)}`, `cuello ${params.neckStyle === 'v' ? 'en V' : 'redondo'}`].join(' · ');
+  return [...(sleeveless() ? [GARMENT_NAMES[garmentOf()]] : []), w.label, fabric.finish === 'satin' ? 'satinada' : 'mate', FOUT.weight(fabric.weight), `calce ${OUT.fit(params.fit).toLowerCase()}`, `largo ${fmtCm(params.length)}`, `cuello ${params.neckStyle === 'v' ? 'en V' : 'redondo'}`].join(' · ');
 }
 function drawHeader(g, x, y, size) {
   const css = getComputedStyle(document.documentElement);

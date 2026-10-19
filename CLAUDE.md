@@ -42,11 +42,13 @@ Es un mockup: manda cómo se ve, no la física exacta.
   recta desde la punta tangente a la curva; medir el desvío de cada borde a la
   cuerda desde la punta, vista de frente.
 - Una variante nueva parte de lo que ya funciona: la V es el redondo con las
-  patas algo más rectas y una costura en la punta, y todo lo demás (tira,
-  caída colgada) es el del redondo. La tela de referencia llega al escote casi
-  horizontal hacia la garganta: un corte que la cruza o pasa apenas encima se
-  va hacia atrás (la V honda anterior se hundía y se caía colgada). Medir el
-  hondo del escote puesto y colgado: el redondo baja 0,4 cm.
+  patas algo más rectas, una costura en la punta y la tira acostada. Puesta,
+  la camiseta tiene que ser la del redondo (medir la distancia de la tela a la
+  del redondo: 0 salvo junto al escote). La tela de referencia llega al
+  escote casi horizontal hacia la garganta: en el redondo la tapa la tira
+  parada; donde queda a la vista (bajo la punta y las patas de la V) es una
+  hundidura, y la tela sigue derecha en ese último tramo. Medir el hondo del
+  escote puesto y colgado: el redondo baja 0,4 cm.
 - Ondas de una celda en la tela colgada son la malla, no la tela: la flexión
   tiene que resistir la compresión (medir el residuo de cada fila contra su
   versión suavizada, no la curva entera).

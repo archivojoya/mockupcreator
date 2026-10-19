@@ -799,10 +799,13 @@ export class HangingShirt {
       [ring, CLIPS_BAND_SEAM],
       [band, CLIPS_BAND_SIDE],
     ])
-      for (const id of list) {
+      list.forEach((id, k) => {
         const sd = smoothstep(BAND_SIDE[0], BAND_SIDE[1], Math.abs(P[id * 3]) / half);
-        this.bandK[id] = this.bandStiff + (side - this.bandStiff) * sd;
-      }
+        // (En V, adelante no: la punta guardaba su forma puesta y la tela de
+        // abajo, que cae, hacía un pliegue en V bajo la punta.)
+        const keep = built.measures.vNeck && k <= C ? 0 : this.bandStiff;
+        this.bandK[id] = keep + (side - keep) * sd;
+      });
     this.bandWin = Int32Array.from(win);
     this.bandWinRest = Float32Array.from(winRest);
     this.bandWinQ = Array.from({ length: K }, () => new THREE.Quaternion());

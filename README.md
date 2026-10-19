@@ -94,20 +94,26 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   con las patas algo más rectas (su curva con un 40 % de la recta de cada
   punto del hombro a la punta), la punta en el medio y al mismo hondo, y una
   costura en inglete en la tira: cada mitad llega hasta el medio y ahí se
-  corta (parada, el borde de arriba de cada mitad pasaba al otro lado). Todo
-  lo demás es el redondo: la misma tira parada, la misma caída colgada (7,5
-  cm puesta, 8,2 colgada; el redondo, 8) y los mismos tres hondos de escote
-  (7,5, 9 y 12 cm). Sobre el escote de referencia, la tela de más de la V sube enseguida
-  (dobla con 3 mm de radio, el redondo con 1,2 cm): la tela de referencia
-  llega al escote casi horizontal hacia la garganta y, siguiéndola, junto a
-  la punta las patas se iban 4 mm hacia atrás. Con escote hondo (V o redondo
-  más hondo que 7,5 cm) la tira se va acostando sobre el pecho donde el corte
-  pasa por debajo del de referencia (del todo 3 cm más abajo): parada, junto a
-  la punta quedaba por delante de la tela (ahí el pecho va inclinado) y más
-  arriba se inclinaba hacia atrás, y torcida a lo largo de la pata hacía un
-  quiebre con tela de más en el borde de arriba. (La V anterior, una V honda
-  cortada en la misma tela, pasaba por donde esa tela se curva hacia el
-  cuello: se hundía, se caía colgada y la tira se armaba mal en la punta.)
+  corta. Los tres hondos de escote son los mismos (7,5, 9 y 12 cm). En V la
+  tira va acostada en todo el frente, con cualquier hondo, y se para recién
+  junto al hombro (entre la mitad y el 80 % del ancho del cuello); en cada
+  tramo su borde de arriba mide como mucho lo que la costura (no sobra tela
+  que la doble). Puesta, la camiseta es la del redondo salvo los últimos 8 mm
+  junto al escote: ahí la tela de referencia se curva hacia el cuello casi
+  horizontal (en el redondo la tapa la tira parada; en la V quedaba a la vista
+  bajo la punta y las patas como una hundidura), y la de la V sigue derecha
+  con la dirección que traía (del todo en el medio, nada en el hombro). El
+  molde de estampado no cambia. Colgada de broches, la tira de adelante de la
+  V no guarda su forma puesta (la punta la guardaba y la tela de abajo, que
+  cae, hacía un pliegue en V bajo la punta). Colgada baja como el redondo
+  hondo: 7,5 → 8,6 cm con percha, 8,3 con broches (el redondo, 8). Con el
+  redondo más hondo que 7,5 cm la tira se va acostando sobre el pecho donde el
+  corte pasa por debajo del de referencia (del todo 3 cm más abajo): parada,
+  junto a la punta quedaba por delante de la tela y, torcida a lo largo de la
+  pata, hacía un quiebre con tela de más en el borde de arriba. (La V
+  anterior, una V honda cortada en la misma tela, pasaba por donde esa tela se
+  curva hacia el cuello: se hundía, se caía colgada y la tira se armaba mal en
+  la punta.)
 - **Tela**: siete tejidos (malla deportiva, piqué, panal, jersey liso,
   acanalada, jacquard con rayas tono sobre tono y microperforada con zonas
   caladas a los costados y bajo los brazos), más dos controles:

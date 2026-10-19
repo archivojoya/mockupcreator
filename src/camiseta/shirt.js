@@ -303,6 +303,28 @@ function backZ(M, x, y) {
 // tiene por encima del de referencia (un redondo más alto, las patas de la V
 // junto al hombro).
 function torsoPoint(M, th, t, out) {
+  const cs = Math.cos(th);
+  if (!M.vNeck || cs <= 0) return torsoBase(M, th, t, out);
+  // Cuello en V: en el último tramo hacia el escote de referencia
+  // (VEE_FLAT_U del recorrido de la curva hacia el cuello: unos 8 mm de alto
+  // en el medio) la tela de referencia se curva hacia el cuello casi
+  // horizontal. En el redondo la tapa la tira parada; en la V quedaba a la
+  // vista bajo la punta y las patas, como una hundidura. Ahí la tela de la V
+  // sigue derecha, con la dirección que traía (del todo en el medio, nada en
+  // el hombro). El molde de estampado no cambia (sale del redondo).
+  const del = lerp(-M.shY, 0.075, cs * cs);
+  const t0 = 1 - (VEE_FLAT_U * del) / (refY(M, th) + M.L);
+  if (t <= t0) return torsoBase(M, th, t, out);
+  const h = 1e-4;
+  const a = torsoBase(M, th, t0, [0, 0, 0]);
+  const b = torsoBase(M, th, t0 - h, [0, 0, 0]);
+  torsoBase(M, th, t, out);
+  const g = cs * cs;
+  for (let c = 0; c < 3; c++) out[c] = lerp(out[c], a[c] + ((a[c] - b[c]) / h) * (t - t0), g);
+  return out;
+}
+const VEE_FLAT_U = 0.27;
+function torsoBase(M, th, t, out) {
   if (t > 1) return torsoAbove(M, th, t, out);
   const yn = refY(M, th);
   const y = lerp(-M.L, yn, t);
@@ -341,8 +363,8 @@ const NECK_EXT_R = 0.012;
 const NECK_EXT_RV = 0.003;
 function torsoAbove(M, th, t, out) {
   const h = 1e-4;
-  const p1 = torsoPoint(M, th, 1, [0, 0, 0]);
-  const p0 = torsoPoint(M, th, 1 - h, [0, 0, 0]);
+  const p1 = torsoBase(M, th, 1, [0, 0, 0]);
+  const p0 = torsoBase(M, th, 1 - h, [0, 0, 0]);
   const T = [(p1[0] - p0[0]) / h, (p1[1] - p0[1]) / h, (p1[2] - p0[2]) / h];
   const v = Math.hypot(...T) || 1e-9;
   const s = (t - 1) * v;
@@ -387,7 +409,8 @@ function tAtX(M, th, t0, x) {
 // no corta nada. La V es el redondo con las patas algo más rectas: su curva
 // mezclada con la recta de cada punto del hombro a la punta, que queda en el
 // medio y al mismo hondo (la tira lleva ahí una costura, ver seamMarks). La
-// prenda y la tira se portan como en el redondo. (Una V honda cortada en la
+// prenda es la del redondo (salvo el último tramo hacia el cuello, ver
+// torsoPoint) y la tira va acostada (ver buildCollar). (Una V honda cortada en la
 // tela de referencia pasa por donde esa tela se curva hacia el cuello: se
 // hundía, se caía colgada y la tira se armaba mal en la punta.) Junto al
 // hombro se redondea el último pedacito de la recta.
@@ -396,6 +419,7 @@ const VEE_STRAIGHT = 0.4; // cuánto de la recta llevan las patas (0 = redondo, 
 // El escote de referencia visto de frente (el redondo de NECK_REF).
 const refCutY = (M, ax) => -M.refF * (1 - Math.min(1, ax / M.neck.a) ** 2) ** 0.8;
 const NECK_LIE = 0.03; // cuánto más abajo que la referencia la tira va del todo acostada
+const VEE_LIE = [0.5, 0.8]; // en V, entre qué fracciones del ancho del cuello la tira pasa de acostada a parada
 const cutY = (M, ax) => {
   const r = Math.min(1, ax / M.neck.a);
   const round = (1 - r * r) ** 0.8;
@@ -1685,10 +1709,13 @@ function buildCollar(M, neck, tip) {
   // (del todo NECK_LIE más abajo): parada, junto a la punta quedaba delante de
   // la tela (el pecho ahí va inclinado) y más arriba se inclinaba hacia atrás;
   // torcida a lo largo de la pata, hacía un quiebre con tela de más arriba.
+  // En V va acostada en todo el frente, con cualquier escote (parada en las
+  // patas, junto a la punta se doblaba): se para recién junto al hombro.
   if (!flat)
     ups = ups.map((u, k) => {
       const ax = Math.abs(base[k].x);
-      const f = base[k].z > 0 && ax < M.neck.a ? smoothstep(0, NECK_LIE, refCutY(M, ax) - cutY(M, ax)) : 0;
+      const deep = smoothstep(0, NECK_LIE, refCutY(M, ax) - cutY(M, ax));
+      const f = base[k].z > 0 && ax < M.neck.a ? Math.max(deep, M.vNeck ? 1 - smoothstep(VEE_LIE[0], VEE_LIE[1], ax / M.neck.a) : 0) : 0;
       if (f <= 0) return u;
       const lie = along(new THREE.Vector3().subVectors(base[k], below[k]).normalize(), k);
       return along(u.clone().lerp(lie, f).normalize(), k);

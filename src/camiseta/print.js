@@ -16,7 +16,14 @@ export const PIECES = [
   { key: 'cuffR', w: 500, h: 50, ax: 250, ay: 10 },
   { key: 'cuffL', w: 500, h: 50, ax: 250, ay: 10 },
   { key: 'collar', w: 1240, h: 75, ax: 620, ay: 65 },
+  // Short: cada pierna con su cintura (el anclaje es la cintura en el
+  // costado; arriba, la cintura y el tiro).
+  { key: 'legR', w: 620, h: 500, ax: 310, ay: 90 },
+  { key: 'legL', w: 620, h: 500, ax: 310, ay: 90 },
 ];
+// Piezas que llevan el mismo estampado que otra (la cintura del short, el
+// de su pierna).
+export const PRINT_WITH = { waistR: 'legR', waistL: 'legL' };
 const PX_PER_MM = 2.5;
 const MAX_PX = 4096;
 export const pieceK = (key) => {
@@ -113,12 +120,18 @@ const NAMES = [
   ['cuff', /pu[ñn]o|cuff/i],
   ['tape', /tapa ?costura|tapa ?cuello|tape|cinta/i],
   ['collar', /cuello|collar/i],
+  ['leg', /pierna|leg|short/i],
 ];
-export const PIECE_LABELS = { front: 'Frente', back: 'Espalda', sleeveL: 'Manga izquierda', sleeveR: 'Manga derecha', cuffL: 'Puño izquierdo', cuffR: 'Puño derecho', collar: 'Cuello', tape: 'Tapacostura', label: 'Etiqueta' };
+export const PIECE_LABELS = { front: 'Frente', back: 'Espalda', sleeveL: 'Manga izquierda', sleeveR: 'Manga derecha', cuffL: 'Puño izquierdo', cuffR: 'Puño derecho', collar: 'Cuello', tape: 'Tapacostura', label: 'Etiqueta', legR: 'Pierna 1 (derecha)', legL: 'Pierna 2 (izquierda)' };
 export function pieceKeys(name) {
   name = name.normalize('NFC');
   for (const [base, re] of NAMES) {
     if (!re.test(name)) continue;
+    // Piernas: la 1 es la derecha.
+    if (base === 'leg') {
+      const side = /(^|[^a-zñ])(izq|left)|pierna ?2|leg ?2/i.test(name) ? 'L' : /(^|[^a-zñ])(der|right)|pierna ?1|leg ?1/i.test(name) ? 'R' : '';
+      return side ? ['leg' + side] : ['legR', 'legL'];
+    }
     if (base !== 'sleeve' && base !== 'cuff') return [base];
     const side = /(^|[^a-zñ])(izq|left)/i.test(name) ? 'L' : /(^|[^a-zñ])(der|right)/i.test(name) ? 'R' : '';
     return side ? [base + side] : [base + 'L', base + 'R'];
@@ -133,18 +146,22 @@ export function pieceSizes(built) {
   const out = {};
   for (const pc of PIECES) {
     if (!built.geos[pc.key]) continue; // pieza que esta prenda no tiene (mangas en la musculosa)
-    const a = built.geos[pc.key].attributes.uv1.array;
-    let n = a.length / 2;
-    if (pc.key === 'collar') n = (built.layout.rings.collar.length + 1) * (COLLAR_FOLD + 1);
     let u0 = Infinity;
     let u1 = -Infinity;
     let v0 = Infinity;
     let v1 = -Infinity;
-    for (let i = 0; i < n; i++) {
-      u0 = Math.min(u0, a[i * 2]);
-      u1 = Math.max(u1, a[i * 2]);
-      v0 = Math.min(v0, a[i * 2 + 1]);
-      v1 = Math.max(v1, a[i * 2 + 1]);
+    // (Con las piezas que llevan su mismo estampado.)
+    const keys = [pc.key, ...Object.keys(PRINT_WITH).filter((k) => PRINT_WITH[k] === pc.key && built.geos[k])];
+    for (const key of keys) {
+      const a = built.geos[key].attributes.uv1.array;
+      let n = a.length / 2;
+      if (key === 'collar') n = (built.layout.rings.collar.length + 1) * (COLLAR_FOLD + 1);
+      for (let i = 0; i < n; i++) {
+        u0 = Math.min(u0, a[i * 2]);
+        u1 = Math.max(u1, a[i * 2]);
+        v0 = Math.min(v0, a[i * 2 + 1]);
+        v1 = Math.max(v1, a[i * 2 + 1]);
+      }
     }
     const wrap = pc.key === 'collar' ? (u1 - u0) * 1000 : 0;
     out[pc.key] = { w: wrap || 2 * Math.max(-u0, u1) * 1000, h: (v1 - v0) * 1000, top: v0 * 1000, wrap };

@@ -83,6 +83,27 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     de un mismo color en el escote y las sisas. No lleva tapacostura.
   Sin mangas se ocultan el largo, la apertura, el puño y el color de las
   mangas, y sus piezas en la personalización.
+- **Short** (`src/camiseta/shorts.js`): con cuerpo, un short de fútbol debajo
+  de la camiseta (con cualquier prenda; se apaga con **Sin short**). Dos
+  piernas, cada una de una sola pieza: la tela da la vuelta desde la costura
+  del tiro de adelante, por afuera, hasta la de atrás, y debajo de la
+  entrepierna esas dos costuras se juntan (la de la entrepierna). Cada fila
+  es una superelipse: arriba la cadera entera (cada pierna, su mitad); en los
+  7 cm de arriba de la entrepierna se corre hacia afuera y se achica con el
+  borde de afuera derecho, hasta tocar el medio justo en la entrepierna; más
+  abajo, cada pierna sola, separadas 4 cm en el ruedo y 10 % más anchas que
+  la cadera. Cintura en -53 cm (la tapa la camiseta), entrepierna en -78 y
+  ruedo en -93 (39 cm de costado). Debajo de la camiseta la cadera queda al
+  menos 5 mm adentro de su tela en su parte más angosta (si no, asoma); al
+  salir del ruedo se ensancha en 3 cm hasta casi su ancho. El ruedo es como
+  el puño de la manga (las 4 filas de abajo, 2,2 cm, apoyadas 1,2 mm por
+  fuera, con su dobladillo) y la cintura elástica, las 7 de arriba (3,9 cm).
+  Colores: pierna 1 (la derecha de quien lo lleva), pierna 2, ruedo 1 y
+  ruedo 2; cada mitad de la cintura, del color de su pierna. Estampado: un
+  molde por pierna (con su cintura), visto de afuera, con el anclaje en la
+  cintura en el costado; una imagen que se llame «pierna 1», «pierna
+  derecha» o «leg 1» va a la pierna 1 (sin número, a las dos). Con el short
+  la vista con cuerpo baja y se aleja un poco. Colgada, en la percha no va.
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
   de mangas, puño (con puño, o sin puño: la manga sigue hasta el borde con su
   color y su diseño, sin costura), cuello (redondo o en V) y profundidad del
@@ -131,7 +152,7 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
 - **Panel en tres solapas**: **Ajustes** (forma, tela, luz y ficha),
   **Colores** y **Personalización**. La presentación (con cuerpo, en percha,
   con broches) queda arriba, en todas. La página recuerda la última solapa.
-- **Colores** por parte: cuerpo, mangas, cuello y puños (con un diseño
+- **Colores** por parte: cuerpo, mangas, cuello y puños, y del short piernas y ruedos (con un diseño
   cargado, el color queda donde la imagen es transparente).
 - **Personalización** (`src/camiseta/print.js`, `src/camiseta/library.js`):
   - **Biblioteca**: se agregan imágenes (PNG, JPG, WebP o SVG) con el botón o

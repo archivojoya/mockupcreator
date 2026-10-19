@@ -31,6 +31,7 @@ export const DEFAULTS = {
   neckStyle: 'round', // 'round' redondo · 'v' en V
   cuff: 'band', // 'band' con puño · 'none' sin puño (la manga sigue hasta el borde)
   garment: 'tee', // 'tee' camiseta · 'muscle' musculosa (sin mangas) · 'basket' musculosa de básquet (sisa grande) · 'tank' tank top (de mujer, espalda nadadora)
+  short: true, // con cuerpo, el short de fútbol debajo (ver shorts.js)
 };
 
 // Resolución de las mallas.
@@ -847,7 +848,7 @@ function torsoFolds(M, x, y, z, th, armpits) {
 
 // ---------- utilidades de malla ----------
 
-function computeNormals(pos, idx) {
+export function computeNormals(pos, idx) {
   const n = new Float32Array(pos.length);
   for (let t = 0; t < idx.length; t += 3) {
     const a = idx[t] * 3;
@@ -880,7 +881,7 @@ function computeNormals(pos, idx) {
 // Cara de adelante hacia afuera de la prenda: ¿hay que dar vuelta los
 // triángulos? out(x, y, z) da la dirección "afuera"; `only` limita los
 // vértices que cuentan.
-function inverted(pos, idx, out, only = null) {
+export function inverted(pos, idx, out, only = null) {
   const nrm = computeNormals(pos, idx);
   let s = 0;
   for (let v = 0; v < pos.length / 3; v++) {
@@ -890,11 +891,11 @@ function inverted(pos, idx, out, only = null) {
   }
   return s < 0;
 }
-function flip(idx) {
+export function flip(idx) {
   for (let t = 0; t < idx.length; t += 3) [idx[t + 1], idx[t + 2]] = [idx[t + 2], idx[t + 1]];
   return idx;
 }
-function orient(pos, idx, out, only) {
+export function orient(pos, idx, out, only) {
   return inverted(pos, idx, out, only) ? flip(idx) : idx;
 }
 const fromVertical = (x, y, z) => [x, 0, z];
@@ -951,7 +952,7 @@ function smoothSurface(parts, r = 0.01) {
 
 // Las normales de puntos que coinciden en distintas piezas (costuras) se
 // promedian: la prenda se ve continua.
-function weldNormals(parts) {
+export function weldNormals(parts) {
   const map = new Map();
   const key = (p, k) => `${Math.round(p[k] * 2e5)},${Math.round(p[k + 1] * 2e5)},${Math.round(p[k + 2] * 2e5)}`;
   for (const part of parts) {
@@ -980,7 +981,7 @@ function weldNormals(parts) {
 }
 
 // Grilla (columnas × filas) a partir de una función de posición.
-function gridIndex(cols, rows, W) {
+export function gridIndex(cols, rows, W) {
   const idx = [];
   for (let r = 0; r < rows; r++)
     for (let k = 0; k < cols; k++) {
@@ -995,7 +996,7 @@ function gridIndex(cols, rows, W) {
 
 // UV en metros: u acumulado a lo largo de las filas desde la columna c0, v
 // acumulado a lo largo de las columnas desde la fila 0.
-function gridUV(pos, W, H, c0 = 0) {
+export function gridUV(pos, W, H, c0 = 0) {
   const uv = new Float32Array(W * H * 2);
   const d = (a, b) => Math.hypot(pos[a * 3] - pos[b * 3], pos[a * 3 + 1] - pos[b * 3 + 1], pos[a * 3 + 2] - pos[b * 3 + 2]);
   for (let r = 0; r < H; r++) {
@@ -1757,7 +1758,7 @@ function buildCollar(M, neck, tip) {
 
 // Dobladillo: desde el borde, la tela se da vuelta hacia adentro y sube.
 // ring: [posiciones, índice del borde, índice de la fila de arriba].
-function buildLip(ring, height, closed) {
+export function buildLip(ring, height, closed) {
   const n = ring.length;
   const prof = [[0, 0], [-0.0008, -0.0009], [-0.0003, -0.0021], [0.002, -0.0024], [height, -0.0024]];
   const P = prof.length;

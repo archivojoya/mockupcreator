@@ -3,13 +3,14 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS, flattenPrint } from './shirt.js';
+import { buildShorts } from './shorts.js';
 import { makeHanger, makeClipHanger, HangingShirt, RAIL_R } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
-import { printTexture, pieceSizes, pieceCanvases, pieceOutline, coverRect, BLEED, placeTape, placeLabel, buildApplique, pieceKeys, PIECE_LABELS, PIECES } from './print.js';
+import { printTexture, pieceSizes, pieceCanvases, pieceOutline, coverRect, BLEED, placeTape, placeLabel, buildApplique, pieceKeys, PIECE_LABELS, PIECES, PRINT_WITH } from './print.js';
 import { openStore, decodeImage, transparency, newId } from './library.js';
 import './style.css';
 
-const COLORS = { body: '#c81e3a', sleeves: '#c81e3a', collar: '#17191d', cuffs: '#17191d' };
+const COLORS = { body: '#c81e3a', sleeves: '#c81e3a', collar: '#17191d', cuffs: '#17191d', leg1: '#17191d', leg2: '#17191d', hem1: '#c81e3a', hem2: '#c81e3a' };
 // Pieza → grupo de color, textura de relieve y nombre en el mapa de estampado.
 // Los dobladillos (`lining`) van del color del revés de su pieza.
 const PARTS = {
@@ -28,12 +29,27 @@ const PARTS = {
   // top son vivos, del color del vivo del escote).
   armL: { color: 'cuffs', band: true },
   armR: { color: 'cuffs', band: true },
+  // Short (con cuerpo): la pierna 1 es la derecha de quien lo lleva; cada
+  // mitad de la cintura, del color de su pierna; los ruedos, como puños.
+  legR: { color: 'leg1', label: 'PIERNA 1' },
+  legL: { color: 'leg2', label: 'PIERNA 2' },
+  waistR: { color: 'leg1' },
+  waistL: { color: 'leg2' },
+  waistLip: { color: 'leg1', lining: 'legR' },
+  hemR: { color: 'hem1', label: 'RUEDO 1' },
+  hemL: { color: 'hem2', label: 'RUEDO 2' },
+  hemRLip: { color: 'hem1', lining: 'hemR' },
+  hemLLip: { color: 'hem2', lining: 'hemL' },
 };
+// Colores que se eligen (id del control → grupo).
+const SWATCHES = { body: 'c-body', sleeves: 'c-sleeves', collar: 'c-collar', cuffs: 'c-cuffs', leg1: 'c-leg1', leg2: 'c-leg2', hem1: 'c-hem1', hem2: 'c-hem2' };
 // Las piezas que la prenda no tiene (mangas en la musculosa, puños de sisa
 // en la camiseta) quedan con una geometría vacía y ocultas.
 const NO_GEO = new THREE.BufferGeometry();
 const CENTER = new THREE.Vector3(0, -0.36, 0);
 const HANG_Y = -0.38; // centro de la vista colgada
+const SHORT_CENTER_Y = -0.48; // centro de la vista con cuerpo y short
+const SHORT_CAM = 1.12; // con el short, la cámara se aleja así
 const CAM_OFF = new THREE.Vector3(0, 0.08, 2.15); // cámara respecto del centro, de entrada
 // Dos camisetas lado a lado (la misma, simulada una vez y dibujada dos
 // veces): de entrada una muestra el frente y la otra la espalda; en
@@ -425,7 +441,7 @@ for (const [k, def] of Object.entries(PARTS)) {
   [mesh, twin].forEach((m, i) => {
     m.castShadow = m.receiveShadow = true;
     m.userData.rig = rigs[i].userData.inner;
-    m.userData.piece = k === 'hem' ? 'hem' : def.lining || k;
+    m.userData.piece = k === 'hem' ? 'hem' : PRINT_WITH[k] || def.lining || k;
     rigs[i].userData.inner.add(m);
   });
   meshes[k] = mesh;
@@ -763,8 +779,11 @@ function fitPair() {
   else rigs.forEach((rig, j) => (rig.position.x = (j ? 1 : -1) * VIEWS[view.pair].gap));
   syncCurls();
 }
+// El short va con cuerpo (colgada, en la percha no va).
+const withShort = () => params.short !== false && view.mode === 'body';
 function rebuild() {
   built = buildShirt(params);
+  if (withShort()) Object.assign(built.geos, buildShorts(built.measures));
   fitPair();
   for (const [k, mesh] of Object.entries(meshes)) {
     if (mesh.geometry !== NO_GEO) mesh.geometry.dispose();
@@ -831,10 +850,11 @@ function applyLook() {
     m.userData.own.appColor.value = app ? app.color : blankTex;
     m.userData.own.appShape.value = app ? app.shape : blankTex;
     if (app) m.userData.own.appTransform.value.copy(app.matrix);
-    if (!view.uvmap && design.textures[k]) {
-      m.map = design.textures[k];
+    const pk = PRINT_WITH[k] || k;
+    if (!view.uvmap && design.textures[pk]) {
+      m.map = design.textures[pk];
       m.color.set(color);
-      m.userData.own.insideColor.value.copy(design.inside[k] || m.color);
+      m.userData.own.insideColor.value.copy(design.inside[pk] || m.color);
     } else if (view.uvmap && def.label) {
       const uv = mesh.geometry.attributes.uv.array;
       let u0 = Infinity;
@@ -919,6 +939,9 @@ function syncControls() {
   document.getElementById('depth-control').hidden = tank;
   document.getElementById('neckDepth-control').hidden = !tank;
   depthButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.depth === params.neckDepth)));
+  shortButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.short === (params.short === false ? 'off' : 'on'))));
+  document.getElementById('short-control').hidden = view.mode !== 'body';
+  for (const sw of document.querySelectorAll('.sw-short')) sw.hidden = !withShort();
   document.getElementById('c-sleeves').closest('.swatch').hidden = bare;
   document.getElementById('sw-cuffs').hidden = tank || (!bare && params.cuff === 'none');
   document.getElementById('c-collar-label').textContent = tank ? 'Vivos' : 'Cuello';
@@ -927,7 +950,7 @@ function syncControls() {
   spinButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.spin === view.spin)));
   document.getElementById('weave-note').textContent = (WEAVES[fabric.weave] || WEAVES.mesh).note;
   lightButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.light === view.light)));
-  for (const [k, id] of Object.entries({ body: 'c-body', sleeves: 'c-sleeves', collar: 'c-collar', cuffs: 'c-cuffs' })) document.getElementById(id).value = colors[k];
+  for (const [k, id] of Object.entries(SWATCHES)) document.getElementById(id).value = colors[k];
 }
 let pending = false;
 function scheduleRebuild() {
@@ -957,6 +980,21 @@ neckButtons.forEach((b) =>
     params.neckStyle = b.dataset.neck;
     syncControls();
     scheduleRebuild();
+  }),
+);
+// Short: con cuerpo, debajo de la camiseta.
+const shortButtons = [...document.querySelectorAll('[data-short]')];
+shortButtons.forEach((b) =>
+  b.addEventListener('click', () => {
+    const on = b.dataset.short === 'on';
+    if ((params.short !== false) === on) return;
+    params.short = on;
+    syncControls();
+    rebuild();
+    renderSlots();
+    if (hasDress()) renderDress();
+    const { target, position } = homePose();
+    flyTo(target, position);
   }),
 );
 const depthButtons = [...document.querySelectorAll('[data-depth]')];
@@ -1061,7 +1099,7 @@ function setLight(name) {
   requestRender();
 }
 lightButtons.forEach((b) => b.addEventListener('click', () => setLight(b.dataset.light)));
-for (const [k, id] of Object.entries({ body: 'c-body', sleeves: 'c-sleeves', collar: 'c-collar', cuffs: 'c-cuffs' })) {
+for (const [k, id] of Object.entries(SWATCHES)) {
   document.getElementById(id).addEventListener('input', (e) => {
     colors[k] = e.target.value;
     applyLook();
@@ -1085,16 +1123,16 @@ document.getElementById('uvmap').addEventListener('change', (e) => {
 const modeButtons = [...document.querySelectorAll('.mode button')];
 function setMode(mode) {
   // La colgada queda más baja (la barra y el gancho arriba, la tela
-  // estirada por su peso): la vista se centra un poco más abajo.
-  const dy = (mode === 'body' ? CENTER.y : HANG_Y) - controls.target.y;
-  controls.target.y += dy;
-  camera.position.y += dy;
-  lightTarget.position.y = controls.target.y;
-  controls.update();
+  // estirada por su peso): la vista se centra un poco más abajo; con
+  // cuerpo y short, más abajo y más lejos.
   view.mode = mode;
+  snapHome();
   modeButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
   updateHint();
+  syncControls();
   rebuild();
+  renderSlots();
+  if (hasDress()) renderDress();
 }
 modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
 
@@ -1227,7 +1265,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 // no se guardan.
 const lib = new Map();
 const dress = { pieces: {}, apps: [], free: false };
-const SLOTS = ['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR', 'collar', 'tape', 'label'];
+const SLOTS = ['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR', 'collar', 'legR', 'legL', 'tape', 'label'];
 const APP_PIECES = ['front', 'back', 'sleeveL', 'sleeveR'];
 // Nombre de una pieza (en el tank top, el cuello es el vivo del escote).
 const pieceLabel = (k) => (k === 'collar' && built.measures.deepNeck ? 'Vivo del escote' : PIECE_LABELS[k]);
@@ -1253,7 +1291,7 @@ const BACK_RANGE = [30, 450]; // por dónde sube o baja el de la espalda
 const FREE_W = 70; // ancho de una aplicación libre al soltarla
 // El escudo va bordado; una marca o un logo, en vinilo.
 const appAs = (name) => (BRAND_NAME.test(name) ? 'vin' : 'emb');
-const SLOT_COLOR = { front: 'body', back: 'body', sleeveL: 'sleeves', sleeveR: 'sleeves', cuffL: 'cuffs', cuffR: 'cuffs', collar: 'collar', tape: 'collar' };
+const SLOT_COLOR = { front: 'body', back: 'body', sleeveL: 'sleeves', sleeveR: 'sleeves', cuffL: 'cuffs', cuffR: 'cuffs', collar: 'collar', tape: 'collar', legR: 'leg1', legL: 'leg2' };
 let store = null;
 const designNote = document.getElementById('design-note');
 const designClear = document.getElementById('design-clear');
@@ -1288,6 +1326,7 @@ const SIZE_ROWS = [
   ['sleeveR', 'Manga (cada una)'],
   ['cuffR', 'Puño (cada uno)'],
   ['collar', 'Cuello (vuelta entera)'],
+  ['legR', 'Pierna del short (cada una)'],
   ['tape', 'Tapacostura (por dentro)'],
   ['label', 'Etiqueta (ruedo, cara de afuera)'],
 ];
@@ -2191,9 +2230,24 @@ function flyTo(target, position) {
   requestRender();
 }
 const shortest = (d) => Math.atan2(Math.sin(d), Math.cos(d));
+// Vista de entrada de cada presentación: con el short, la de con cuerpo baja
+// y se aleja (entra el conjunto entero).
+function homePose() {
+  const short = withShort();
+  const target = new THREE.Vector3(0, view.mode !== 'body' ? HANG_Y : short ? SHORT_CENTER_Y : CENTER.y, 0);
+  return { target, position: target.clone().addScaledVector(CAM_OFF, short ? SHORT_CAM : 1) };
+}
+function snapHome() {
+  fly = null;
+  const { target, position } = homePose();
+  controls.target.copy(target);
+  camera.position.copy(position);
+  lightTarget.position.y = target.y;
+  controls.update();
+}
 function goToView(i) {
-  const c = new THREE.Vector3(0, view.mode === 'body' ? CENTER.y : HANG_Y, 0);
-  flyTo(c, c.clone().add(CAM_OFF));
+  const { target: c, position } = homePose();
+  flyTo(c, position);
   zoomButtons.forEach((b) => b.setAttribute('aria-pressed', 'false'));
   turn = {
     rigs: rigs.map((rig, j) => [rig.rotation.y, shortest(VIEWS[i].turn[j] - rig.rotation.y)]),
@@ -2511,7 +2565,10 @@ applyLights(view.light);
 applyFabric();
 document.getElementById('uvmap').checked = view.uvmap;
 if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
-else rebuild();
+else {
+  snapHome();
+  rebuild();
+}
 resize();
 let savedTab = 'ajustes';
 try {

@@ -28,8 +28,11 @@ Es un mockup: manda cómo se ve, no la física exacta.
   hombro): se redondea el doblez o el borde lo cruza derecho. Agrandar un
   hueco en la grilla donde la tela rinde distinto por fila lo deja en punta.
 - La percha se ve donde la prenda se apoya, sostiene casi hasta la punta del
-  hombro (más corta, la tela de arriba sobra a lo ancho y se ondula) y dentro
-  del cuello va más baja: la espalda del escote apoya arriba y la tapa.
+  hombro (más corta, la tela de arriba sobra a lo ancho y se ondula) y nunca
+  asoma a través de la tela: la madera que se ve, dentro del cuello, es más
+  baja que la que sostiene (si no, sobresale sobre la tira de atrás). Para
+  encontrarlo, tirar rayos de frente y de espaldas a la madera y ver qué tocan
+  primero.
 - Ondas de una celda en la tela colgada son la malla, no la tela: la flexión
   tiene que resistir la compresión (medir el residuo de cada fila contra su
   versión suavizada, no la curva entera).

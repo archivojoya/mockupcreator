@@ -257,23 +257,11 @@ export function girth(M, y) {
   return per;
 }
 
-// Altura del escote: baja al frente y apenas atrás. Con el exponente la curva
-// llega plana al punto del hombro (sin pico donde se juntan frente y espalda).
-// En V, adelante la recta (vista de frente) desde cada punto del hombro hasta
-// la punta se mezcla con la curva del cuello redondo: las patas se abomban un
-// poco hacia afuera y la punta queda neta. Junto al hombro se redondea el
-// último pedacito para no hacer pico donde sigue la espalda. (El escote de la
-// camiseta es un corte con esta forma, ver cutY; neckY lo usa el tank top.)
-const VEE_EASE = 0.08; // fracción del ancho que se redondea junto al hombro
-const VEE_ROUND = 0.4; // cuánto de la curva redonda llevan las patas (0 = rectas)
+// Altura del escote redondo: baja al frente y apenas atrás. Con el exponente
+// la curva llega plana al punto del hombro (sin pico donde se juntan frente y
+// espalda). (La camiseta lo corta con cutY; neckY lo usa el tank top.)
 const neckY = (M, th) => {
   const c = Math.cos(th);
-  if (c >= 0 && M.vNeck) {
-    const u = 1 - Math.abs(Math.sin(th)); // 0 en el hombro, 1 al medio
-    const e = VEE_EASE;
-    const g = ((u < e ? (u * u) / (2 * e) : u - e / 2) / (1 - e / 2)) * (1 - VEE_ROUND) + c ** 1.6 * VEE_ROUND;
-    return -M.dropF * g;
-  }
   return -(c >= 0 ? M.dropF : M.dropB) * Math.abs(c) ** 1.6;
 };
 // El escote de referencia (redondo, ver measures), hasta donde llega la tela
@@ -395,14 +383,23 @@ function tAtX(M, th, t0, x) {
 }
 // Escote del frente visto de frente: la altura del corte a la distancia ax
 // del centro (cada cuello, con el mismo ancho en el hombro). Fuera del cuello
-// no corta nada.
+// no corta nada. En V, la recta desde cada punto del hombro hasta la punta
+// lleva algo de la curva del cuello redondo: las patas se abomban un poco
+// hacia afuera. Junto a la punta no (la curva redonda llega plana al centro y
+// el fondo de la V quedaba redondeado): las patas llegan rectas y la punta
+// queda neta. Junto al hombro se redondea el último pedacito de la recta para
+// no hacer pico donde sigue la espalda.
+const VEE_EASE = 0.08; // fracción del ancho que se redondea junto al hombro
+const VEE_ROUND = 0.4; // cuánto de la curva redonda llevan las patas (0 = rectas)
+const VEE_TIP = 0.45; // fracción del ancho, desde el centro, en la que ese abombado se apaga
 const cutY = (M, ax) => {
   const r = Math.min(1, ax / M.neck.a);
   const round = (1 - r * r) ** 0.8;
   if (!M.vNeck) return -M.dropF * round;
   const u = 1 - r;
   const e = VEE_EASE;
-  return -M.dropF * (((u < e ? (u * u) / (2 * e) : u - e / 2) / (1 - e / 2)) * (1 - VEE_ROUND) + round * VEE_ROUND);
+  const straight = (u < e ? (u * u) / (2 * e) : u - e / 2) / (1 - e / 2);
+  return -M.dropF * (straight + VEE_ROUND * (round - straight) * smoothstep(0, VEE_TIP, r));
 };
 // Dónde corta el escote la columna de ángulo th del frente: el t en que la
 // columna llega a la línea del corte (menos de 1 si pasa más abajo que el de
@@ -1575,6 +1572,42 @@ export function flattenPanel(pos, idx, W, H, X0, levels, ease = null) {
   return X;
 }
 
+// Costura en inglete de la punta de la V (tira del cuello, puesta o
+// colgada): cada fila del perfil de cada lado es paralela a su pata y sigue
+// derecho hasta el medio (x = 0), donde se encuentra con la del otro lado;
+// los puntos que pasarían al otro lado (y la columna de la punta) quedan ahí.
+// Correr sólo su x los dejaba más abajo que la fila: el borde de la tira
+// hacía una muesca en el medio (abierta, sobre todo colgada). La cola de la
+// cara de adentro (las últimas TAIL filas, que bajan por dentro de la prenda)
+// sólo se corta en el medio: prolongada, en la punta salía por delante de la
+// tela.
+const TAIL = 2;
+export function mitreV(pos, SW, P, tip, span = 10) {
+  const at = (j, i) => (j * SW + i) * 3;
+  for (let j = P - TAIL; j < P; j++)
+    for (const s of [-1, 1])
+      for (let m = 1; m < span; m++) if (pos[at(j, tip + s * m)] * s < 0) pos[at(j, tip + s * m)] = 0;
+  for (let j = 1; j < P - TAIL; j++) {
+    const meet = [0, 0, 0];
+    let got = 0;
+    for (const s of [-1, 1]) {
+      // Las dos columnas más cercanas al medio que quedan de su lado.
+      let m = 1;
+      while (m < span && pos[at(j, tip + s * m)] * s <= 1e-5) m++;
+      const a = at(j, tip + s * m);
+      const b = at(j, tip + s * (m + 1));
+      const dx = pos[b] - pos[a];
+      const t = Math.abs(dx) > 1e-9 ? Math.min(3, -pos[a] / dx) : 0;
+      const q = [0, 0, pos[a + 1] + (pos[b + 1] - pos[a + 1]) * t, pos[a + 2] + (pos[b + 2] - pos[a + 2]) * t];
+      for (let k = 1; k < m; k++) pos.set([0, q[2], q[3]], at(j, tip + s * k));
+      meet[1] += q[2];
+      meet[2] += q[3];
+      got++;
+    }
+    pos.set([0, meet[1] / got, meet[2] / got], at(j, tip));
+  }
+}
+
 // Fila del perfil de la tira en la mitad del doblez, y separación (m) entre
 // las dos caras en la plantilla.
 export const COLLAR_FOLD = 5;
@@ -1685,19 +1718,8 @@ function buildCollar(M, neck, tip) {
     }
   }
   // En V, cada lado de la tira llega hasta el medio y ahí se corta (costura
-  // en inglete): nada pasa al otro lado.
-  if (M.vNeck) {
-    const half = Math.round(n / 4);
-    for (let i = 0; i <= n; i++) {
-      const k = i % n;
-      if (k === tip || Math.abs(k - tip) > half) continue;
-      const side = Math.sign(base[k].x);
-      for (let j = 0; j < P; j++) {
-        const v = (j * SW + i) * 3;
-        if (pos[v] * side < 0) pos[v] = 0;
-      }
-    }
-  }
+  // en inglete).
+  if (M.vNeck) mitreV(pos, SW, P, tip);
   const idx = gridIndex(n, P - 1, SW);
   return { pos, uv, P, idx: orient(pos, idx, fromVertical, (v) => v < SW * 3) };
 }

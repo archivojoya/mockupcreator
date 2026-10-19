@@ -18,7 +18,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { armholeLoopIJ, flattenPanel, bust } from './shirt.js';
+import { armholeLoopIJ, flattenPanel, bust, mitreV } from './shirt.js';
 
 const SUBSTEPS = 4;
 const ITERATIONS = 5;
@@ -50,7 +50,7 @@ const CLIPS_CAP = 0.15;
 const CLIPS_BAND_SIDE = 0.9;
 const CLIPS_BAND_SEAM = 0.45;
 const HANGER_SINK = 0.008; // (tank top) cuánto baja la madera que se ve bajo las tiras
-const HANGER_DIP = 0.021; // cuánto baja la madera dentro del cuello (ver makeHanger)
+const HANGER_NECK_SINK = [0.014, 0.021]; // (camiseta; básquet) cuánto baja el borde de arriba de la madera que se ve
 const VOLUME_HEM = 0.06;
 const RACER_PAIR = 0.03; // (tank top) a más de esto, de costado, no se miran
 const VOLUME_SLEEVE = 0.5;
@@ -139,12 +139,7 @@ export function makeHanger(M) {
   const p = 1.8;
   let drop = 0.03;
   for (let x = M.neck.a - 0.01; x <= xEnd; x += 0.002) drop = Math.max(drop, (y0 - (seamY(x) - 0.006)) / (x / xEnd) ** p);
-  // Dentro del cuello la madera baja HANGER_DIP (donde sale el gancho): la
-  // espalda del escote, más baja que los hombros, apoya arriba y la tira la
-  // tapa; si no, colgaba detrás de la madera y la dejaba asomar sobre el
-  // cuello de atrás. (En el tank top la madera se ve entera: no.)
-  const dip = M.deepNeck ? 0 : HANGER_DIP;
-  const topY = (x) => y0 - drop * (Math.abs(x) / xEnd) ** p - dip * (1 - smoothstep(M.neck.a - 0.03, M.neck.a + 0.005, Math.abs(x)));
+  const topY = (x) => y0 - drop * (Math.abs(x) / xEnd) ** p;
   const center = (x) => new THREE.Vector3(x, topY(x) - half(x), z0);
   const tangent = (x) => new THREE.Vector3().subVectors(center(x + 1e-4), center(x - 1e-4)).normalize();
   const upOf = (t) => new THREE.Vector3(-t.y, t.x, 0).normalize();
@@ -195,7 +190,13 @@ export function makeHanger(M) {
   };
   // Bajo las tiras del tank top la madera que se ve baja su borde de arriba:
   // la tela, de malla gruesa, corta camino sobre la barra y la dejaba asomar.
-  const sink = (x) => (M.deepNeck ? HANGER_SINK * smoothstep(M.neck.a - 0.012, M.neck.a + 0.004, Math.abs(x)) : 0);
+  // En la camiseta, colgada, la tira de atrás del cuello queda más baja que
+  // la barra y su borde de arriba asomaba por encima, como si atravesara la
+  // camiseta: la madera que se ve (toda dentro del cuello) baja HANGER_NECK_SINK
+  // (en la de básquet, más: con la sisa grande queda menos tela arriba de la
+  // espalda y el escote de atrás cuelga más bajo).
+  const neckSink = HANGER_NECK_SINK[M.garment === 'basket' ? 1 : 0];
+  const sink = (x) => (M.deepNeck ? HANGER_SINK * smoothstep(M.neck.a - 0.012, M.neck.a + 0.004, Math.abs(x)) : neckSink);
   const visC = (x) => center(x).addScaledVector(upOf(tangent(x)), -sink(x) / 2);
   const visH = (x) => half(x) - sink(x) / 2;
   const N = 60;
@@ -237,7 +238,7 @@ export function makeHanger(M) {
   for (let i = 0; i < exact.length; i += 3) if (exact[i] || exact[i + 1] || exact[i + 2]) na.set([exact[i], exact[i + 1], exact[i + 2]], i);
 
   // Gancho de alambre, desde el centro del borde de arriba.
-  const hook = makeHook(topY(0) - 0.004, z0, 0.035 + dip);
+  const hook = makeHook(topY(0) - sink(0) - 0.004, z0, 0.035 + sink(0));
   return { kind: 'hanger', wood: bar, metal: hook.stem, hook, segments, minY: Math.min(...segments.map((s) => Math.min(s.a.y, s.b.y) - s.hu)) };
 }
 
@@ -786,13 +787,12 @@ export class HangingShirt {
       this.collarLocal[v * 3 + 1] = (ox * F[f + 3] + oy * F[f + 4] + oz * F[f + 5]) / F[f + 9];
       this.collarLocal[v * 3 + 2] = ox * F[f + 6] + oy * F[f + 7] + oz * F[f + 8];
     }
-    // En V, ningún vértice de la tira del frente pasa al otro lado (inglete).
-    this.collarSide = new Int8Array(rest.length / 3);
+    // En V, la punta de la tira se cose en inglete (ver mitreV): columna de
+    // la punta (la del frente en el medio).
+    this.collarTip = -1;
     if (built.measures.vNeck)
-      for (let v = 0; v < rest.length / 3; v++) {
-        const e = (v % CSW) % nf;
-        if (collarRing[e][0] === 'front') this.collarSide[v] = Math.sign(seamRest[e * 3]);
-      }
+      for (let e = 0; e < nf; e++)
+        if (collarRing[e][0] === 'front' && (this.collarTip < 0 || Math.abs(seamRest[e * 3]) < Math.abs(seamRest[this.collarTip * 3]))) this.collarTip = e;
 
     // Broches: pellizcan la costura de cada hombro (en dos puntos), como se
     // cuelga de verdad con un broche de pinza: la costura queda arriba, entre
@@ -2014,7 +2014,6 @@ export class HangingShirt {
     const l = this.collarLocal;
     const SW = this.collarSW;
     const nf = this.collarRing.length;
-    const side = this.collarSide;
     const attr = this.geos.collar.attributes.position;
     const a = attr.array;
     for (let v = 0; v < a.length / 3; v++) {
@@ -2023,8 +2022,8 @@ export class HangingShirt {
       const i = v * 3;
       const lu = l[i + 1] * F[f + 9];
       for (let c = 0; c < 3; c++) a[i + c] = seam[e * 3 + c] + F[f + c] * l[i] + F[f + 3 + c] * lu + F[f + 6 + c] * l[i + 2];
-      if (a[i] * side[v] < 0) a[i] = 0;
     }
+    if (this.collarTip >= 0) mitreV(a, SW, a.length / 3 / SW, this.collarTip);
     attr.needsUpdate = true;
     this.geos.collar.computeVertexNormals();
     for (const g of Object.values(this.geos)) g.computeBoundingSphere();

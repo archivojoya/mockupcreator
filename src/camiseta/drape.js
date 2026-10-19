@@ -278,10 +278,13 @@ function makeHook(y0, z, stemLen) {
 // Barra de metal con gancho y dos broches que cuelgan de ella. Cada broche:
 // dos mordazas que aprietan la tela (una adelante y otra atrás), unidas
 // arriba por el resorte, y un alambre hasta la barra.
-export function makeClipHanger(clips) {
+// Con `wireTo` (una altura), en lugar del gancho un alambre derecho sube desde
+// el medio de la barra hasta ahí (el short cuelga así de la camiseta: el
+// alambre va por dentro de ella).
+export function makeClipHanger(clips, wireTo = null) {
   const metal = [];
   const plastic = [];
-  const top = Math.max(0.035, ...clips.map((c) => c.y + 0.06));
+  const top = Math.max(wireTo === null ? 0.035 : -Infinity, ...clips.map((c) => c.y + 0.06));
   const z = clips[0].z;
   const xMax = Math.max(...clips.map((c) => Math.abs(c.x))) + 0.035;
   const along = (geo, a, b) => {
@@ -294,8 +297,9 @@ export function makeClipHanger(clips) {
   const rodR = 0.0032;
   metal.push(along(new THREE.CylinderGeometry(rodR, rodR, 2 * xMax, 16, 1, true), new THREE.Vector3(-xMax, top, z), new THREE.Vector3(xMax, top, z)));
   for (const s of [-1, 1]) metal.push(new THREE.SphereGeometry(rodR * 1.35, 16, 10).translate(s * xMax, top, z));
-  const hook = makeHook(top, z, 0.025);
-  metal.push(hook.stem);
+  const hook = wireTo === null ? makeHook(top, z, 0.025) : null;
+  if (hook) metal.push(hook.stem);
+  else metal.push(along(new THREE.CylinderGeometry(0.0022, 0.0022, wireTo - top, 10), new THREE.Vector3(0, top, z), new THREE.Vector3(0, wireTo, z)));
   for (const c of clips) {
     const t = 0.0034; // espesor de cada mordaza
     const jawTop = c.y + 0.014;

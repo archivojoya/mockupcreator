@@ -77,31 +77,25 @@ function sectionPoint(c, t) {
 // columnas. Cada fila va de la costura de adelante a la de atrás por afuera,
 // con las columnas a distancias iguales. Arriba de la entrepierna las puntas
 // están en el medio (las costuras de adelante y de atrás, con la otra
-// pierna); debajo se juntan (la costura de la entrepierna).
-function legGrid(S) {
+// pierna); debajo se juntan (la costura de la entrepierna). `sec(r, y)` da la
+// sección de cada fila (y es la altura puesta) y `outY(y)`, dónde va.
+const rowY = (r) => lerp(SHORT.hem, SHORT.waist, r / ROWS);
+function legGrid(sec, outY = (y) => y, z0 = 0) {
   const W = COLS + 1;
   const pos = new Float32Array(W * (ROWS + 1) * 3);
   const ts = new Float64Array(T_SAMPLES + 1);
   const cum = new Float64Array(T_SAMPLES + 1);
   for (let r = 0; r <= ROWS; r++) {
-    const y = lerp(SHORT.hem, SHORT.waist, r / ROWS);
-    const c = section(S, y);
-    // Ángulo donde la sección cruza el medio (x = 0), o la vuelta entera.
-    const tf = Math.acos(-(Math.min(1, c.sx / c.sa) ** (c.n / 2)));
-    let prev = null;
-    for (let k = 0; k <= T_SAMPLES; k++) {
-      ts[k] = tf - (2 * tf * k) / T_SAMPLES;
-      const p = sectionPoint(c, ts[k]);
-      cum[k] = prev ? cum[k - 1] + Math.hypot(p[0] - prev[0], p[1] - prev[1]) : 0;
-      prev = p;
-    }
+    const y = rowY(r);
+    const c = sec(r, y);
+    sampleArc(c, ts, cum);
     let k = 0;
     for (let j = 0; j <= COLS; j++) {
       const target = (cum[T_SAMPLES] * j) / COLS;
       while (k < T_SAMPLES - 1 && cum[k + 1] < target) k++;
       const f = (target - cum[k]) / (cum[k + 1] - cum[k] || 1);
       const p = sectionPoint(c, lerp(ts[k], ts[k + 1], clamp01(f)));
-      pos.set([p[0], y, p[1]], (r * W + j) * 3);
+      pos.set([p[0], outY(y), z0 + p[1]], (r * W + j) * 3);
     }
     // La primera y la última columna: juntas (entrepierna) o justo en el
     // medio (tiro).
@@ -113,29 +107,156 @@ function legGrid(S) {
   }
   return { pos, W };
 }
+// Recorrido de la tela en una sección: desde donde cruza el medio adelante
+// (o desde la entrepierna, si la vuelta está cerrada), por afuera, hasta
+// atrás; ángulos en `ts` y largo acumulado en `cum`. Devuelve el largo.
+function sampleArc(c, ts, cum) {
+  const tf = Math.acos(-(Math.min(1, c.sx / c.sa) ** (c.n / 2)));
+  let px = 0;
+  let pz = 0;
+  for (let k = 0; k <= T_SAMPLES; k++) {
+    ts[k] = tf - (2 * tf * k) / T_SAMPLES;
+    const p = sectionPoint(c, ts[k]);
+    cum[k] = k ? cum[k - 1] + Math.hypot(p[0] - px, p[1] - pz) : 0;
+    px = p[0];
+    pz = p[1];
+  }
+  return cum[T_SAMPLES];
+}
 
 // El ruedo (las filas de abajo) se apoya por fuera de la tela: sube desde la
-// costura en una fila.
-function liftCuff(S, pos, W) {
+// costura en una fila (hacia afuera de la sección).
+function liftCuff(sec, pos, W, z0 = 0) {
   for (let r = 0; r < HEM_ROWS; r++) {
     const f = CUFF_OUT * Math.min(1, HEM_ROWS - r);
+    const c = sec(r, rowY(r));
     for (let j = 0; j < W; j++) {
       const v = (r * W + j) * 3;
-      const c = section(S, pos[v + 1]);
       const dx = pos[v] - c.sx;
-      const dz = pos[v + 2];
-      const l = Math.hypot(dx, dz) || 1;
-      pos[v] += (dx / l) * f;
-      pos[v + 2] += (dz / l) * f;
+      const dz = pos[v + 2] - z0;
+      const sb = dz >= 0 ? c.sbF : c.sbB;
+      const gx = spow(dx / c.sa, c.n - 1) / c.sa;
+      const gz = spow(dz / sb, c.n - 1) / sb;
+      const l = Math.hypot(gx, gz) || 1;
+      pos[v] += (gx / l) * f;
+      pos[v + 2] += (gz / l) * f;
     }
   }
 }
+
+// Colgado de broches: plano (el frente sobre la espalda) con algo de volumen,
+// como en una foto de producto, y sin arrugas (no se simula). Cada fila mide
+// lo mismo que puesta: su sección es una superelipse finita (n = 4: caras
+// planas y dobleces redondeados) del ancho que haga falta, con las piernas
+// separadas como puestas.
+const HUNG_N = 4;
+const HUNG_T = 0.012; // medio espesor (el volumen)
+const HUNG_T_WAIST = 0.007; // en la cintura, más finito (el elástico)
+const WAIST_H = (WAIST_ROWS / ROWS) * (SHORT.waist - SHORT.hem);
+function hungSection(y, outer, t = null) {
+  const top = SHORT.crotch + CROTCH_SPAN;
+  const s = smooth(clamp01((top - y) / CROTCH_SPAN));
+  const b = clamp01((SHORT.crotch - y) / (SHORT.crotch - SHORT.hem));
+  const inner = y > SHORT.crotch ? -(1 - s) * outer : (HEM_GAP / 2) * b ** 1.2;
+  if (t === null) t = lerp(HUNG_T, HUNG_T_WAIST, smooth(clamp01((y - (SHORT.waist - 1.6 * WAIST_H)) / (0.6 * WAIST_H))));
+  return { sx: (outer + inner) / 2, sa: (outer - inner) / 2, sbF: t, sbB: t, n: HUNG_N };
+}
+// El ancho de cada fila colgada: el costado baja derecho desde la cintura
+// hasta donde las piernas se empiezan a separar y de ahí hasta el ruedo
+// (HUNG_FLARE más ancho), y cada fila mide lo mismo que puesta: lo que sobra
+// o falta lo toma el volumen (la cadera, al salir de la camiseta, y la pierna,
+// que da más vuelta que la mitad de la cadera, cuelgan como un tubo
+// achatado).
+const HUNG_FLARE = 1.1;
+const HUNG_T_MIN = 0.004;
+const HUNG_T_MAX = 0.07;
+function hungSections(worn, W) {
+  const ts = new Float64Array(T_SAMPLES + 1);
+  const cum = new Float64Array(T_SAMPLES + 1);
+  const rowLen = (r) => {
+    let len = 0;
+    for (let j = 1; j <= COLS; j++) {
+      const a = (r * W + j - 1) * 3;
+      const b = (r * W + j) * 3;
+      len += Math.hypot(worn[b] - worn[a], worn[b + 1] - worn[a + 1], worn[b + 2] - worn[a + 2]);
+    }
+    return len;
+  };
+  const solve = (lo, hi, f, len) => {
+    for (let k = 0; k < 32; k++) {
+      const mid = (lo + hi) / 2;
+      if (f(mid) < len) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  };
+  const yTop = SHORT.crotch + CROTCH_SPAN;
+  const rTop = Math.round(((yTop - SHORT.hem) / (SHORT.waist - SHORT.hem)) * ROWS);
+  // Costado: recto de la cintura a rTop y de ahí al ruedo.
+  const free = (r) => solve(0.02, 0.6, (o) => sampleArc(hungSection(rowY(r), o), ts, cum), rowLen(r));
+  const oW = free(ROWS);
+  const oT = free(rTop);
+  const out = [];
+  for (let r = 0; r <= ROWS; r++) {
+    const y = rowY(r);
+    const len = rowLen(r);
+    const outer = r >= rTop ? lerp(oT, oW, (r - rTop) / (ROWS - rTop)) : oT * lerp(HUNG_FLARE, 1, r / rTop);
+    const arc = (t) => sampleArc(hungSection(y, outer, t), ts, cum);
+    if (arc(HUNG_T_MIN) > len) out.push(hungSection(y, solve(0.02, outer, (o) => sampleArc(hungSection(y, o, HUNG_T_MIN), ts, cum), len), HUNG_T_MIN));
+    else if (arc(HUNG_T_MAX) < len) out.push(hungSection(y, solve(outer, 0.8, (o) => sampleArc(hungSection(y, o, HUNG_T_MAX), ts, cum), len), HUNG_T_MAX));
+    else out.push(hungSection(y, outer, solve(HUNG_T_MIN, HUNG_T_MAX, arc, len)));
+  }
+  // Ancho y volumen parejos fila a fila (el largo de cada fila cambia un poco:
+  // si no, la pierna se infla de golpe en la entrepierna).
+  const avg = (get, R) => out.map((_, r) => {
+    let sum = 0;
+    let n = 0;
+    for (let q = Math.max(0, r - R); q <= Math.min(ROWS, r + R); q++) {
+      sum += get(out[q]);
+      n++;
+    }
+    return sum / n;
+  });
+  const outerS = avg((c) => c.sx + c.sa, HUNG_SMOOTH);
+  const tS = avg((c) => c.sbF, HUNG_SMOOTH);
+  return out.map((_, r) => hungSection(rowY(r), outerS[r], tS[r]));
+}
+const HUNG_SMOOTH = 6; // filas a cada lado
+const CLIP_IN = 0.016; // los broches, a esto del doblez de cada costado
+const CLIP = { width: 0.03, depth: 0.012 };
+
 // Las piezas del short: piernas (legL, legR), ruedos (hemL, hemR) con su
-// dobladillo, y cintura (waistL, waistR) con su dobladillo de arriba.
-export function buildShorts(M) {
+// dobladillo, y cintura (waistL, waistR) con su dobladillo de arriba. Con
+// `hung` ({ top, z }: borde de arriba y plano del medio), colgado de dos
+// broches en la cintura; devuelve también dónde van los broches.
+export function buildShorts(M, hung = null) {
   const S = shortMeasures(M);
-  const { pos: base, W } = legGrid(S);
-  liftCuff(S, base, W);
+  const worn = legGrid((r, y) => section(S, y));
+  const W = worn.W;
+  // La pieza (molde, tela y largos de la colgada) es la del short sin el
+  // achique de debajo de la camiseta: puesto, ahí no se ve.
+  const S2 = { ...S, A: S.A2, F: S.F2, B: S.B2 };
+  const piece = legGrid((r, y) => section(S2, y)).pos;
+  let base = worn.pos;
+  let clips = null;
+  // Sección de cada fila (por la altura donde quedó).
+  let secOf = (y) => section(S, y);
+  if (hung) {
+    const secs = hungSections(piece, W);
+    const sec = (r) => secs[r];
+    secOf = (y) => secs[Math.min(ROWS, Math.max(0, Math.round(((y - hung.top) / (SHORT.waist - SHORT.hem)) * ROWS + ROWS)))];
+    base = legGrid(sec, (y) => hung.top + (y - SHORT.waist), hung.z).pos;
+    liftCuff(sec, base, W, hung.z);
+    // Los broches aprietan las dos capas en la cintura, cerca de cada costado.
+    const top = secs[ROWS];
+    const cx = top.sx + top.sa - CLIP_IN;
+    clips = [-1, 1].map((sd) => ({ x: sd * cx, y: hung.top, z: hung.z, ...CLIP }));
+    for (let v = 0; v < base.length; v += 3) {
+      const wx = 1 - smooth(clamp01((Math.abs(base[v] - cx) - CLIP.width / 2) / 0.012));
+      const wy = smooth(clamp01((base[v + 1] - (hung.top - CLIP.depth - 0.012)) / 0.012));
+      base[v + 2] = hung.z + (base[v + 2] - hung.z) * (1 - 0.8 * wx * wy);
+    }
+  } else liftCuff((r, y) => section(S, y), base, W);
   const parts = {};
   const c0 = COLS / 2;
   for (const [key, side] of [
@@ -143,8 +264,10 @@ export function buildShorts(M) {
     ['R', -1],
   ]) {
     const pos = Float32Array.from(base);
+    const wp = piece;
     if (side < 0) for (let v = 0; v < pos.length; v += 3) pos[v] = -pos[v];
-    const uv = gridUV(pos, W, ROWS + 1, c0);
+    // (Tela y molde, los de la pierna puesta: colgada es la misma pieza.)
+    const uv = gridUV(wp, W, ROWS + 1, c0);
     // Molde: visto desde afuera, x hacia la derecha (en la izquierda, hacia
     // atrás; en la derecha, hacia adelante) e y hacia abajo desde la
     // cintura en el costado.
@@ -154,9 +277,12 @@ export function buildShorts(M) {
       uv1[v * 2] = side * uv[v * 2];
       uv1[v * 2 + 1] = vTop - uv[v * 2 + 1];
     }
+    // Hacia afuera: el gradiente de la superelipse de su fila.
+    const z0 = hung ? hung.z : 0;
     const out = (x, y, z) => {
-      const c = section(S, y);
-      return [x - side * c.sx, 0, z];
+      const c = secOf(y);
+      const dz = z - z0;
+      return [spow((side * x - c.sx) / c.sa, c.n - 1) / c.sa * side, 0, spow(dz / (dz >= 0 ? c.sbF : c.sbB), c.n - 1) / (dz >= 0 ? c.sbF : c.sbB)];
     };
     const slice = (r0, r1) => {
       const a = r0 * W;
@@ -211,5 +337,5 @@ export function buildShorts(M) {
     g.computeBoundingBox();
     geos[key] = g;
   }
-  return geos;
+  return hung ? { geos, clips } : geos;
 }

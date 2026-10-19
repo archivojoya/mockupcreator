@@ -57,6 +57,10 @@ Es un mockup: manda cómo se ve, no la física exacta.
   los dobleces de verdad. Es el primer recurso contra arrugas: endurecer la
   flexión o ablandar el apoyo en la madera las empeoraba o no la dejaba
   quieta.
+- Una prenda que va debajo de otra (el short bajo la camiseta) entra con
+  margen en la parte más angosta de la de arriba: medir por rayos que no
+  asome (hoy ≥ 5 mm). Lo que se arregla sólo para que no asome no cambia el
+  molde (sale de la pieza sin ese arreglo).
 - Si el pedido viene dibujado, pasar el trazo a medidas y superponerlo a la
   prenda en 2D antes de renderizar.
 

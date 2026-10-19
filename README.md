@@ -103,7 +103,18 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   molde por pierna (con su cintura), visto de afuera, con el anclaje en la
   cintura en el costado; una imagen que se llame «pierna 1», «pierna
   derecha» o «leg 1» va a la pierna 1 (sin número, a las dos). Con el short
-  la vista con cuerpo baja y se aleja un poco. Colgada, en la percha no va.
+  la vista baja y se aleja un poco. En la percha no va. Con broches cuelga
+  debajo de la camiseta (9,5 cm bajo su ruedo colgado), de su propia barra
+  con dos broches que aprietan la cintura a 1,6 cm de cada costado (el
+  elástico a la vista); la barra cuelga de un alambre que sube por dentro de
+  la camiseta, en el medio entre el frente y la espalda. No se simula: es
+  una forma fija, plana con algo de volumen, como en una foto de producto.
+  Cada fila mide lo mismo que en la pieza (el estampado no se deforma): el
+  costado baja derecho desde la cintura y se abre un 10 % hasta el ruedo, y
+  lo que sobra lo toma el volumen (la pierna da más vuelta que la mitad de
+  la cadera y cuelga como un tubo achatado; aplanada sin más, el costado se
+  abría 5 cm de golpe en la entrepierna). Ancho y volumen se promedian fila a
+  fila.
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
   de mangas, puño (con puño, o sin puño: la manga sigue hasta el borde con su
   color y su diseño, sin costura), cuello (redondo o en V) y profundidad del

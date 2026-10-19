@@ -50,6 +50,8 @@ const CENTER = new THREE.Vector3(0, -0.36, 0);
 const HANG_Y = -0.38; // centro de la vista colgada
 const SHORT_CENTER_Y = -0.48; // centro de la vista con cuerpo y short
 const SHORT_CAM = 1.12; // con el short, la cámara se aleja así
+const SHORT_HANG_Y = -0.58; // centro de la vista con broches y short
+const SHORT_HANG_CAM = 1.45;
 const CAM_OFF = new THREE.Vector3(0, 0.08, 2.15); // cámara respecto del centro, de entrada
 // Dos camisetas lado a lado (la misma, simulada una vez y dibujada dos
 // veces): de entrada una muestra el frente y la otra la espalda; en
@@ -531,6 +533,21 @@ const supports = rigs.map((rig) => {
   scene.add(curl);
   return { group, parts, curl };
 });
+// Barra con broches del short (con broches), en cada camiseta.
+const shortSupports = rigs.map((rig) => {
+  const group = new THREE.Group();
+  const parts = {};
+  for (const k of ['metal', 'plastic']) {
+    const m = new THREE.Mesh(new THREE.BufferGeometry(), supportMaterials[k]);
+    m.castShadow = m.receiveShadow = true;
+    m.userData.rig = rig.userData.inner;
+    group.add(m);
+    parts[k] = m;
+  }
+  group.visible = false;
+  rig.userData.inner.add(group);
+  return { group, parts };
+});
 // Perchero: una barra cromada colgada del techo, de donde cuelgan los ganchos
 // (así las camisetas no cuelgan en el aire).
 const RAIL_HALF = 1.6;
@@ -779,11 +796,35 @@ function fitPair() {
   else rigs.forEach((rig, j) => (rig.position.x = (j ? 1 : -1) * VIEWS[view.pair].gap));
   syncCurls();
 }
-// El short va con cuerpo (colgada, en la percha no va).
-const withShort = () => params.short !== false && view.mode === 'body';
+// El short va con cuerpo o con broches (en la percha no va). Con broches
+// cuelga debajo de la camiseta de su propia barra con dos broches, de un
+// alambre que sube por dentro de la camiseta; no se simula (queda plano y
+// liso).
+const withShort = () => params.short !== false && view.mode !== 'hanger';
+// Dónde cuelga el short (borde de arriba y plano del medio): bajo el ruedo de
+// la camiseta colgada (que baja 5 cm, el tank top 8,5).
+const shortHang = (M) => ({ top: -M.L - (M.deepNeck ? 0.085 : 0.05) - SHORT_DROP, z: -0.008 });
+const SHORT_DROP = 0.095;
 function rebuild() {
   built = buildShirt(params);
-  if (withShort()) Object.assign(built.geos, buildShorts(built.measures));
+  let shortClips = null;
+  if (withShort()) {
+    if (view.mode === 'body') Object.assign(built.geos, buildShorts(built.measures));
+    else {
+      const h = buildShorts(built.measures, shortHang(built.measures));
+      Object.assign(built.geos, h.geos);
+      shortClips = h.clips;
+    }
+  }
+  // (El alambre sube hasta 6 cm arriba del ruedo, por dentro de la camiseta,
+  // en el medio entre el frente y la espalda colgados.)
+  const sg = shortClips && makeClipHanger(shortClips, -built.measures.L + 0.06);
+  for (const k of ['metal', 'plastic']) {
+    shortSupports[0].parts[k].geometry.dispose();
+    const g = sg ? sg[k] : new THREE.BufferGeometry();
+    for (const sp of shortSupports) sp.parts[k].geometry = g;
+  }
+  for (const sp of shortSupports) sp.group.visible = !!sg;
   fitPair();
   for (const [k, mesh] of Object.entries(meshes)) {
     if (mesh.geometry !== NO_GEO) mesh.geometry.dispose();
@@ -940,7 +981,7 @@ function syncControls() {
   document.getElementById('neckDepth-control').hidden = !tank;
   depthButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.depth === params.neckDepth)));
   shortButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.short === (params.short === false ? 'off' : 'on'))));
-  document.getElementById('short-control').hidden = view.mode !== 'body';
+  document.getElementById('short-control').hidden = view.mode === 'hanger';
   for (const sw of document.querySelectorAll('.sw-short')) sw.hidden = !withShort();
   document.getElementById('c-sleeves').closest('.swatch').hidden = bare;
   document.getElementById('sw-cuffs').hidden = tank || (!bare && params.cuff === 'none');
@@ -2234,8 +2275,10 @@ const shortest = (d) => Math.atan2(Math.sin(d), Math.cos(d));
 // y se aleja (entra el conjunto entero).
 function homePose() {
   const short = withShort();
-  const target = new THREE.Vector3(0, view.mode !== 'body' ? HANG_Y : short ? SHORT_CENTER_Y : CENTER.y, 0);
-  return { target, position: target.clone().addScaledVector(CAM_OFF, short ? SHORT_CAM : 1) };
+  const body = view.mode === 'body';
+  const y = body ? (short ? SHORT_CENTER_Y : CENTER.y) : short ? SHORT_HANG_Y : HANG_Y;
+  const target = new THREE.Vector3(0, y, 0);
+  return { target, position: target.clone().addScaledVector(CAM_OFF, short ? (body ? SHORT_CAM : SHORT_HANG_CAM) : 1) };
 }
 function snapHome() {
   fly = null;

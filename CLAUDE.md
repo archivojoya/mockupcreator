@@ -29,10 +29,12 @@ Es un mockup: manda cómo se ve, no la física exacta.
   hueco en la grilla donde la tela rinde distinto por fila lo deja en punta.
 - La percha se ve donde la prenda se apoya, sostiene casi hasta la punta del
   hombro (más corta, la tela de arriba sobra a lo ancho y se ondula) y nunca
-  asoma a través de la tela: la madera que se ve, dentro del cuello, es más
-  baja que la que sostiene (si no, sobresale sobre la tira de atrás). Para
-  encontrarlo, tirar rayos de frente y de espaldas a la madera y ver qué tocan
-  primero.
+  atraviesa la tela: la malla que se ve (más fina que la simulada) se empuja
+  fuera de la madera. Para encontrarlo, buscar puntos de la malla que se ve
+  dentro de la madera (rayos en seis direcciones: número impar de cruces).
+  La percha queda a su altura de siempre, sin espacio con la tela.
+- La forma 3D cerca de un corte puede diferir de la referencia si se ve mejor
+  (la V apoyada sobre el pecho, no hundida); el molde del estampado no.
 - Ondas de una celda en la tela colgada son la malla, no la tela: la flexión
   tiene que resistir la compresión (medir el residuo de cada fila contra su
   versión suavizada, no la curva entera).

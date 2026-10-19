@@ -12,7 +12,7 @@
 // - Cuello: el escote es un corte sobre la misma tela (la de la camiseta de
 //   cuello redondo de referencia): redondo de cualquier hondo o en V, la
 //   camiseta y su molde son los mismos y sólo cambia la línea del corte.
-//   Encima va una tira acanalada (en V, las dos puntas de la tira se juntan
+//   Encima va una tira de la misma tela (en V, las dos puntas se juntan
 //   en una costura al medio). Ruedo y puños llevan un dobladillo hacia
 //   adentro (se ve el espesor de la tela).
 //
@@ -322,9 +322,12 @@ function torsoPoint(M, th, t, out) {
     x = lerp(x, M.neck.a * sn, w);
     yy = lerp(y, yn, w);
     z = lerp(z, M.neck.c + (cs >= 0 ? M.neck.b : M.neck.bB) * cs, w);
-    // Escote hondo (tank top): el borde va apoyado sobre el pecho y la
-    // espalda, no se mete hacia el cuello.
-    if (M.deepNeck && cs > 0) z = Math.max(z, chestZ(M, x, yy));
+    // Escote hondo (tank top) y en V: el borde va apoyado sobre el pecho (y
+    // en el tank la espalda), no se mete hacia el cuello. En V la tela de
+    // referencia se curva hacia el cuello justo por donde pasan las patas: se
+    // veían hundidas, como en una zanja. (El molde del estampado sigue siendo
+    // el de la referencia, ver cutMold: el diseño no se mueve.)
+    if ((M.vNeck || M.deepNeck) && cs > 0) z = Math.max(z, chestZ(M, x, yy));
     if (M.deepNeck && cs < 0) z = Math.min(z, backZ(M, x, yy));
   }
   out[0] = x;
@@ -1613,7 +1616,7 @@ export function mitreV(pos, SW, P, tip, span = 10) {
 export const COLLAR_FOLD = 5;
 const COLLAR_GAP = 0.006;
 
-// Tira acanalada del cuello sobre el borde del escote (lazo cerrado). En V,
+// Tira del cuello (de la misma tela) sobre el borde del escote (lazo cerrado). En V,
 // la punta del escote es el punto `tip` del lazo. Con el escote hondo del
 // tank top es un vivo angosto que sigue la tela (mismo perfil, más chico).
 function buildCollar(M, neck, tip) {

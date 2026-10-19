@@ -22,7 +22,8 @@ const PARTS = {
   cuffR: { color: 'cuffs', label: 'PUÑO' },
   cuffLLip: { color: 'cuffs', lining: 'cuffL' },
   cuffRLip: { color: 'cuffs', lining: 'cuffR' },
-  collar: { color: 'collar', label: 'CUELLO', rib: true },
+  // El cuello es de la misma tela que la camiseta (antes, acanalado).
+  collar: { color: 'collar', label: 'CUELLO' },
   // Puños de las sisas de la musculosa: como los de las mangas (en el tank
   // top son vivos, del color del vivo del escote).
   armL: { color: 'cuffs', band: true },
@@ -162,7 +163,8 @@ function fabricMaterial(rib) {
     normalScale: new THREE.Vector2(0.55, 0.55),
     side: THREE.DoubleSide,
   });
-  // Tono y aspereza punto a punto del tejido (el cuello acanalado no tiene).
+  // Tono y aspereza punto a punto del tejido (lo que lleve `rib`, acanalado,
+  // no tiene).
   const own = {
     detailMap: { value: flatDetail },
     detailTile: { value: new THREE.Vector2(1, 1) },
@@ -878,7 +880,7 @@ const FOUT = {
   weight: (v) => `${Math.round(120 + 100 * v)} g/m²`,
 };
 // Escote según el tipo de cuello: mínimo, máximo y valor al elegirlo.
-const NECK = { round: [0.055, 0.12, 0.075], v: [0.07, 0.13, 0.09], tank: [0.09, 0.18, 0.13] };
+const NECK = { round: [0.055, 0.12, 0.075], v: [0.08, 0.13, 0.09], tank: [0.09, 0.18, 0.13] };
 const sliders = {};
 const fabricSliders = {};
 function setFill(input) {

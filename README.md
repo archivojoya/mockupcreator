@@ -98,7 +98,12 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   con el mismo ancho en toda la V, y sus dos mitades se juntan en la punta en
   una costura en inglete, cerrada también colgada: cada fila de la tira sigue
   derecho hasta el medio (recortando sólo lo que pasaba al otro lado, el borde
-  hacía una muesca en el medio, abierta colgada).
+  hacía una muesca en el medio, abierta colgada). Con cuerpo, la tela de la V
+  va apoyada sobre el pecho (la de referencia se curva hacia el cuello justo
+  por donde pasan las patas y las dejaba hundidas, como en una zanja); el
+  molde del estampado sigue siendo el de referencia. La V va de 8 a 13 cm de
+  escote (menos honda que el redondo, su punta caía en la tela que sube hacia
+  el cuello).
 - **Tela**: siete tejidos (malla deportiva, piqué, panal, jersey liso,
   acanalada, jacquard con rayas tono sobre tono y microperforada con zonas
   caladas a los costados y bajo los brazos), más dos controles:
@@ -235,7 +240,8 @@ Cómo se arma (`src/camiseta/shirt.js`):
   empinado y la espalda sigue casi plana: la punta quedaba levantada). El
   busto es un relieve sobre el frente que la tela cruza de un pecho al otro
   sin meterse.
-- **Cuello y dobladillos**: tira acanalada sobre el escote; ruedo y puños se dan
+- **Cuello y dobladillos**: tira de la misma tela sobre el escote (se ve con el
+  mismo tejido que la camiseta, como los puños; antes era acanalada); ruedo y puños se dan
   vuelta hacia adentro y muestran el espesor de la tela.
 - **Terminación**: pliegues suaves (caída hacia el ruedo, tensiones desde la
   axila), costuras hundidas y pespunte doble en ruedo y puños. El relieve, el
@@ -272,11 +278,11 @@ espalda del cuello cae y se embolsa), mucho más en los costados del cuello
 guarda menos volumen arriba y la copa de la manga cede más. La percha llega
 a 1,5 cm de la punta del hombro: más corta, la punta y la manga caían, los
 costados se cerraban y arriba la tela quedaba sobrando a lo ancho (ondas
-verticales en la espalda y el frente). La madera que se ve, toda dentro del
-cuello, tiene el borde de arriba 1,4 cm más bajo que la que sostiene la tela
-(2,1 cm en la de básquet): colgada, la tira de atrás del cuello queda más baja
-que la barra y su borde de arriba asomaba sobre el cuello, como si la madera
-atravesara la camiseta. La camiseta y el gancho quedan donde estaban.
+verticales en la espalda y el frente). La madera nunca atraviesa la tela: la
+tira del cuello que se dibuja, más fina que la simulada, cortaba camino donde
+se apoya en la madera (en los costados de la V su borde de arriba pasaba por
+dentro de la barra); cada punto que queda dentro de la madera sale hasta su
+superficie, así la tela la rodea.
 En el torso la tela no se comprime tan fácil al doblarse (en las mangas sí):
 blanda, se arrugaba punto a punto junto a los hombros y marcaba un pliegue a lo
 largo del centro de la espalda y el frente. En el tank top la

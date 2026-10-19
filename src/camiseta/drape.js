@@ -50,7 +50,7 @@ const CLIPS_CAP = 0.15;
 const CLIPS_BAND_SIDE = 0.9;
 const CLIPS_BAND_SEAM = 0.45;
 const HANGER_SINK = 0.008; // (tank top) cuánto baja la madera que se ve bajo las tiras
-const HANGER_NECK_SINK = [0.014, 0.021]; // (camiseta; básquet) cuánto baja el borde de arriba de la madera que se ve
+const HANGER_MARGIN = 0.005; // cuánto más grande que la madera es su sección de choque
 const VOLUME_HEM = 0.06;
 const RACER_PAIR = 0.03; // (tank top) a más de esto, de costado, no se miran
 const VOLUME_SLEEVE = 0.5;
@@ -88,7 +88,7 @@ const BAND_SPAN = 6;
 const BAND_SIDE = [0.6, 0.9];
 // La costura de la tira es más firme que la tela: no la deja darse vuelta.
 const SEAM_K = 0.5;
-// La tira acanalada del cuello se cose estirada y frunce un poco el escote:
+// La tira del cuello se cose estirada y frunce un poco el escote:
 // al aplanar el molde para colgarla, el borde del escote apunta a este largo
 // respecto del puesto, en el frente y en la espalda (la tela de alrededor no
 // lo deja llegar). Es igual para cualquier cuello: sin esto el escote colgado
@@ -99,7 +99,7 @@ const NECK_EASE = [0.5, 0.75];
 // tiraba de la punta del hombro y el hombro del frente quedaba más largo que
 // el de la espalda (al coserlos, los dos se arrugaban).
 const NECK_EASE_SIDE = [1, 4];
-// La tira acanalada es más firme que la tela: sus uniones se resuelven
+// La tira es doble y cosida, más firme que la tela: sus uniones se resuelven
 // estas veces más en cada iteración (casi no se estira con el peso del pecho).
 const BAND_PASSES = 4;
 // Aplanado del molde para el largo de reposo colgada (grilla de la
@@ -146,7 +146,7 @@ export function makeHanger(M) {
 
   // Tramos de choque: la sección es algo mayor que la madera (la malla de
   // la tela es más gruesa que la barra).
-  const MARGIN = 0.005;
+  const MARGIN = HANGER_MARGIN;
   const segments = [];
   const S = 48;
   for (let i = 0; i < S; i++) {
@@ -190,13 +190,7 @@ export function makeHanger(M) {
   };
   // Bajo las tiras del tank top la madera que se ve baja su borde de arriba:
   // la tela, de malla gruesa, corta camino sobre la barra y la dejaba asomar.
-  // En la camiseta, colgada, la tira de atrás del cuello queda más baja que
-  // la barra y su borde de arriba asomaba por encima, como si atravesara la
-  // camiseta: la madera que se ve (toda dentro del cuello) baja HANGER_NECK_SINK
-  // (en la de básquet, más: con la sisa grande queda menos tela arriba de la
-  // espalda y el escote de atrás cuelga más bajo).
-  const neckSink = HANGER_NECK_SINK[M.garment === 'basket' ? 1 : 0];
-  const sink = (x) => (M.deepNeck ? HANGER_SINK * smoothstep(M.neck.a - 0.012, M.neck.a + 0.004, Math.abs(x)) : neckSink);
+  const sink = (x) => (M.deepNeck ? HANGER_SINK * smoothstep(M.neck.a - 0.012, M.neck.a + 0.004, Math.abs(x)) : 0);
   const visC = (x) => center(x).addScaledVector(upOf(tangent(x)), -sink(x) / 2);
   const visH = (x) => half(x) - sink(x) / 2;
   const N = 60;
@@ -238,8 +232,20 @@ export function makeHanger(M) {
   for (let i = 0; i < exact.length; i += 3) if (exact[i] || exact[i + 1] || exact[i + 2]) na.set([exact[i], exact[i + 1], exact[i + 2]], i);
 
   // Gancho de alambre, desde el centro del borde de arriba.
-  const hook = makeHook(topY(0) - sink(0) - 0.004, z0, 0.035 + sink(0));
-  return { kind: 'hanger', wood: bar, metal: hook.stem, hook, segments, minY: Math.min(...segments.map((s) => Math.min(s.a.y, s.b.y) - s.hu)) };
+  const hook = makeHook(topY(0) - 0.004, z0, 0.035);
+  // Caja que encierra la sección de choque (para descartar rápido).
+  const box = [Infinity, -Infinity, Infinity, -Infinity, Infinity, -Infinity];
+  for (const sg of segments)
+    for (const p of [sg.a, sg.b]) {
+      const r = Math.max(sg.hu, sg.hz);
+      box[0] = Math.min(box[0], p.x - r);
+      box[1] = Math.max(box[1], p.x + r);
+      box[2] = Math.min(box[2], p.y - r);
+      box[3] = Math.max(box[3], p.y + r);
+      box[4] = Math.min(box[4], p.z - r);
+      box[5] = Math.max(box[5], p.z + r);
+    }
+  return { kind: 'hanger', wood: bar, metal: hook.stem, hook, segments, box, minY: Math.min(...segments.map((s) => Math.min(s.a.y, s.b.y) - s.hu)) };
 }
 
 // Gancho giratorio, como en una vidriera: el alambre sube derecho desde la
@@ -344,7 +350,7 @@ function smoothUps(u, t, n) {
 // (Dijkstra sobre las uniones de la malla): de qué punto cuelga cada uno y
 // cuánto se puede alejar de él.
 function geodesic(n, adj, anchors) {
-  const geo = new Float32Array(n).fill(Infinity);
+  const geo = new Float64Array(n).fill(Infinity);
   const owner = new Int32Array(n).fill(-1);
   const heap = [];
   const push = (d, i) => {
@@ -1568,6 +1574,43 @@ export class HangingShirt {
     return Math.sqrt(u2 * u2 + v2 * v2 + w2 * w2);
   }
 
+  // La tira del cuello que se dibuja (más fina que la simulada) corta camino
+  // donde se apoya en la madera: en los costados de la V su borde de arriba
+  // pasaba por dentro de la barra y la madera asomaba a través del cuello.
+  // Cada punto que queda dentro de la madera (la sección de choque sin su
+  // margen) sale hasta su superficie.
+  outOfWood(a) {
+    const segs = this.hanger.segments;
+    const bb = this.hanger.box;
+    for (let i = 0; i < a.length; i += 3) {
+      if (a[i] < bb[0] || a[i] > bb[1] || a[i + 1] < bb[2] || a[i + 1] > bb[3] || a[i + 2] < bb[4] || a[i + 2] > bb[5]) continue;
+      let best = null;
+      let bs = null;
+      for (const sg of segs) {
+        const ex = sg.b.x - sg.a.x;
+        const ey = sg.b.y - sg.a.y;
+        const ez = sg.b.z - sg.a.z;
+        const u = Math.max(0, Math.min(1, ((a[i] - sg.a.x) * ex + (a[i + 1] - sg.a.y) * ey + (a[i + 2] - sg.a.z) * ez) / (ex * ex + ey * ey + ez * ez)));
+        const o = [a[i] - sg.a.x - ex * u, a[i + 1] - sg.a.y - ey * u, a[i + 2] - sg.a.z - ez * u];
+        const q = this.insideWood(sg, o);
+        if (!best || q < best.q) {
+          best = { q, o };
+          bs = sg;
+        }
+      }
+      if (best.q >= 1 || best.q < 1e-9) continue;
+      const f = 1 / Math.sqrt(best.q) - 1;
+      for (let c = 0; c < 3; c++) a[i + c] += best.o[c] * f;
+    }
+  }
+  insideWood(s, o) {
+    const hu = s.hu - HANGER_MARGIN + 0.0005;
+    const u = (o[0] * s.up.x + o[1] * s.up.y) / hu;
+    const w = (o[0] * s.t.x + o[1] * s.t.y + o[2] * s.t.z) / hu;
+    const v = o[2] / (s.hz - HANGER_MARGIN + 0.0005);
+    return Math.sqrt(u ** 4 + v ** 4 + w ** 4);
+  }
+
   // Choque con la barra de la percha (dentro del ciclo de restricciones, así
   // la tela nunca llega a pasar del centro de la barra). La partícula que
   // entra en la sección sale hacia afuera por la misma dirección (o por el
@@ -2024,6 +2067,7 @@ export class HangingShirt {
       for (let c = 0; c < 3; c++) a[i + c] = seam[e * 3 + c] + F[f + c] * l[i] + F[f + 3 + c] * lu + F[f + 6 + c] * l[i + 2];
     }
     if (this.collarTip >= 0) mitreV(a, SW, a.length / 3 / SW, this.collarTip);
+    if (this.hanger) this.outOfWood(a);
     attr.needsUpdate = true;
     this.geos.collar.computeVertexNormals();
     for (const g of Object.values(this.geos)) g.computeBoundingSphere();

@@ -104,7 +104,9 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   hacía una muesca en el medio, abierta colgada). Con cuerpo, la tela de la V
   va apoyada sobre el pecho (la de referencia se curva hacia el cuello justo
   por donde pasan las patas y las dejaba hundidas, como en una zanja); el
-  molde del estampado sigue siendo el de referencia. La V va de 8 a 13 cm de
+  molde del estampado sigue siendo el de referencia, y colgada la tela tiende
+  a ese molde, no a la forma apoyada (con esa tela de más entre el hombro y la
+  punta, la V colgada se caía 5 cm). La V va de 8 a 13 cm de
   escote (menos honda que el redondo, su punta caía en la tela que sube hacia
   el cuello).
 - **Tela**: siete tejidos (malla deportiva, piqué, panal, jersey liso,
@@ -269,8 +271,8 @@ un aro que empuja el frente y arruga los hombros). La tira se cose estirada y
 frunce apenas el escote, igual con cualquier cuello: en el molde plano el borde
 del escote apunta a la mitad de su largo puesto en el frente y a tres cuartos
 en la espalda (repartido en la tela de alrededor, que queda plana). Colgado,
-el redondo se hace 0,7 cm más hondo que puesto y la V de 9 cm, 1 cm (sin esto,
-3,7 y 4,6). Ese acortamiento se apaga junto a la costura del hombro: si no, el
+el redondo se hace 0,4 cm más hondo que puesto y la V de 9 cm, 0,7 cm (sin
+esto, 3,7 y 4,6). Ese acortamiento se apaga junto a la costura del hombro: si no, el
 hombro del frente aplanado medía hasta un 40 % más que el de la espalda y,
 cosidos, los dos se arrugaban.
 Con broches nada sostiene el

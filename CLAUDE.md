@@ -38,7 +38,9 @@ Es un mockup: manda cómo se ve, no la física exacta.
   recta desde la punta tangente a la curva; medir el desvío de cada borde a la
   cuerda desde la punta, vista de frente.
 - La forma 3D cerca de un corte puede diferir de la referencia si se ve mejor
-  (la V apoyada sobre el pecho, no hundida); el molde del estampado no.
+  (la V apoyada sobre el pecho, no hundida); el molde del estampado no, ni el
+  de reposo de la colgada (con la tela de más del apoyo, la V colgada se caía
+  5 cm). Medir el hondo del escote puesto y colgado: el redondo baja 0,4 cm.
 - Ondas de una celda en la tela colgada son la malla, no la tela: la flexión
   tiene que resistir la compresión (medir el residuo de cada fila contra su
   versión suavizada, no la curva entera).

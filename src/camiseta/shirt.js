@@ -326,8 +326,9 @@ function torsoPoint(M, th, t, out) {
     // en el tank la espalda), no se mete hacia el cuello. En V la tela de
     // referencia se curva hacia el cuello justo por donde pasan las patas: se
     // veían hundidas, como en una zanja. (El molde del estampado sigue siendo
-    // el de la referencia, ver cutMold: el diseño no se mueve.)
-    if ((M.vNeck || M.deepNeck) && cs > 0) z = Math.max(z, chestZ(M, x, yy));
+    // el de la referencia, ver cutMold: el diseño no se mueve; colgada, la
+    // tela tampoco toma este apoyo: ver vRestOffset.)
+    if ((M.deepNeck || (M.vNeck && !M.offChest)) && cs > 0) z = Math.max(z, chestZ(M, x, yy));
     if (M.deepNeck && cs < 0) z = Math.min(z, backZ(M, x, yy));
   }
   out[0] = x;
@@ -1023,6 +1024,8 @@ export function buildShirt(params) {
   // Sin mangas no hay manga que tire de la axila: sin esos pliegues (arrugaban
   // los costados bajo el busto del tank top y asomaban debajo de los puños).
   const pitY = panels.front.pos[(i1 * W + COLS) * 3 + 1];
+  // El frente antes de los pliegues (para vRestOffset).
+  const frontBare = M.vNeck ? Float32Array.from(panels.front.pos) : null;
   const armpits = M.sleeveless ? [] : [Math.PI / 2, -Math.PI / 2, (3 * Math.PI) / 2].map((th) => ({ y: pitY, th }));
   for (const key of ['front', 'back']) {
     const p = panels[key];
@@ -1233,7 +1236,19 @@ export function buildShirt(params) {
     params: { ...DEFAULTS, ...params },
     printBase: { front: parts.front.printBase, back: parts.back.printBase },
     cut: M.cutNeck ? { tw: panels.front.tw, tv: panels.front.tv } : null,
+    frontBare,
   };
+}
+
+// Colgada, la tela tiende a su molde (ver HangingShirt), y el de la V es el de
+// la referencia: sus largos de reposo no pueden salir del frente apoyado
+// sobre el pecho (con esa tela de más entre el hombro y la punta, la V
+// colgada se caía 5 cm más que puesta; el redondo, medio). Devuelve, por
+// vértice del frente, lo que hay que sumarle para sacarle ese apoyo (sólo
+// cambia la z cerca de la V).
+export function vRestOffset(built) {
+  const off = buildTorso({ ...built.measures, offChest: true }).panels.front.pos;
+  return Float32Array.from(built.frontBare, (v, i) => off[i] - v);
 }
 
 // ---------- coordenadas de estampado ----------

@@ -18,7 +18,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { armholeLoopIJ, flattenPanel, bust, mitreV } from './shirt.js';
+import { armholeLoopIJ, flattenPanel, bust, mitreV, vRestOffset } from './shirt.js';
 
 const SUBSTEPS = 4;
 const ITERATIONS = 5;
@@ -155,7 +155,7 @@ export function makeHanger(M) {
     const a = center(xa);
     const b = center(xb);
     const t = new THREE.Vector3().subVectors(b, a).normalize();
-    segments.push({ a, b, t, up: upOf(t), hu: (half(xa) + half(xb)) / 2 + MARGIN, hz: depth + MARGIN });
+    segments.push({ a, b, t, up: upOf(t), hu: (half(xa) + half(xb)) / 2 + MARGIN, hz: depth + MARGIN, r: round });
   }
 
   // Malla: anillos con la sección a lo largo del arco, y en cada punta unos
@@ -493,6 +493,9 @@ export class HangingShirt {
     // Partículas del torso: la grilla fina tomando una fila y columna de cada
     // dos; las costuras de costado y hombro comparten partícula.
     const map = { front: new Int32Array(WC * (NC + 1)).fill(-1), back: new Int32Array(WC * (NC + 1)).fill(-1) };
+    // En V, lo que separa la tela apoyada sobre el pecho de su molde (el de la
+    // referencia): ver vRestOffset y, más abajo, el molde de reposo.
+    const vLift = built.frontBare ? vRestOffset(built) : null;
     const inHole = (key, i, j) => i > i1 && i < i2 && (j < AK[key] || j > C - AK[key]);
     for (const key of ['front', 'back']) {
       for (let i = 0; i <= NC; i++)
@@ -669,10 +672,12 @@ export class HangingShirt {
       const base = built.printBase[key];
       const pos3 = new Float64Array(m.length * 3);
       const X0 = new Float64Array(m.length * 2);
+      const lift = key === 'front' ? vLift : null;
       m.forEach((id, v) => {
         if (id < 0) return;
         const f = 2 * Math.floor(v / WC) * W + 2 * (v % WC);
         pos3.set(P.subarray(id * 3, id * 3 + 3), v * 3);
+        if (lift) for (let d = 0; d < 3; d++) pos3[v * 3 + d] += lift[f * 3 + d];
         X0[v * 2] = base[f * 2];
         X0[v * 2 + 1] = base[f * 2 + 1];
       });
@@ -1598,10 +1603,40 @@ export class HangingShirt {
           bs = sg;
         }
       }
-      if (best.q >= 1 || best.q < 1e-9) continue;
-      const f = 1 / Math.sqrt(best.q) - 1;
-      for (let c = 0; c < 3; c++) a[i + c] += best.o[c] * f;
+      // (La superelipse elige el tramo; el empuje es con la sección de la
+      // madera, un rectángulo de bordes redondeados: en las esquinas queda
+      // afuera de la superelipse y la tira de la V colgada se metía ahí.)
+      if (best.q >= 1.5) continue;
+      const m = this.woodPush(bs, best.o);
+      if (!m) continue;
+      a[i] += bs.up.x * m[0];
+      a[i + 1] += bs.up.y * m[0];
+      a[i + 2] += m[1];
     }
+  }
+  // Cuánto mover un punto (o, desde el eje del tramo s) a lo alto y a lo
+  // hondo de la sección para dejarlo en el borde de la madera (null si ya
+  // está afuera).
+  woodPush(s, o) {
+    const h = s.hu - HANGER_MARGIN + 0.0005;
+    const d = s.hz - HANGER_MARGIN + 0.0005;
+    const u = o[0] * s.up.x + o[1] * s.up.y;
+    const v = o[2];
+    const au = Math.abs(u);
+    const av = Math.abs(v);
+    const cu = au - (h - s.r);
+    const cv = av - (d - s.r);
+    let nu = au;
+    let nv = av;
+    if (cu > 0 && cv > 0) {
+      const l = Math.hypot(cu, cv);
+      if (l >= s.r) return null;
+      nu = h - s.r + (cu / l) * s.r;
+      nv = d - s.r + (cv / l) * s.r;
+    } else if (au >= h || av >= d) return null;
+    else if (h - au < d - av) nu = h;
+    else nv = d;
+    return [Math.sign(u) * (nu - au), Math.sign(v) * (nv - av)];
   }
   insideWood(s, o) {
     const hu = s.hu - HANGER_MARGIN + 0.0005;

@@ -118,13 +118,14 @@ const FLAT_REST = [
 // rectángulo de bordes apenas redondeados (más alto que ancho) y las puntas
 // son redondas vistas de frente.
 export function makeHanger(M) {
-  // La percha llega cerca de la punta del hombro: si termina antes, la punta
-  // y la manga caen, los costados se cierran y arriba la tela queda sobrando
-  // a lo ancho (ondas verticales en la espalda y el frente: con 5 cm, 4 mm;
-  // con 1,5 cm, la mitad). Sin mangas, un poco antes (si no, la punta
-  // cuelga y se dobla junto a la sisa); con las tiras finas del tank top,
-  // casi hasta su borde de afuera (si no, media tira queda en el aire).
-  const xEnd = (M.shTip || M.shA) - (M.deepNeck ? 0.008 : M.sleeveless ? 0.022 : 0.015);
+  // Con mangas, la percha termina 5 cm antes de la punta del hombro: la
+  // tela cae un poco antes de la manga (más larga, la camiseta colgada se ve
+  // ancha y cuadrada). La tela de arriba sobra a lo ancho y hace ondas y
+  // pliegues que salen de la punta de la percha: los borra el suavizado de
+  // lo que se ve (smoothed). Sin mangas, más cerca (si no, la punta cuelga
+  // y se dobla junto a la sisa); con las tiras finas del tank top, casi
+  // hasta su borde de afuera (si no, media tira queda en el aire).
+  const xEnd = (M.shTip || M.shA) - (M.deepNeck ? 0.008 : M.sleeveless ? 0.022 : 0.05);
   const seamY = (x) => {
     const ax = Math.abs(x);
     return ax <= M.neck.a ? 0 : (M.shY * (ax - M.neck.a)) / (M.shA - M.neck.a);
@@ -342,6 +343,64 @@ function smoothUps(u, t, n) {
     u[k * 3 + 1] = y / l;
     u[k * 3 + 2] = z / l;
   }
+}
+
+// ---------- suavizado de lo que se ve ----------
+
+// La tela que se ve sale de la simulada suavizada: las ondas chicas (de unas
+// pocas celdas) se borran y la caída queda igual. Taubin (un paso que
+// suaviza y otro que infla: no achica), y cada punto se mueve a lo sumo
+// DISPLAY_CAP (los dobleces de verdad, como los costados o la punta del
+// hombro, no se redondean).
+const DISPLAY_PASSES = 20;
+const DISPLAY_CAP = 0.004;
+const TAUBIN = [0.5, -0.53];
+
+// Vecinos de cada punto para el suavizado: adentro de su pieza, los cuatro
+// de la grilla; en el ruedo, el escote y las costuras de costado, los dos de
+// a lo largo del borde; en las sisas y donde las piezas no coinciden, quieto.
+function smoothStencil(dims, map, sleeveMap) {
+  const { C, NC, WC, SWC, RC } = dims;
+  const role = new Map();
+  const put = (id, nb) => {
+    const cur = role.get(id);
+    if (cur === null) return;
+    if (!nb || (cur && (cur.length !== nb.length || !cur.every((x) => nb.includes(x))))) role.set(id, null);
+    else role.set(id, nb);
+  };
+  for (const m of [map.front, map.back]) {
+    const at = (i, j) => (i < 0 || j < 0 || i > NC || j > C ? -1 : m[i * WC + j]);
+    for (let i = 0; i <= NC; i++)
+      for (let j = 0; j <= C; j++) {
+        const id = at(i, j);
+        if (id < 0) continue;
+        const nb = [at(i + 1, j), at(i - 1, j), at(i, j - 1), at(i, j + 1)];
+        if (nb.every((x) => x >= 0)) put(id, nb);
+        else if ((i === 0 || i === NC) && nb[2] >= 0 && nb[3] >= 0) put(id, [nb[2], nb[3]]);
+        else if ((j === 0 || j === C) && nb[0] >= 0 && nb[1] >= 0) put(id, [nb[0], nb[1]]);
+        else put(id, null);
+      }
+  }
+  for (const m of Object.values(sleeveMap)) {
+    const K = SWC - 1;
+    const at = (r, k) => m[r * SWC + ((k % K) + K) % K];
+    for (let r = 0; r <= RC; r++)
+      for (let k = 0; k < K; k++) {
+        if (r === 0) put(at(r, k), null);
+        else if (r === RC) put(at(r, k), [at(r, k - 1), at(r, k + 1)]);
+        else put(at(r, k), [at(r + 1, k), at(r - 1, k), at(r, k - 1), at(r, k + 1)]);
+      }
+  }
+  const ids = [];
+  const off = [0];
+  const nbs = [];
+  for (const [id, nb] of role)
+    if (nb) {
+      ids.push(id);
+      nbs.push(...nb);
+      off.push(nbs.length);
+    }
+  return { ids: Int32Array.from(ids), off: Int32Array.from(off), nbs: Int32Array.from(nbs), tmp: new Float32Array(ids.length * 3) };
 }
 
 // ---------- simulación ----------
@@ -945,6 +1004,8 @@ export class HangingShirt {
     this.layers = Int32Array.from(layers);
     this.layerGap = Float32Array.from({ length: layers.length / 2 }, (_, c) => Math.max(GAP, (P[layers[2 * c] * 3 + 2] - P[layers[2 * c + 1] * 3 + 2]) * VOLUME_SLEEVE));
     this.bindFine(L, W, SW);
+    this.stencil = smoothStencil(this.dims, map, sleeveMap);
+    this.shown = new Float32Array(this.p.length);
     // Choque entre puntos. Junto a los broches la tela queda apretada a
     // propósito (más cerca que el grosor): ahí no hay choque.
     this.noCollide = new Uint8Array(n);
@@ -2018,8 +2079,47 @@ export class HangingShirt {
   }
 
   // Malla fina, cuello y dobladillos a partir de las partículas.
-  updateMeshes() {
+  // Posiciones que se ven: las simuladas, suavizadas (ver smoothStencil).
+  smoothed() {
     const P = this.p;
+    const out = this.shown;
+    out.set(P);
+    const { ids, off, nbs, tmp } = this.stencil;
+    for (let it = 0; it < 2 * DISPLAY_PASSES; it++) {
+      const f = TAUBIN[it % 2];
+      for (let a = 0; a < ids.length; a++) {
+        const id = ids[a] * 3;
+        let x = 0;
+        let y = 0;
+        let z = 0;
+        for (let q = off[a]; q < off[a + 1]; q++) {
+          const b = nbs[q] * 3;
+          x += out[b];
+          y += out[b + 1];
+          z += out[b + 2];
+        }
+        const n = off[a + 1] - off[a];
+        tmp[a * 3] = out[id] + f * (x / n - out[id]);
+        tmp[a * 3 + 1] = out[id + 1] + f * (y / n - out[id + 1]);
+        tmp[a * 3 + 2] = out[id + 2] + f * (z / n - out[id + 2]);
+      }
+      for (let a = 0; a < ids.length; a++) {
+        const id = ids[a] * 3;
+        const dx = tmp[a * 3] - P[id];
+        const dy = tmp[a * 3 + 1] - P[id + 1];
+        const dz = tmp[a * 3 + 2] - P[id + 2];
+        const l2 = dx * dx + dy * dy + dz * dz;
+        const k = l2 > DISPLAY_CAP * DISPLAY_CAP ? DISPLAY_CAP / Math.sqrt(l2) : 1;
+        out[id] = P[id] + dx * k;
+        out[id + 1] = P[id + 1] + dy * k;
+        out[id + 2] = P[id + 2] + dz * k;
+      }
+    }
+    return out;
+  }
+
+  updateMeshes() {
+    const P = this.smoothed();
     for (const b of this.binds) {
       const attr = this.geos[b.key].attributes.position;
       const a = attr.array;

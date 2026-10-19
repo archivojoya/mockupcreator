@@ -279,10 +279,19 @@ cuello atrás (entre los broches) ni el hombro de afuera del broche: ahí cada
 tramo de unos 10 cm de la tira guarda algo de su forma puesta (si no, la
 espalda del cuello cae y se embolsa), mucho más en los costados del cuello
 (ahí la tira dobla de frente a espalda; acostada se quebraba en una aleta), se
-guarda menos volumen arriba y la copa de la manga cede más. La percha llega
-a 1,5 cm de la punta del hombro: más corta, la punta y la manga caían, los
-costados se cerraban y arriba la tela quedaba sobrando a lo ancho (ondas
-verticales en la espalda y el frente). La madera nunca atraviesa la tela: la
+guarda menos volumen arriba y la copa de la manga cede más. Con mangas, la
+percha termina 5 cm antes de la punta del hombro: la tela cae un poco antes
+de la manga (llegando a 1,5 cm, la camiseta colgada se veía ancha y
+cuadrada). Arriba la tela sobra a lo ancho y hace ondas y pliegues que salen
+de la punta de la percha. Lo que se ve es la tela simulada suavizada
+(Taubin: un paso suaviza y otro infla, así no achica; 20 vueltas): las ondas
+y pliegues chicos se borran y la caída queda igual. Cada punto se mueve 4 mm
+como mucho, así los dobleces de verdad (los costados, la punta del hombro)
+no se redondean, y los bordes (ruedo, escote, costuras de costado) sólo se
+suavizan a lo largo de sí mismos; las sisas quedan quietas. Endurecer la
+flexión o ablandar el apoyo en la madera (una punta blanda más allá de la
+percha, la tela sin quedar adherida donde toca) empeoraba las ondas o no la
+dejaba quieta. La madera nunca atraviesa la tela: la
 tira del cuello que se dibuja, más fina que la simulada, cortaba camino donde
 se apoya en la madera (en los costados de la V su borde de arriba pasaba por
 dentro de la barra); cada punto que queda dentro de la madera sale hasta su

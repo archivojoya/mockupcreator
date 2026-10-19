@@ -31,9 +31,9 @@ Es un mockup: manda cómo se ve, no la física exacta.
 - Un borde no cruza en diagonal un doblez cerrado de la tela (la punta del
   hombro): se redondea el doblez o el borde lo cruza derecho. Agrandar un
   hueco en la grilla donde la tela rinde distinto por fila lo deja en punta.
-- La percha se ve donde la prenda se apoya, sostiene casi hasta la punta del
-  hombro (más corta, la tela de arriba sobra a lo ancho y se ondula) y nunca
-  atraviesa la tela: la malla que se ve (más fina que la simulada) se empuja
+- La percha se ve donde la prenda se apoya, con mangas termina 5 cm antes de
+  la punta del hombro (la tela cae antes de la manga; más larga, la camiseta
+  se ve ancha y cuadrada) y nunca atraviesa la tela: la malla que se ve (más fina que la simulada) se empuja
   fuera de la madera. Para encontrarlo, buscar puntos de la malla que se ve
   dentro de la madera (rayos en seis direcciones: número impar de cruces).
   La percha queda a su altura de siempre, sin espacio con la tela.
@@ -50,6 +50,11 @@ Es un mockup: manda cómo se ve, no la física exacta.
 - Ondas de una celda en la tela colgada son la malla, no la tela: la flexión
   tiene que resistir la compresión (medir el residuo de cada fila contra su
   versión suavizada, no la curva entera).
+- Colgada, lo que se ve es la tela simulada suavizada (Taubin, cada punto se
+  mueve 4 mm como mucho): borra ondas y pliegues chicos sin tocar la caída ni
+  los dobleces de verdad. Es el primer recurso contra arrugas: endurecer la
+  flexión o ablandar el apoyo en la madera las empeoraba o no la dejaba
+  quieta.
 - Si el pedido viene dibujado, pasar el trazo a medidas y superponerlo a la
   prenda en 2D antes de renderizar.
 
@@ -58,7 +63,11 @@ Es un mockup: manda cómo se ve, no la física exacta.
 Playwright + Chromium sin pantalla (`--use-gl=angle --use-angle=swiftshader`):
 adelantar la simulación a mano (`d.step(1/60)` hasta `d.sleeping`), valores
 extremos de los controles, simetría, acercamientos de cámara al cuello, los
-hombros y las sisas. Pruebas numéricas útiles: triángulos dados vuelta,
+hombros y las sisas. Arrugómetro (antes que una imagen): en la grilla
+simulada, la curvatura de cada punto (laplaciano sobre la normal) menos su
+promedio en ±2 puntos, por zona (arriba, medio, abajo de frente y espalda, y
+mangas), en mm; en lo que se ve no debería pasar de 0,5 de promedio, salvo
+arriba junto a la percha y los broches. Otras pruebas numéricas útiles: triángulos dados vuelta,
 distancia de una pieza apoyada a la tela, ángulo que dobla un borde y largo de
 las costuras en los moldes aplanados.
 

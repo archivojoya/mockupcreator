@@ -85,8 +85,9 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   mangas, y sus piezas en la personalización.
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
   de mangas, puño (con puño, o sin puño: la manga sigue hasta el borde con su
-  color y su diseño, sin costura), cuello (redondo o en V) y profundidad del
-  escote. De entrada: calce ajustado, 62 cm de largo, manga de 18 cm, 30° de
+  color y su diseño, sin costura) y profundidad del escote (el cuello en V
+  está fuera de la página hasta estudiarlo bien: `V_NECK` en `main.js`; lo
+  que sigue lo describe tal como quedó en el motor). De entrada: calce ajustado, 62 cm de largo, manga de 18 cm, 30° de
   apertura, cuello redondo con 7,5 cm de escote. La malla se rehace
   al instante. El cuello es sólo un corte: con cualquier cuello y cualquier
   hondo la camiseta y su molde son los mismos (la tela de la de cuello

@@ -378,7 +378,12 @@ const CONFIG = (() => {
 // Tela: tejido (ver WEAVES en fabric.js), acabado ('matte' mate · 'satin'
 // satinado) y peso (0 liviana · 1 pesada).
 const FABRIC = { weave: 'mesh', finish: 'matte', weight: 0.5 };
+// El cuello en V queda fuera de la página hasta estudiarlo bien (el motor lo
+// sigue teniendo: neckStyle 'v' en shirt.js y drape.js). Con esto en true
+// vuelve el selector de cuello.
+const V_NECK = false;
 const BASE_PARAMS = { ...DEFAULTS, ...CONFIG.params };
+if (!V_NECK) BASE_PARAMS.neckStyle = 'round';
 // El tank top arranca con su escote típico (ver NECK.tank).
 if (BASE_PARAMS.garment === 'tank' && CONFIG.params?.neckDepth === undefined) BASE_PARAMS.neckDepth = 0.13;
 const BASE_COLORS = { ...COLORS, ...CONFIG.colors };
@@ -912,7 +917,7 @@ function syncControls() {
   garmentButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.garment === garmentOf())));
   for (const id of ['sleeveLength', 'sleeveAngle']) sliders[id].closest('.control').hidden = bare;
   document.getElementById('cuff-control').hidden = bare;
-  document.getElementById('neck-control').hidden = tank;
+  document.getElementById('neck-control').hidden = tank || !V_NECK;
   document.getElementById('c-sleeves').closest('.swatch').hidden = bare;
   document.getElementById('sw-cuffs').hidden = tank || (!bare && params.cuff === 'none');
   document.getElementById('c-collar-label').textContent = tank ? 'Vivos' : 'Cuello';

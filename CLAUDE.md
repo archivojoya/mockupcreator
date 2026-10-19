@@ -3,6 +3,8 @@
 Mockups 3D de prendas deportivas con three.js (`camiseta.html`, código en
 `src/camiseta/`). El README explica cada parte; la skill de cuenta
 `camiseta-3d` lleva la misma página y sus lecciones (`references/motor.md`).
+El cuello en V está fuera de la página hasta estudiarlo bien (`V_NECK` en
+`main.js`); el motor lo sigue teniendo.
 
 ## Criterios estéticos (para todas las prendas)
 

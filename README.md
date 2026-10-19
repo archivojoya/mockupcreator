@@ -72,8 +72,8 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     hombro derecho, de frente a espalda. Colgada sale del borde siguiendo la
     tela, y la percha llega más cerca de la punta del hombro.
   - **Básquet**: la musculosa de sisa grande (baja 4,5 cm más, entra más en
-    el frente y la espalda, y el hombro termina antes), también con el
-    hombro 2 cm más angosto.
+    el frente y la espalda, y el hombro termina antes), con el hombro 3,5 cm
+    más angosto (cada tira del hombro mide 9,8 cm de ancho, sin el puño).
   - **Tank top** (de mujer): cuerpo con busto, cintura y cadera; escote
     redondo ancho y hondo adelante (13 cm de entrada, de 9 a 18) y alto
     atrás (4 cm); tiras de 4,2 cm en el hombro; espalda nadadora (cada sisa
@@ -96,8 +96,8 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   costura en inglete en la tira: cada mitad llega hasta el medio y ahí se
   corta (parada, el borde de arriba de cada mitad pasaba al otro lado). Todo
   lo demás es el redondo: la misma tira parada, la misma caída colgada (7,5
-  cm puesta, 8,2 colgada; el redondo, 8) y el mismo rango de escote (5,5 a
-  12 cm). Sobre el escote de referencia, la tela de más de la V sube enseguida
+  cm puesta, 8,2 colgada; el redondo, 8) y los mismos tres hondos de escote
+  (7,5, 9 y 12 cm). Sobre el escote de referencia, la tela de más de la V sube enseguida
   (dobla con 3 mm de radio, el redondo con 1,2 cm): la tela de referencia
   llega al escote casi horizontal hacia la garganta y, siguiéndola, junto a
   la punta las patas se iban 4 mm hacia atrás. Con escote hondo (V o redondo

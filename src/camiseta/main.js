@@ -879,8 +879,11 @@ const OUT = {
 const FOUT = {
   weight: (v) => `${Math.round(120 + 100 * v)} g/m²`,
 };
-// Escote según el tipo de cuello: mínimo, máximo y valor al elegirlo.
-const NECK = { round: [0.055, 0.12, 0.075], v: [0.055, 0.12, 0.075], tank: [0.09, 0.18, 0.13] };
+// Escote según el tipo de cuello: mínimo, máximo y valor al elegirlo. El
+// redondo y la V tienen sólo tres hondos (DEPTHS); el tank top, el control.
+const NECK = { round: [0.075, 0.12, 0.075], v: [0.075, 0.12, 0.075], tank: [0.09, 0.18, 0.13] };
+const DEPTHS = [0.075, 0.09, 0.12];
+const snapDepth = (v) => DEPTHS.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a));
 const sliders = {};
 const fabricSliders = {};
 function setFill(input) {
@@ -891,7 +894,7 @@ function syncControls() {
   const [lo, hi] = neckRange();
   sliders.neckDepth.min = lo;
   sliders.neckDepth.max = hi;
-  params.neckDepth = Math.min(hi, Math.max(lo, params.neckDepth));
+  params.neckDepth = params.garment === 'tank' ? Math.min(hi, Math.max(lo, params.neckDepth)) : snapDepth(params.neckDepth);
   for (const [k, input] of Object.entries(sliders)) {
     input.value = params[k];
     document.getElementById(`${k}-out`).textContent = OUT[k](params[k]);
@@ -913,6 +916,9 @@ function syncControls() {
   for (const id of ['sleeveLength', 'sleeveAngle']) sliders[id].closest('.control').hidden = bare;
   document.getElementById('cuff-control').hidden = bare;
   document.getElementById('neck-control').hidden = tank;
+  document.getElementById('depth-control').hidden = tank;
+  document.getElementById('neckDepth-control').hidden = !tank;
+  depthButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.depth === params.neckDepth)));
   document.getElementById('c-sleeves').closest('.swatch').hidden = bare;
   document.getElementById('sw-cuffs').hidden = tank || (!bare && params.cuff === 'none');
   document.getElementById('c-collar-label').textContent = tank ? 'Vivos' : 'Cuello';
@@ -942,14 +948,22 @@ for (const k of Object.keys(OUT)) {
     scheduleRebuild();
   });
 }
-// Tipo de cuello: al cambiarlo, el escote vuelve al valor típico de ese
-// cuello.
+// Tipo de cuello: el redondo y la V comparten los tres hondos, así que el
+// escote se mantiene al cambiarlo.
 const neckButtons = [...document.querySelectorAll('[data-neck]')];
 neckButtons.forEach((b) =>
   b.addEventListener('click', () => {
     if (params.neckStyle === b.dataset.neck) return;
     params.neckStyle = b.dataset.neck;
-    params.neckDepth = neckRange()[2];
+    syncControls();
+    scheduleRebuild();
+  }),
+);
+const depthButtons = [...document.querySelectorAll('[data-depth]')];
+depthButtons.forEach((b) =>
+  b.addEventListener('click', () => {
+    if (params.neckDepth === +b.dataset.depth) return;
+    params.neckDepth = +b.dataset.depth;
     syncControls();
     scheduleRebuild();
   }),

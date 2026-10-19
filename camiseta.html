@@ -90,7 +90,15 @@
                 <button type="button" data-neck="v" aria-pressed="false">En V</button>
               </div>
             </div>
-            <div class="control">
+            <div class="control" id="depth-control">
+              <span class="label" id="depth-label">Escote</span>
+              <div class="seg" role="group" aria-labelledby="depth-label">
+                <button type="button" data-depth="0.075" aria-pressed="true">7,5 cm</button>
+                <button type="button" data-depth="0.09" aria-pressed="false">9 cm</button>
+                <button type="button" data-depth="0.12" aria-pressed="false">12 cm</button>
+              </div>
+            </div>
+            <div class="control" id="neckDepth-control">
               <label for="neckDepth">Escote</label>
               <output id="neckDepth-out" for="neckDepth"></output>
               <input id="neckDepth" type="range" min="0.055" max="0.12" step="0.001" />

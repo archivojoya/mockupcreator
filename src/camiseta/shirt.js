@@ -151,7 +151,7 @@ export function measures(p) {
     // abajo (más suelta, menos relieve y cae más derecho).
     bust: tank ? { x: 0.085, y: -0.245, h: 0.042 * (1 - 0.4 * f), sx: 0.045, sUp: 0.12, sDown: 0.05 + 0.07 * f } : null,
   };
-  const shA = tank ? M.neck.a + TANK.strap : basket ? 0.188 + 0.026 * f : 0.214 + 0.032 * f; // medio ancho de hombros
+  const shA = tank ? M.neck.a + TANK.strap : basket ? 0.173 + 0.026 * f : 0.214 + 0.032 * f; // medio ancho de hombros
   if (tank || basket) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
   const aC = 0.176 + 0.046 * f; // medio ancho y media profundidad del pecho
   const bC = 0.112 + 0.022 * f;

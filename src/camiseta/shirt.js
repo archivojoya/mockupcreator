@@ -393,6 +393,9 @@ function tAtX(M, th, t0, x) {
 // hombro se redondea el último pedacito de la recta.
 const VEE_EASE = 0.08; // fracción del ancho que se redondea junto al hombro
 const VEE_STRAIGHT = 0.4; // cuánto de la recta llevan las patas (0 = redondo, 1 = rectas)
+// El escote de referencia visto de frente (el redondo de NECK_REF).
+const refCutY = (M, ax) => -M.refF * (1 - Math.min(1, ax / M.neck.a) ** 2) ** 0.8;
+const NECK_LIE = 0.03; // cuánto más abajo que la referencia la tira va del todo acostada
 const cutY = (M, ax) => {
   const r = Math.min(1, ax / M.neck.a);
   const round = (1 - r * r) ** 0.8;
@@ -1677,6 +1680,19 @@ function buildCollar(M, neck, tip) {
     hz.normalize().multiplyScalar(Math.sqrt(Math.max(0, h * h - rise * rise)));
     return along(new THREE.Vector3(hz.x, rise, hz.z), k);
   });
+  // Donde el escote pasa más abajo que el de referencia (en V y en el
+  // redondo hondo), la tira se va acostando sobre el pecho, siguiendo la tela
+  // (del todo NECK_LIE más abajo): parada, junto a la punta quedaba delante de
+  // la tela (el pecho ahí va inclinado) y más arriba se inclinaba hacia atrás;
+  // torcida a lo largo de la pata, hacía un quiebre con tela de más arriba.
+  if (!flat)
+    ups = ups.map((u, k) => {
+      const ax = Math.abs(base[k].x);
+      const f = base[k].z > 0 && ax < M.neck.a ? smoothstep(0, NECK_LIE, refCutY(M, ax) - cutY(M, ax)) : 0;
+      if (f <= 0) return u;
+      const lie = along(new THREE.Vector3().subVectors(base[k], below[k]).normalize(), k);
+      return along(u.clone().lerp(lie, f).normalize(), k);
+    });
   // Vivo: sigue la tela desde el borde.
   if (flat) {
     ups = base.map((b, k) => along(new THREE.Vector3().subVectors(b, below[k]).normalize(), k));

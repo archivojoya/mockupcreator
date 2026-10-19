@@ -12,6 +12,10 @@ Es un mockup: manda cómo se ve, no la física exacta.
   esconder una pieza o hacer un truco está bien si las evita.
 - Pliegues de terminación sólo donde tienen sentido (los que salen de la
   axila, sólo con mangas).
+- La tira del cuello alcanza justo: sin tela de más que la doble o la tuerza.
+  Con escote hondo va acostada sobre el pecho (parada se torcía a lo largo de
+  la pata). Medir, por tramo, el borde de arriba contra la costura: nunca más
+  largo.
 - Puños y vivos con cuerpo, apoyados sobre la tela (envuelven el borde);
   colgados siguen la tela sin levantarse.
 - Bordes de huecos en curvas sin quiebres: si la grilla dobla en un punto, se

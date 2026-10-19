@@ -100,7 +100,12 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   12 cm). Sobre el escote de referencia, la tela de más de la V sube enseguida
   (dobla con 3 mm de radio, el redondo con 1,2 cm): la tela de referencia
   llega al escote casi horizontal hacia la garganta y, siguiéndola, junto a
-  la punta las patas se iban 4 mm hacia atrás. (La V anterior, una V honda
+  la punta las patas se iban 4 mm hacia atrás. Con escote hondo (V o redondo
+  más hondo que 7,5 cm) la tira se va acostando sobre el pecho donde el corte
+  pasa por debajo del de referencia (del todo 3 cm más abajo): parada, junto a
+  la punta quedaba por delante de la tela (ahí el pecho va inclinado) y más
+  arriba se inclinaba hacia atrás, y torcida a lo largo de la pata hacía un
+  quiebre con tela de más en el borde de arriba. (La V anterior, una V honda
   cortada en la misma tela, pasaba por donde esa tela se curva hacia el
   cuello: se hundía, se caía colgada y la tira se armaba mal en la punta.)
 - **Tela**: siete tejidos (malla deportiva, piqué, panal, jersey liso,

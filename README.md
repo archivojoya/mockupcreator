@@ -94,7 +94,10 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   queda adentro del triángulo. El cuello en V tiene el mismo ancho que el
   redondo; sus patas bajan de cada hombro apenas abombadas hacia afuera y
   llegan rectas a la punta, que queda neta (con el abombado hasta el final el
-  fondo de la V se redondeaba). Adelante la tira va acostada sobre el pecho,
+  fondo de la V se redondeaba). El tramo recto es la recta desde la punta que
+  toca la curva sin cortarla, hasta unos 3,5 cm del centro: apagando el
+  abombado sin más, la pata quedaba más empinada en la punta que arriba y se
+  metía hacia adentro antes del pico. Adelante la tira va acostada sobre el pecho,
   con el mismo ancho en toda la V, y sus dos mitades se juntan en la punta en
   una costura en inglete, cerrada también colgada: cada fila de la tira sigue
   derecho hasta el medio (recortando sólo lo que pasaba al otro lado, el borde

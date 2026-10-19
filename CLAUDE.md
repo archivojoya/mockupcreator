@@ -33,6 +33,10 @@ Es un mockup: manda cómo se ve, no la física exacta.
   fuera de la madera. Para encontrarlo, buscar puntos de la malla que se ve
   dentro de la madera (rayos en seis direcciones: número impar de cruces).
   La percha queda a su altura de siempre, sin espacio con la tela.
+- Un borde que termina en punta (la V) llega recto: si una curva se apaga
+  antes de la punta, la pata se mete hacia adentro (inflexión). Se usa la
+  recta desde la punta tangente a la curva; medir el desvío de cada borde a la
+  cuerda desde la punta, vista de frente.
 - La forma 3D cerca de un corte puede diferir de la referencia si se ve mejor
   (la V apoyada sobre el pecho, no hundida); el molde del estampado no.
 - Ondas de una celda en la tela colgada son la malla, no la tela: la flexión

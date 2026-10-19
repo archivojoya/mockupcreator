@@ -389,20 +389,35 @@ function tAtX(M, th, t0, x) {
 // no corta nada. En V, la recta desde cada punto del hombro hasta la punta
 // lleva algo de la curva del cuello redondo: las patas se abomban un poco
 // hacia afuera. Junto a la punta no (la curva redonda llega plana al centro y
-// el fondo de la V quedaba redondeado): las patas llegan rectas y la punta
-// queda neta. Junto al hombro se redondea el último pedacito de la recta para
-// no hacer pico donde sigue la espalda.
+// el fondo de la V quedaba redondeado): ese abombado se apaga. Junto al hombro
+// se redondea el último pedacito de la recta para no hacer pico donde sigue
+// la espalda.
 const VEE_EASE = 0.08; // fracción del ancho que se redondea junto al hombro
 const VEE_ROUND = 0.4; // cuánto de la curva redonda llevan las patas (0 = rectas)
 const VEE_TIP = 0.45; // fracción del ancho, desde el centro, en la que ese abombado se apaga
-const cutY = (M, ax) => {
-  const r = Math.min(1, ax / M.neck.a);
-  const round = (1 - r * r) ** 0.8;
-  if (!M.vNeck) return -M.dropF * round;
+// Hondo de la V (fracción de la punta) a la fracción r del ancho.
+const veeDrop = (r) => {
   const u = 1 - r;
   const e = VEE_EASE;
   const straight = (u < e ? (u * u) / (2 * e) : u - e / 2) / (1 - e / 2);
-  return -M.dropF * (straight + VEE_ROUND * (round - straight) * smoothstep(0, VEE_TIP, r));
+  return straight + VEE_ROUND * ((1 - r * r) ** 0.8 - straight) * smoothstep(0, VEE_TIP, r);
+};
+// Al apagarse el abombado, la pata se metía hacia adentro antes del pico (más
+// empinada en la punta que más arriba). Del centro hasta VEE_R1 va la recta
+// desde la punta que toca la curva sin cortarla: la de menos pendiente entre
+// las cuerdas desde la punta (VEE_SLOPE).
+const [VEE_R1, VEE_SLOPE] = (() => {
+  let best = [0, -Infinity];
+  for (let i = 1; i <= 1000; i++) {
+    const s = (veeDrop(i / 1000) - 1) / (i / 1000);
+    if (s > best[1]) best = [i / 1000, s];
+  }
+  return best;
+})();
+const cutY = (M, ax) => {
+  const r = Math.min(1, ax / M.neck.a);
+  if (!M.vNeck) return -M.dropF * (1 - r * r) ** 0.8;
+  return -M.dropF * (r < VEE_R1 ? 1 + VEE_SLOPE * r : veeDrop(r));
 };
 // Dónde corta el escote la columna de ángulo th del frente: el t en que la
 // columna llega a la línea del corte (menos de 1 si pasa más abajo que el de

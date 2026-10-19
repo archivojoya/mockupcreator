@@ -85,31 +85,24 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   mangas, y sus piezas en la personalización.
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
   de mangas, puño (con puño, o sin puño: la manga sigue hasta el borde con su
-  color y su diseño, sin costura) y profundidad del escote (el cuello en V
-  está fuera de la página hasta estudiarlo bien: `V_NECK` en `main.js`; lo
-  que sigue lo describe tal como quedó en el motor). De entrada: calce ajustado, 62 cm de largo, manga de 18 cm, 30° de
+  color y su diseño, sin costura), cuello (redondo o en V) y profundidad del
+  escote. De entrada: calce ajustado, 62 cm de largo, manga de 18 cm, 30° de
   apertura, cuello redondo con 7,5 cm de escote. La malla se rehace
   al instante. El cuello es sólo un corte: con cualquier cuello y cualquier
   hondo la camiseta y su molde son los mismos (la tela de la de cuello
-  redondo de 7,5 cm), y un diseño cae en el mismo lugar; la V se lleva lo que
-  queda adentro del triángulo. El cuello en V tiene el mismo ancho que el
-  redondo; sus patas bajan de cada hombro apenas abombadas hacia afuera y
-  llegan rectas a la punta, que queda neta (con el abombado hasta el final el
-  fondo de la V se redondeaba). El tramo recto es la recta desde la punta que
-  toca la curva sin cortarla, hasta unos 3,5 cm del centro: apagando el
-  abombado sin más, la pata quedaba más empinada en la punta que arriba y se
-  metía hacia adentro antes del pico. Adelante la tira va acostada sobre el pecho,
-  con el mismo ancho en toda la V, y sus dos mitades se juntan en la punta en
-  una costura en inglete, cerrada también colgada: cada fila de la tira sigue
-  derecho hasta el medio (recortando sólo lo que pasaba al otro lado, el borde
-  hacía una muesca en el medio, abierta colgada). Con cuerpo, la tela de la V
-  va apoyada sobre el pecho (la de referencia se curva hacia el cuello justo
-  por donde pasan las patas y las dejaba hundidas, como en una zanja); el
-  molde del estampado sigue siendo el de referencia, y colgada la tela tiende
-  a ese molde, no a la forma apoyada (con esa tela de más entre el hombro y la
-  punta, la V colgada se caía 5 cm). La V va de 8 a 13 cm de
-  escote (menos honda que el redondo, su punta caía en la tela que sube hacia
-  el cuello).
+  redondo de 7,5 cm), y un diseño cae en el mismo lugar. La V es el redondo
+  con las patas algo más rectas (su curva con un 40 % de la recta de cada
+  punto del hombro a la punta), la punta en el medio y al mismo hondo, y una
+  costura en inglete en la tira: cada mitad llega hasta el medio y ahí se
+  corta (parada, el borde de arriba de cada mitad pasaba al otro lado). Todo
+  lo demás es el redondo: la misma tira parada, la misma caída colgada (7,5
+  cm puesta, 8,2 colgada; el redondo, 8) y el mismo rango de escote (5,5 a
+  12 cm). Sobre el escote de referencia, la tela de más de la V sube enseguida
+  (dobla con 3 mm de radio, el redondo con 1,2 cm): la tela de referencia
+  llega al escote casi horizontal hacia la garganta y, siguiéndola, junto a
+  la punta las patas se iban 4 mm hacia atrás. (La V anterior, una V honda
+  cortada en la misma tela, pasaba por donde esa tela se curva hacia el
+  cuello: se hundía, se caía colgada y la tira se armaba mal en la punta.)
 - **Tela**: siete tejidos (malla deportiva, piqué, panal, jersey liso,
   acanalada, jacquard con rayas tono sobre tono y microperforada con zonas
   caladas a los costados y bajo los brazos), más dos controles:
@@ -272,7 +265,7 @@ un aro que empuja el frente y arruga los hombros). La tira se cose estirada y
 frunce apenas el escote, igual con cualquier cuello: en el molde plano el borde
 del escote apunta a la mitad de su largo puesto en el frente y a tres cuartos
 en la espalda (repartido en la tela de alrededor, que queda plana). Colgado,
-el redondo se hace 0,4 cm más hondo que puesto y la V de 9 cm, 0,7 cm (sin
+el redondo se hace 0,4 cm más hondo que puesto y la V, 0,6 cm (sin
 esto, 3,7 y 4,6). Ese acortamiento se apaga junto a la costura del hombro: si no, el
 hombro del frente aplanado medía hasta un 40 % más que el de la espalda y,
 cosidos, los dos se arrugaban.

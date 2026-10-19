@@ -3,8 +3,6 @@
 Mockups 3D de prendas deportivas con three.js (`camiseta.html`, código en
 `src/camiseta/`). El README explica cada parte; la skill de cuenta
 `camiseta-3d` lleva la misma página y sus lecciones (`references/motor.md`).
-El cuello en V está fuera de la página hasta estudiarlo bien (`V_NECK` en
-`main.js`); el motor lo sigue teniendo.
 
 ## Criterios estéticos (para todas las prendas)
 
@@ -39,10 +37,12 @@ Es un mockup: manda cómo se ve, no la física exacta.
   antes de la punta, la pata se mete hacia adentro (inflexión). Se usa la
   recta desde la punta tangente a la curva; medir el desvío de cada borde a la
   cuerda desde la punta, vista de frente.
-- La forma 3D cerca de un corte puede diferir de la referencia si se ve mejor
-  (la V apoyada sobre el pecho, no hundida); el molde del estampado no, ni el
-  de reposo de la colgada (con la tela de más del apoyo, la V colgada se caía
-  5 cm). Medir el hondo del escote puesto y colgado: el redondo baja 0,4 cm.
+- Una variante nueva parte de lo que ya funciona: la V es el redondo con las
+  patas algo más rectas y una costura en la punta, y todo lo demás (tira,
+  caída colgada) es el del redondo. La tela de referencia llega al escote casi
+  horizontal hacia la garganta: un corte que la cruza o pasa apenas encima se
+  va hacia atrás (la V honda anterior se hundía y se caía colgada). Medir el
+  hondo del escote puesto y colgado: el redondo baja 0,4 cm.
 - Ondas de una celda en la tela colgada son la malla, no la tela: la flexión
   tiene que resistir la compresión (medir el residuo de cada fila contra su
   versión suavizada, no la curva entera).

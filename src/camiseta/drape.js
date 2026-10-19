@@ -18,7 +18,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { armholeLoopIJ, flattenPanel, bust, mitreV, vRestOffset } from './shirt.js';
+import { armholeLoopIJ, flattenPanel, bust } from './shirt.js';
 
 const SUBSTEPS = 4;
 const ITERATIONS = 5;
@@ -161,8 +161,8 @@ export function makeHanger(M) {
   // Malla: anillos con la sección a lo largo del arco, y en cada punta unos
   // anillos más que se achican en alto (punta redonda vista de frente). La
   // madera que se ve termina (con su punta) en el borde de adentro de la
-  // tira: más afuera la tapa la tela del hombro, pero con la tira acostada,
-  // como en la V, la madera taparía la tira en las esquinas de los hombros.
+  // tira: más afuera la tapa la tela del hombro, pero con la tira acostada
+  // la madera taparía la tira en las esquinas de los hombros.
   // (Con escote hondo y vivo fino, como el del tank top, la madera se ve
   // entera: cortada ahí quedaba en el aire en medio del escote.)
   const xVis = M.deepNeck ? xEnd - 0.015 : Math.min(xEnd, M.neck.a - 0.032);
@@ -493,9 +493,6 @@ export class HangingShirt {
     // Partículas del torso: la grilla fina tomando una fila y columna de cada
     // dos; las costuras de costado y hombro comparten partícula.
     const map = { front: new Int32Array(WC * (NC + 1)).fill(-1), back: new Int32Array(WC * (NC + 1)).fill(-1) };
-    // En V, lo que separa la tela apoyada sobre el pecho de su molde (el de la
-    // referencia): ver vRestOffset y, más abajo, el molde de reposo.
-    const vLift = built.frontBare ? vRestOffset(built) : null;
     const inHole = (key, i, j) => i > i1 && i < i2 && (j < AK[key] || j > C - AK[key]);
     for (const key of ['front', 'back']) {
       for (let i = 0; i <= NC; i++)
@@ -579,12 +576,6 @@ export class HangingShirt {
       else if (mirror[i] >= 0 && sideX[i] < 0) mpairs.push(i, mirror[i]);
     }
     this.mirrorOf = mirror;
-    // En V, cada lado de la cinta del frente llega hasta el medio (costura en
-    // inglete de la punta) y no pasa al otro: colgada, la V se cierra un poco
-    // y los puntos junto a la punta se cruzarían.
-    const sides = [];
-    if (built.measures.vNeck) band.forEach((id, k) => P[ring[k] * 3 + 2] > 0 && P[ring[k] * 3] && sides.push(id, Math.sign(P[ring[k] * 3])));
-    this.bandSides = Int32Array.from(sides);
     this.mirrorPairs = Int32Array.from(mpairs);
     this.midline = Int32Array.from(mid);
     this.lastPoke = -Infinity;
@@ -672,12 +663,10 @@ export class HangingShirt {
       const base = built.printBase[key];
       const pos3 = new Float64Array(m.length * 3);
       const X0 = new Float64Array(m.length * 2);
-      const lift = key === 'front' ? vLift : null;
       m.forEach((id, v) => {
         if (id < 0) return;
         const f = 2 * Math.floor(v / WC) * W + 2 * (v % WC);
         pos3.set(P.subarray(id * 3, id * 3 + 3), v * 3);
-        if (lift) for (let d = 0; d < 3; d++) pos3[v * 3 + d] += lift[f * 3 + d];
         X0[v * 2] = base[f * 2];
         X0[v * 2 + 1] = base[f * 2 + 1];
       });
@@ -798,12 +787,6 @@ export class HangingShirt {
       this.collarLocal[v * 3 + 1] = (ox * F[f + 3] + oy * F[f + 4] + oz * F[f + 5]) / F[f + 9];
       this.collarLocal[v * 3 + 2] = ox * F[f + 6] + oy * F[f + 7] + oz * F[f + 8];
     }
-    // En V, la punta de la tira se cose en inglete (ver mitreV): columna de
-    // la punta (la del frente en el medio).
-    this.collarTip = -1;
-    if (built.measures.vNeck)
-      for (let e = 0; e < nf; e++)
-        if (collarRing[e][0] === 'front' && (this.collarTip < 0 || Math.abs(seamRest[e * 3]) < Math.abs(seamRest[this.collarTip * 3]))) this.collarTip = e;
 
     // Broches: pellizcan la costura de cada hombro (en dos puntos), como se
     // cuelga de verdad con un broche de pinza: la costura queda arriba, entre
@@ -1254,7 +1237,6 @@ export class HangingShirt {
         for (let b = 0; b < BAND_PASSES; b++) this.solveLengths(this.bandLinks);
         this.tethers();
         if (this.bandStiff) this.holdBand();
-        this.keepSides();
         this.collideSelf();
         this.holdApart(this.volPairs, this.volGap, 0.5);
         this.holdApart(this.layers, this.layerGap, 0.5);
@@ -1472,12 +1454,6 @@ export class HangingShirt {
         const i = id * 3;
         for (let c = 0; c < 3; c++) P[i + c] += (G[i + c] / cnt[id] - P[i + c]) * this.bandK[id];
       }
-  }
-
-  keepSides() {
-    const P = this.p;
-    const S = this.bandSides;
-    for (let c = 0; c < S.length; c += 2) if (P[S[c] * 3] * S[c + 1] < 0) P[S[c] * 3] = 0;
   }
 
   // Restricciones de largo (todas, o sólo las de la lista `only`).
@@ -2101,7 +2077,6 @@ export class HangingShirt {
       const lu = l[i + 1] * F[f + 9];
       for (let c = 0; c < 3; c++) a[i + c] = seam[e * 3 + c] + F[f + c] * l[i] + F[f + 3 + c] * lu + F[f + 6 + c] * l[i + 2];
     }
-    if (this.collarTip >= 0) mitreV(a, SW, a.length / 3 / SW, this.collarTip);
     if (this.hanger) this.outOfWood(a);
     attr.needsUpdate = true;
     this.geos.collar.computeVertexNormals();

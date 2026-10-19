@@ -322,13 +322,9 @@ function torsoPoint(M, th, t, out) {
     x = lerp(x, M.neck.a * sn, w);
     yy = lerp(y, yn, w);
     z = lerp(z, M.neck.c + (cs >= 0 ? M.neck.b : M.neck.bB) * cs, w);
-    // Escote hondo (tank top) y en V: el borde va apoyado sobre el pecho (y
-    // en el tank la espalda), no se mete hacia el cuello. En V la tela de
-    // referencia se curva hacia el cuello justo por donde pasan las patas: se
-    // veían hundidas, como en una zanja. (El molde del estampado sigue siendo
-    // el de la referencia, ver cutMold: el diseño no se mueve; colgada, la
-    // tela tampoco toma este apoyo: ver vRestOffset.)
-    if ((M.deepNeck || (M.vNeck && !M.offChest)) && cs > 0) z = Math.max(z, chestZ(M, x, yy));
+    // Escote hondo (tank top): el borde va apoyado sobre el pecho y la
+    // espalda, no se mete hacia el cuello.
+    if (M.deepNeck && cs > 0) z = Math.max(z, chestZ(M, x, yy));
     if (M.deepNeck && cs < 0) z = Math.min(z, backZ(M, x, yy));
   }
   out[0] = x;
@@ -342,6 +338,7 @@ function torsoPoint(M, th, t, out) {
 // hacia el eje del cuello (perpendicular al contorno): así las columnas no se
 // juntan en el medio.
 const NECK_EXT_R = 0.012;
+const NECK_EXT_RV = 0.003;
 function torsoAbove(M, th, t, out) {
   const h = 1e-4;
   const p1 = torsoPoint(M, th, 1, [0, 0, 0]);
@@ -349,7 +346,7 @@ function torsoAbove(M, th, t, out) {
   const T = [(p1[0] - p0[0]) / h, (p1[1] - p0[1]) / h, (p1[2] - p0[2]) / h];
   const v = Math.hypot(...T) || 1e-9;
   const s = (t - 1) * v;
-  const R = NECK_EXT_R;
+  const R = M.vNeck ? NECK_EXT_RV : NECK_EXT_R;
   const c0 = Math.min(1, Math.max(-1, T[1] / v));
   const phi0 = Math.acos(c0);
   // Rumbo horizontal: el de la columna al salir, el del contorno al terminar
@@ -387,38 +384,23 @@ function tAtX(M, th, t0, x) {
 }
 // Escote del frente visto de frente: la altura del corte a la distancia ax
 // del centro (cada cuello, con el mismo ancho en el hombro). Fuera del cuello
-// no corta nada. En V, la recta desde cada punto del hombro hasta la punta
-// lleva algo de la curva del cuello redondo: las patas se abomban un poco
-// hacia afuera. Junto a la punta no (la curva redonda llega plana al centro y
-// el fondo de la V quedaba redondeado): ese abombado se apaga. Junto al hombro
-// se redondea el último pedacito de la recta para no hacer pico donde sigue
-// la espalda.
+// no corta nada. La V es el redondo con las patas algo más rectas: su curva
+// mezclada con la recta de cada punto del hombro a la punta, que queda en el
+// medio y al mismo hondo (la tira lleva ahí una costura, ver seamMarks). La
+// prenda y la tira se portan como en el redondo. (Una V honda cortada en la
+// tela de referencia pasa por donde esa tela se curva hacia el cuello: se
+// hundía, se caía colgada y la tira se armaba mal en la punta.) Junto al
+// hombro se redondea el último pedacito de la recta.
 const VEE_EASE = 0.08; // fracción del ancho que se redondea junto al hombro
-const VEE_ROUND = 0.4; // cuánto de la curva redonda llevan las patas (0 = rectas)
-const VEE_TIP = 0.45; // fracción del ancho, desde el centro, en la que ese abombado se apaga
-// Hondo de la V (fracción de la punta) a la fracción r del ancho.
-const veeDrop = (r) => {
+const VEE_STRAIGHT = 0.4; // cuánto de la recta llevan las patas (0 = redondo, 1 = rectas)
+const cutY = (M, ax) => {
+  const r = Math.min(1, ax / M.neck.a);
+  const round = (1 - r * r) ** 0.8;
+  if (!M.vNeck) return -M.dropF * round;
   const u = 1 - r;
   const e = VEE_EASE;
   const straight = (u < e ? (u * u) / (2 * e) : u - e / 2) / (1 - e / 2);
-  return straight + VEE_ROUND * ((1 - r * r) ** 0.8 - straight) * smoothstep(0, VEE_TIP, r);
-};
-// Al apagarse el abombado, la pata se metía hacia adentro antes del pico (más
-// empinada en la punta que más arriba). Del centro hasta VEE_R1 va la recta
-// desde la punta que toca la curva sin cortarla: la de menos pendiente entre
-// las cuerdas desde la punta (VEE_SLOPE).
-const [VEE_R1, VEE_SLOPE] = (() => {
-  let best = [0, -Infinity];
-  for (let i = 1; i <= 1000; i++) {
-    const s = (veeDrop(i / 1000) - 1) / (i / 1000);
-    if (s > best[1]) best = [i / 1000, s];
-  }
-  return best;
-})();
-const cutY = (M, ax) => {
-  const r = Math.min(1, ax / M.neck.a);
-  if (!M.vNeck) return -M.dropF * (1 - r * r) ** 0.8;
-  return -M.dropF * (r < VEE_R1 ? 1 + VEE_SLOPE * r : veeDrop(r));
+  return -M.dropF * (round + VEE_STRAIGHT * (straight - round));
 };
 // Dónde corta el escote la columna de ángulo th del frente: el t en que la
 // columna llega a la línea del corte (menos de 1 si pasa más abajo que el de
@@ -1024,8 +1006,6 @@ export function buildShirt(params) {
   // Sin mangas no hay manga que tire de la axila: sin esos pliegues (arrugaban
   // los costados bajo el busto del tank top y asomaban debajo de los puños).
   const pitY = panels.front.pos[(i1 * W + COLS) * 3 + 1];
-  // El frente antes de los pliegues (para vRestOffset).
-  const frontBare = M.vNeck ? Float32Array.from(panels.front.pos) : null;
   const armpits = M.sleeveless ? [] : [Math.PI / 2, -Math.PI / 2, (3 * Math.PI) / 2].map((th) => ({ y: pitY, th }));
   for (const key of ['front', 'back']) {
     const p = panels[key];
@@ -1188,7 +1168,7 @@ export function buildShirt(params) {
   // Normales, costuras soldadas y marcas de costura.
   for (const part of Object.values(parts)) part.nrm = computeNormals(part.pos, part.idx);
   weldNormals(['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR'].filter((k) => parts[k]).map((k) => parts[k]));
-  seamMarks(parts, N, W, params.cuff === 'none');
+  seamMarks(parts, N, W, params.cuff === 'none', M.vNeck ? COLS / 2 : -1);
   zoneMarks(parts, M, W);
 
   const geos = {};
@@ -1236,19 +1216,7 @@ export function buildShirt(params) {
     params: { ...DEFAULTS, ...params },
     printBase: { front: parts.front.printBase, back: parts.back.printBase },
     cut: M.cutNeck ? { tw: panels.front.tw, tv: panels.front.tv } : null,
-    frontBare,
   };
-}
-
-// Colgada, la tela tiende a su molde (ver HangingShirt), y el de la V es el de
-// la referencia: sus largos de reposo no pueden salir del frente apoyado
-// sobre el pecho (con esa tela de más entre el hombro y la punta, la V
-// colgada se caía 5 cm más que puesta; el redondo, medio). Devuelve, por
-// vértice del frente, lo que hay que sumarle para sacarle ese apoyo (sólo
-// cambia la z cerca de la V).
-export function vRestOffset(built) {
-  const off = buildTorso({ ...built.measures, offChest: true }).panels.front.pos;
-  return Float32Array.from(built.frontBare, (v, i) => off[i] - v);
 }
 
 // ---------- coordenadas de estampado ----------
@@ -1646,25 +1614,24 @@ export function mitreV(pos, SW, P, tip, span = 10) {
 export const COLLAR_FOLD = 5;
 const COLLAR_GAP = 0.006;
 
-// Tira del cuello (de la misma tela) sobre el borde del escote (lazo cerrado). En V,
-// la punta del escote es el punto `tip` del lazo. Con el escote hondo del
-// tank top es un vivo angosto que sigue la tela (mismo perfil, más chico).
+// Tira del cuello (de la misma tela) sobre el borde del escote (lazo cerrado):
+// `tip` es el punto del lazo en el centro del frente (en V, la punta). Con el
+// escote hondo del tank top es un vivo angosto que sigue la tela (mismo
+// perfil, más chico).
 function buildCollar(M, neck, tip) {
   const n = neck.length;
   const base = neck.map(([pos, v]) => new THREE.Vector3().fromArray(pos, v * 3));
   const below = neck.map(([pos, , b]) => new THREE.Vector3().fromArray(pos, b * 3));
   const nrms = neck.map(([, v, , nn]) => new THREE.Vector3().fromArray(nn, v * 3));
   const flat = M.deepNeck;
-  // Contorno suavizado (redondo y parejo; en V, el frente queda tal cual para
-  // que las patas sean rectas y la punta neta).
-  const front = (k) => M.vNeck && k <= 2 * tip;
+  // Contorno suavizado (redondo y parejo).
   const ring = base.map((p) => p.clone());
   for (let pass = 0; pass < 2; pass++) {
     const prev = ring.map((p) => p.clone());
-    for (let i = 0; i < n; i++) if (!front(i)) ring[i].copy(prev[(i - 1 + n) % n]).add(prev[(i + 1) % n]).multiplyScalar(0.25).addScaledVector(prev[i], 0.5);
+    for (let i = 0; i < n; i++) ring[i].copy(prev[(i - 1 + n) % n]).add(prev[(i + 1) % n]).multiplyScalar(0.25).addScaledVector(prev[i], 0.5);
   }
-  // Alto de la tira (en V, apenas más angosta).
-  const h = flat ? M.armBand : M.vNeck ? 0.019 : 0.021;
+  // Alto de la tira.
+  const h = flat ? M.armBand : 0.021;
   const th = flat ? 0.0032 : 0.0034;
   const center = new THREE.Vector3();
   for (const p of ring) center.add(p);
@@ -1710,18 +1677,6 @@ function buildCollar(M, neck, tip) {
     hz.normalize().multiplyScalar(Math.sqrt(Math.max(0, h * h - rise * rise)));
     return along(new THREE.Vector3(hz.x, rise, hz.z), k);
   });
-  // En V, en todo el frente la tira no se para: queda acostada sobre el pecho
-  // siguiendo la tela, con el mismo ancho a lo largo de cada pata (parada
-  // sería una pared). Atrás se para como en el cuello redondo; el cambio es
-  // junto a cada hombro.
-  if (M.vNeck) {
-    ups = ups.map((u, k) => {
-      const f = k <= 2 * tip ? smoothstep(M.neck.a, M.neck.a * 0.8, Math.abs(base[k].x)) : 0;
-      if (f <= 0) return u;
-      const flat = along(new THREE.Vector3().subVectors(base[k], below[k]).normalize(), k);
-      return along(u.clone().lerp(flat, f).normalize(), k);
-    });
-  }
   // Vivo: sigue la tela desde el borde.
   if (flat) {
     ups = base.map((b, k) => along(new THREE.Vector3().subVectors(b, below[k]).normalize(), k));
@@ -1927,8 +1882,9 @@ function zoneMarks(parts, M, W) {
 // Marcas de costura por vértice: x = distancia a la costura más cercana
 // (hundido de la costura), y = distancia al borde con pespunte (ruedos).
 // Sin puño (`noCuff`), entre la manga y el puño no hay costura: la manga
-// sigue, con la costura de abajo del brazo, hasta el borde.
-function seamMarks(parts, N, W, noCuff = false) {
+// sigue, con la costura de abajo del brazo, hasta el borde. En V, la tira
+// lleva una costura en la punta (`vTip`, su columna).
+function seamMarks(parts, N, W, noCuff = false, vTip = -1) {
   const set = (part, f) => {
     const n = part.pos.length / 3;
     part.seam = new Float32Array(n * 2);
@@ -1997,5 +1953,6 @@ function seamMarks(parts, N, W, noCuff = false) {
     const p = parts[key];
     if (p) set(p, (v) => [p.uv[v * 2 + 1], 1]);
   }
-  set(parts.collar, () => [1, 1]);
+  const cu = parts.collar.uv;
+  set(parts.collar, (v) => [vTip >= 0 ? Math.abs(cu[v * 2] - cu[vTip * 2]) : 1, 1]);
 }

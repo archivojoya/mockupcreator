@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Camiseta Deportiva 3D</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" />
+  </head>
+  <body>
+    <main class="studio">
+      <section id="stage" class="stage" aria-label="Camiseta en 3D">
+        <div class="views" role="group" aria-label="Vistas">
+          <button type="button" data-view="0">Frente y espalda</button>
+          <button type="button" data-view="1">Perfiles</button>
+        </div>
+        <div class="views zooms" role="group" aria-label="Acercar">
+          <button type="button" data-zoom="chest" aria-pressed="false">Pecho</button>
+          <button type="button" data-zoom="back" aria-pressed="false">Espalda alta</button>
+          <button type="button" data-zoom="neck" aria-pressed="false">Cuello</button>
+          <button type="button" data-zoom="label" aria-pressed="false" hidden>Etiqueta</button>
+        </div>
+        <button type="button" class="shot" id="shot" aria-expanded="false" aria-controls="sheet-pop">Descargar muestra</button>
+        <div class="sheet-pop" id="sheet-pop" role="dialog" aria-labelledby="sheet-pop-title" hidden>
+          <p class="sheet-pop-title" id="sheet-pop-title">Lámina de muestra</p>
+          <label class="sheet-field" for="sheet-client">
+            <span>Cliente</span>
+            <input id="sheet-client" type="text" maxlength="40" autocomplete="off" placeholder="Camiseta deportiva" />
+          </label>
+          <div class="sheet-field">
+            <span id="sheet-bg-label">Fondo</span>
+            <div class="seg" role="group" aria-labelledby="sheet-bg-label">
+              <button type="button" data-sheetbg="light" aria-pressed="true">Claro</button>
+              <button type="button" data-sheetbg="dark" aria-pressed="false">Oscuro</button>
+            </div>
+          </div>
+          <p class="note">Debajo del nombre: «Esta imagen es ilustrativa».</p>
+          <div class="sheet-actions">
+            <button type="button" id="sheet-cancel">Cancelar</button>
+            <button type="button" id="sheet-go">Descargar</button>
+          </div>
+        </div>
+        <p class="hint">Arrastrá sobre una camiseta para girarla · rueda o pellizco para acercar</p>
+      </section>
+
+      <aside class="panel">
+        <header class="title">
+          <h1>Camiseta deportiva</h1>
+          <p>Modelo 3D paramétrico</p>
+        </header>
+
+        <div class="mode" role="group" aria-label="Presentación">
+          <button type="button" data-mode="body" aria-pressed="true">Con cuerpo</button>
+          <button type="button" data-mode="hanger" aria-pressed="false">En percha</button>
+          <button type="button" data-mode="clips" aria-pressed="false">Con broches</button>
+        </div>
+
+
+        <div class="tabs" role="tablist" aria-label="Secciones">
+          <button type="button" role="tab" id="tab-ajustes" data-tab="ajustes" aria-controls="p-ajustes" aria-selected="true">Ajustes</button>
+          <button type="button" role="tab" id="tab-colores" data-tab="colores" aria-controls="p-colores" aria-selected="false" tabindex="-1">Colores</button>
+          <button type="button" role="tab" id="tab-perso" data-tab="perso" aria-controls="p-perso" aria-selected="false" tabindex="-1">Personalización</button>
+        </div>
+
+        <div class="tabpanel" id="p-ajustes" role="tabpanel" aria-labelledby="tab-ajustes">
+          <section class="group" aria-labelledby="g-forma">
+            <h2 id="g-forma">Forma</h2>
+            <div class="control">
+              <span class="label" id="garment-label">Prenda</span>
+              <div class="seg two-rows" role="group" aria-labelledby="garment-label">
+                <button type="button" data-garment="tee" aria-pressed="true">Camiseta</button>
+                <button type="button" data-garment="muscle" aria-pressed="false">Musculosa</button>
+                <button type="button" data-garment="basket" aria-pressed="false">Básquet</button>
+                <button type="button" data-garment="tank" aria-pressed="false">Tank top</button>
+              </div>
+            </div>
+            <div class="control" id="short-control">
+              <span class="label" id="short-label">Short</span>
+              <div class="seg" role="group" aria-labelledby="short-label">
+                <button type="button" data-short="on" aria-pressed="true">Con short</button>
+                <button type="button" data-short="off" aria-pressed="false">Sin short</button>
+              </div>
+            </div>
+            <div class="control">
+              <label for="fit">Calce</label>
+              <output id="fit-out" for="fit"></output>
+              <input id="fit" type="range" min="0" max="1" step="0.01" />
+            </div>
+            <div class="control">
+              <label for="length">Largo</label>
+              <output id="length-out" for="length"></output>
+              <input id="length" type="range" min="0.62" max="0.82" step="0.005" />
+            </div>
+            <div class="control">
+              <label for="sleeveLength">Largo de manga</label>
+              <output id="sleeveLength-out" for="sleeveLength"></output>
+              <input id="sleeveLength" type="range" min="0.13" max="0.3" step="0.005" />
+            </div>
+            <div class="control">
+              <label for="sleeveAngle">Apertura de mangas</label>
+              <output id="sleeveAngle-out" for="sleeveAngle"></output>
+              <input id="sleeveAngle" type="range" min="30" max="65" step="1" />
+            </div>
+            <div class="control" id="cuff-control">
+              <span class="label" id="cuff-label">Puño</span>
+              <div class="seg" role="group" aria-labelledby="cuff-label">
+                <button type="button" data-cuff="band" aria-pressed="true">Con puño</button>
+                <button type="button" data-cuff="none" aria-pressed="false">Sin puño</button>
+              </div>
+            </div>
+            <div class="control" id="neck-control">
+              <span class="label" id="neckStyle-label">Cuello</span>
+              <div class="seg" role="group" aria-labelledby="neckStyle-label">
+                <button type="button" data-neck="round" aria-pressed="true">Redondo</button>
+                <button type="button" data-neck="v" aria-pressed="false">En V</button>
+              </div>
+            </div>
+            <div class="control" id="depth-control">
+              <span class="label" id="depth-label">Escote</span>
+              <div class="seg" role="group" aria-labelledby="depth-label">
+                <button type="button" data-depth="0.075" aria-pressed="true">7,5 cm</button>
+                <button type="button" data-depth="0.09" aria-pressed="false">9 cm</button>
+                <button type="button" data-depth="0.12" aria-pressed="false">12 cm</button>
+              </div>
+            </div>
+            <div class="control" id="neckDepth-control">
+              <label for="neckDepth">Escote</label>
+              <output id="neckDepth-out" for="neckDepth"></output>
+              <input id="neckDepth" type="range" min="0.055" max="0.12" step="0.001" />
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="g-tela">
+            <h2 id="g-tela">Tela</h2>
+            <div class="weaves" role="group" aria-label="Tejido"></div>
+            <p id="weave-note" class="note"></p>
+            <div class="control">
+              <span class="label" id="finish-label">Acabado</span>
+              <div class="seg" role="group" aria-labelledby="finish-label">
+                <button type="button" data-finish="matte" aria-pressed="true">Mate</button>
+                <button type="button" data-finish="satin" aria-pressed="false">Satinado</button>
+              </div>
+            </div>
+            <div class="control">
+              <label for="weight">Peso</label>
+              <output id="weight-out" for="weight"></output>
+              <input id="weight" type="range" min="0" max="1" step="0.01" />
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="g-vista">
+            <h2 id="g-vista">Vista</h2>
+            <div class="control">
+              <span class="label" id="light-label">Luz</span>
+              <div class="seg" role="group" aria-labelledby="light-label">
+                <button type="button" data-light="studio" aria-pressed="true">Estudio</button>
+                <button type="button" data-light="soft" aria-pressed="false">Pareja</button>
+                <button type="button" data-light="contrast" aria-pressed="false">Contraste</button>
+                <button type="button" data-light="day" aria-pressed="false">Día</button>
+              </div>
+            </div>
+            <div class="control">
+              <span class="label" id="spin-label">Girar solas</span>
+              <div class="seg" role="group" aria-labelledby="spin-label">
+                <button type="button" data-spin="0" aria-pressed="true">No</button>
+                <button type="button" data-spin="1" aria-pressed="false">Lenta</button>
+                <button type="button" data-spin="2" aria-pressed="false">Media</button>
+                <button type="button" data-spin="3" aria-pressed="false">Rápida</button>
+              </div>
+            </div>
+            <label class="toggle"><input id="uvmap" type="checkbox" /> Mapa de estampado</label>
+            <button id="reset" type="button" class="reset">Restablecer todo</button>
+          </section>
+
+          <section class="group spec" aria-labelledby="g-ficha">
+            <h2 id="g-ficha">Ficha</h2>
+            <dl>
+              <div><dt>Contorno de pecho</dt><dd id="s-chest"></dd></div>
+              <div><dt>Ancho de hombros</dt><dd id="s-shoulders"></dd></div>
+              <div><dt>Largo total</dt><dd id="s-length"></dd></div>
+              <div><dt id="s-sleeve-label">Boca de manga</dt><dd id="s-sleeve"></dd></div>
+              <div><dt>Tela</dt><dd id="s-fabric"></dd></div>
+            </dl>
+          </section>
+        </div>
+
+        <div class="tabpanel" id="p-colores" role="tabpanel" aria-labelledby="tab-colores" hidden>
+          <section class="group" aria-labelledby="g-colores">
+            <h2 id="g-colores">Colores</h2>
+            <div class="swatches">
+              <label class="swatch"><input id="c-body" type="color" /><span>Cuerpo</span></label>
+              <label class="swatch"><input id="c-sleeves" type="color" /><span>Mangas</span></label>
+              <label class="swatch"><input id="c-collar" type="color" /><span id="c-collar-label">Cuello</span></label>
+              <label class="swatch" id="sw-cuffs"><input id="c-cuffs" type="color" /><span>Puños</span></label>
+              <label class="swatch sw-short"><input id="c-leg1" type="color" /><span>Pierna 1</span></label>
+              <label class="swatch sw-short"><input id="c-leg2" type="color" /><span>Pierna 2</span></label>
+              <label class="swatch sw-short"><input id="c-hem1" type="color" /><span>Ruedo 1</span></label>
+              <label class="swatch sw-short"><input id="c-hem2" type="color" /><span>Ruedo 2</span></label>
+            </div>
+            <p class="note">Con un diseño cargado, la pieza muestra el diseño; el color queda donde la imagen es transparente.</p>
+          </section>
+
+        </div>
+
+        <div class="tabpanel" id="p-perso" role="tabpanel" aria-labelledby="tab-perso" hidden>
+          <section class="group" aria-labelledby="g-biblio">
+            <h2 id="g-biblio">Biblioteca</h2>
+            <div class="lib-drop" id="lib-drop">
+              <button id="lib-add" type="button" class="reset">Agregar imágenes</button>
+              <span>o arrastralas acá</span>
+              <input id="lib-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg" multiple hidden />
+            </div>
+            <p class="note">Arrastrá una imagen a una pieza de la camiseta o a su casillero. Las de fondo transparente (escudo, marcas) van como aplicación donde las sueltes. La biblioteca queda guardada en este navegador.</p>
+            <div class="lib-grid" id="lib-grid"></div>
+          </section>
+
+          <section class="group" aria-labelledby="g-piezas">
+            <h2 id="g-piezas">Piezas</h2>
+            <ul class="slots" id="slots"></ul>
+            <div class="editor" id="editor" hidden>
+              <p class="editor-title" id="editor-title"></p>
+              <canvas id="editor-canvas"></canvas>
+              <div class="control" id="ed-scale-row">
+                <label for="ed-scale">Tamaño</label>
+                <output id="ed-scale-out" for="ed-scale"></output>
+                <input id="ed-scale" type="range" min="0.5" max="3" step="0.01" />
+              </div>
+              <div class="actions">
+                <button id="ed-center" type="button" class="reset">Centrar</button>
+              </div>
+              <p class="note">Arrastrá el dibujo para moverlo; la rueda lo agranda o lo achica.</p>
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="g-apps">
+            <h2 id="g-apps">Escudo y marcas</h2>
+            <p class="note">Un logo (PNG con fondo transparente) que se suelta en el frente va a la franja del pecho, del lado más cercano, con 5 cm; en la espalda, arriba al centro, con 20 cm. Cada lugar lleva uno. Se corren arrastrándolos sobre la camiseta: los del pecho de costado y el de la espalda hacia arriba o abajo.</p>
+            <label class="toggle"><input id="free-place" type="checkbox" /> Ubicación libre</label>
+            <p class="note" id="apps-empty">Todavía no hay escudo ni marcas.</p>
+            <ul class="apps" id="apps"></ul>
+          </section>
+
+          <section class="group" aria-labelledby="g-medidas">
+            <h2 id="g-medidas">Medidas</h2>
+            <details class="sizes" id="design-sizes">
+              <summary>Medidas para diseñar</summary>
+              <dl></dl>
+            </details>
+            <p class="note">Una imagen con la proporción de su pieza la cubre justo; si no, la cubre igual y sobra a los costados o abajo.</p>
+            <div class="actions">
+              <button id="design-clear" type="button" class="reset" hidden>Quitar todo de la camiseta</button>
+            </div>
+            <p class="note" id="design-note" aria-live="polite"></p>
+          </section>
+        </div>
+      </aside>
+    </main>
+    <script type="module" src="/src/camiseta/main.js"></script>
+  </body>
+</html>

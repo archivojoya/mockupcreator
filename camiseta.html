@@ -21,7 +21,26 @@
           <button type="button" data-zoom="neck" aria-pressed="false">Cuello</button>
           <button type="button" data-zoom="label" aria-pressed="false" hidden>Etiqueta</button>
         </div>
-        <button type="button" class="shot" id="shot">Descargar muestra</button>
+        <button type="button" class="shot" id="shot" aria-expanded="false" aria-controls="sheet-pop">Descargar muestra</button>
+        <div class="sheet-pop" id="sheet-pop" role="dialog" aria-labelledby="sheet-pop-title" hidden>
+          <p class="sheet-pop-title" id="sheet-pop-title">Lámina de muestra</p>
+          <label class="sheet-field" for="sheet-client">
+            <span>Cliente</span>
+            <input id="sheet-client" type="text" maxlength="40" autocomplete="off" placeholder="Camiseta deportiva" />
+          </label>
+          <div class="sheet-field">
+            <span id="sheet-bg-label">Fondo</span>
+            <div class="seg" role="group" aria-labelledby="sheet-bg-label">
+              <button type="button" data-sheetbg="light" aria-pressed="true">Claro</button>
+              <button type="button" data-sheetbg="dark" aria-pressed="false">Oscuro</button>
+            </div>
+          </div>
+          <p class="note">Debajo del nombre: «Esta imagen es ilustrativa».</p>
+          <div class="sheet-actions">
+            <button type="button" id="sheet-cancel">Cancelar</button>
+            <button type="button" id="sheet-go">Descargar</button>
+          </div>
+        </div>
         <p class="hint">Arrastrá sobre una camiseta para girarla · rueda o pellizco para acercar</p>
       </section>
 

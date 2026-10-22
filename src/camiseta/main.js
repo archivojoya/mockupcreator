@@ -2385,13 +2385,18 @@ controls.addEventListener('start', () => {
 // confirma); sola o en desarrollo, un enlace de descarga común.
 const downloadsP = window.claude?.use ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
 
+// Fondos de la lámina (los del escenario claro y oscuro) y sus textos.
+const SHEET_THEMES = {
+  light: { hi: '#f2f3f4', lo: '#d3d8dd', ink: '#161a1f', muted: '#5d6570' },
+  dark: { hi: '#2a2f35', lo: '#121417', ink: '#eef0f2', muted: '#9aa3ad' },
+};
+const SHEET_NOTE = 'Esta imagen es ilustrativa';
 // El fondo del escenario (el mismo degradado).
-function studioBackground(g, x, y, w, h) {
-  const css = getComputedStyle(document.documentElement);
+function studioBackground(g, x, y, w, h, theme) {
   const r = 0.7 * w;
   const grad = g.createRadialGradient(0, 0, 0, 0, 0, r);
-  grad.addColorStop(0, css.getPropertyValue('--stage-hi').trim());
-  grad.addColorStop(1, css.getPropertyValue('--stage-lo').trim());
+  grad.addColorStop(0, theme.hi);
+  grad.addColorStop(1, theme.lo);
   g.save();
   g.beginPath();
   g.rect(x, y, w, h);
@@ -2470,24 +2475,23 @@ function sheetPose(aspect, fill = 0.86) {
   for (const [x, y, z] of pts) d = Math.max(d, z - c.z + Math.abs(x - c.x) / (t * aspect * fill), z - c.z + Math.abs(y - c.y) / (t * fill));
   return { target: c, position: c.clone().add(new THREE.Vector3(0, (CAM_OFF.y * d) / CAM_OFF.z, d)) };
 }
-function sheetSpec() {
-  const w = WEAVES[fabric.weave] || WEAVES.mesh;
-  return [...(sleeveless() ? [GARMENT_NAMES[garmentOf()]] : []), w.label, fabric.finish === 'satin' ? 'satinada' : 'mate', FOUT.weight(fabric.weight), `calce ${OUT.fit(params.fit).toLowerCase()}`, `largo ${fmtCm(params.length)}`, `cuello ${params.neckStyle === 'v' ? 'en V' : 'redondo'}`].join(' · ');
-}
-function drawHeader(g, x, y, size) {
-  const css = getComputedStyle(document.documentElement);
+// Arriba a la izquierda: el nombre del cliente (o el título de la página) y
+// la aclaración.
+function drawHeader(g, x, y, size, theme, title) {
   g.textAlign = 'left';
   g.textBaseline = 'top';
-  g.fillStyle = css.getPropertyValue('--ink').trim();
+  g.fillStyle = theme.ink;
   g.font = `700 ${size}px "Barlow Condensed", "Arial Narrow", sans-serif`;
-  g.fillText(document.querySelector('.title h1').textContent.toUpperCase(), x, y);
-  g.fillStyle = css.getPropertyValue('--muted').trim();
+  g.fillText(title.toUpperCase(), x, y);
+  g.fillStyle = theme.muted;
   g.font = `400 ${Math.round(size * 0.42)}px Barlow, "Helvetica Neue", Arial, sans-serif`;
-  g.fillText(sheetSpec(), x, y + size * 1.12);
+  g.fillText(SHEET_NOTE, x, y + size * 1.12);
 }
 // La lámina: el frente y la espalda en una sola toma (del mismo tamaño, con
 // la barra del perchero entera) sobre el fondo del estudio.
-function makeSheet() {
+function makeSheet(opts = {}) {
+  const theme = SHEET_THEMES[opts.bg] || SHEET_THEMES.light;
+  const title = opts.client?.trim() || document.querySelector('.title h1').textContent;
   if (hasDress()) ensureFlat();
   if (drape) {
     let f = 0;
@@ -2503,23 +2507,66 @@ function makeSheet() {
     const sheet = document.createElement('canvas');
     [sheet.width, sheet.height] = [W, H];
     const g = sheet.getContext('2d');
-    studioBackground(g, 0, 0, W, H);
+    studioBackground(g, 0, 0, W, H, theme);
     const M = 90;
-    drawHeader(g, M, M * 0.8, 68);
+    drawHeader(g, M, M * 0.8, 68, theme, title);
     const [cw, ch] = [W - 40, H - 190];
     g.drawImage(shoot(cw, ch, sheetPose(cw / ch)), 20, 190);
     return sheet;
   });
 }
+// Al tocar «Descargar muestra» se eligen el fondo y el nombre del cliente
+// (se recuerdan en este navegador).
+const sheetPop = document.getElementById('sheet-pop');
+const sheetClient = document.getElementById('sheet-client');
+const sheetBgButtons = [...document.querySelectorAll('[data-sheetbg]')];
+const shotBtn = document.getElementById('shot');
+const sheetOpts = { bg: 'light', client: '' };
+try {
+  Object.assign(sheetOpts, JSON.parse(localStorage.getItem('camiseta-sheet') || '{}'));
+} catch {
+  // Sin almacenamiento: de entrada.
+}
+const syncSheetBg = () => sheetBgButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.sheetbg === sheetOpts.bg)));
+function openSheetPop(open) {
+  sheetPop.hidden = !open;
+  shotBtn.setAttribute('aria-expanded', String(open));
+  if (open) {
+    sheetClient.value = sheetOpts.client || '';
+    syncSheetBg();
+    sheetClient.focus();
+  }
+}
+sheetBgButtons.forEach((b) =>
+  b.addEventListener('click', () => {
+    sheetOpts.bg = b.dataset.sheetbg;
+    syncSheetBg();
+  }),
+);
+document.getElementById('sheet-cancel').addEventListener('click', () => openSheetPop(false));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !sheetPop.hidden) openSheetPop(false);
+});
+document.addEventListener('pointerdown', (e) => {
+  if (!sheetPop.hidden && !sheetPop.contains(e.target) && e.target !== shotBtn) openSheetPop(false);
+});
 async function downloadSheet() {
-  const btn = document.getElementById('shot');
+  sheetOpts.client = sheetClient.value.trim();
+  try {
+    localStorage.setItem('camiseta-sheet', JSON.stringify(sheetOpts));
+  } catch {
+    // Sin almacenamiento: no se recuerda.
+  }
+  openSheetPop(false);
+  const btn = shotBtn;
   btn.disabled = true;
   btn.textContent = 'Armando…';
   try {
     await Promise.all([document.fonts.load('700 68px "Barlow Condensed"'), document.fonts.load('400 28px Barlow')]).catch(() => {});
-    const sheet = makeSheet();
+    const sheet = makeSheet(sheetOpts);
     const blob = await new Promise((ok) => sheet.toBlob(ok, 'image/png'));
-    const name = 'muestra-camiseta.png';
+    const slug = sheetOpts.client.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const name = `muestra-${slug || 'camiseta'}.png`;
     const dl = await downloadsP;
     if (dl) {
       try {
@@ -2540,7 +2587,11 @@ async function downloadSheet() {
     btn.textContent = 'Descargar muestra';
   }
 }
-document.getElementById('shot').addEventListener('click', downloadSheet);
+document.getElementById('sheet-go').addEventListener('click', downloadSheet);
+sheetClient.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') downloadSheet();
+});
+shotBtn.addEventListener('click', () => openSheetPop(sheetPop.hidden));
 
 // ---------- dibujo ----------
 

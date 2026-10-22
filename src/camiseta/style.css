@@ -133,6 +133,69 @@ body {
   opacity: 0.6;
   cursor: progress;
 }
+/* Opciones de la lámina: arriba del botón. */
+.sheet-pop {
+  position: absolute;
+  right: 16px;
+  bottom: 56px;
+  z-index: 5;
+  width: min(300px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--ink) 18%, transparent);
+}
+.sheet-pop[hidden] {
+  display: none;
+}
+.sheet-pop-title {
+  margin: 0;
+  font: 700 16px/1 var(--display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.sheet-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.sheet-field input {
+  font: 500 15px var(--body);
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+.sheet-pop .note {
+  margin: 0;
+}
+.sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.sheet-actions button {
+  font: 600 14px/1 var(--display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+  color: var(--muted);
+  background: none;
+}
+#sheet-go {
+  color: var(--panel);
+  background: var(--ink);
+}
 .hint {
   position: absolute;
   bottom: 14px;

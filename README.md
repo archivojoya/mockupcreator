@@ -47,10 +47,13 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   derecha), aunque estén colgadas o giradas; **Etiqueta** (si hay una) va a
   la del ruedo. **Girar solas** gira cada una sobre su eje (lenta, media o
   rápida). El mouse empuja la tela de cualquiera de las dos.
-- **Descargar muestra** (abajo a la derecha del escenario) baja una lámina PNG
-  de 3000 px con el fondo del estudio: las dos camisetas en una sola toma,
-  frente y espalda del mismo tamaño (aunque estén giradas), y arriba la tela,
-  el calce, el largo y el cuello. Se dibuja aparte, sin mover la vista.
+- **Descargar muestra** (abajo a la derecha del escenario) abre un panelito:
+  nombre del cliente y fondo claro u oscuro (los del escenario; se recuerdan
+  en el navegador). Baja una lámina PNG de 3000 px: las dos camisetas en una
+  sola toma, frente y espalda del mismo tamaño (aunque estén giradas), y
+  arriba el nombre del cliente (sin nombre, el título de la página) y «Esta
+  imagen es ilustrativa». El archivo se llama `muestra-<cliente>.png`. Se
+  dibuja aparte, sin mover la vista.
 
 - **Presentación**: con cuerpo (forma fija, como puesta), en percha o con
   broches. La percha es de madera, plana y paralela a la camiseta, con el arco

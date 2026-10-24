@@ -47,6 +47,15 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   LLAQTA», principios de octubre). De cerca no convencía y la página pesaba
   mucho. La base es three.js con la tela de `fabric.js`.
 
+## Más adelante
+
+- **Exportar el modelo en GLB.** Es la puerta a todo lo demás: Blender (para
+  una foto más realista que la de tiempo real), motion, realidad aumentada.
+- **Personajes animados para los pedidos de niños:** un personaje con su
+  propia remera, con el diseño del pedido estampado encima, grabado como
+  video. No es la camiseta de producción puesta en otro cuerpo: con las
+  proporciones de un dibujo no calzaría.
+
 ## Nombres compartidos con escalado
 
 Los scripts de Illustrator de `archivojoya/escalado` leen las piezas por

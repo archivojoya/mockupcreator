@@ -2,7 +2,63 @@
 
 Mockups 3D de prendas deportivas con three.js (`camiseta.html`, código en
 `src/camiseta/`). El README explica cada parte; la skill de cuenta
-`camiseta-3d` lleva la misma página y sus lecciones (`references/motor.md`).
+`camiseta-3d` lleva la página y sus lecciones (`references/motor.md`), pero
+quedó atrás: no tiene musculosa, tank top, short ni personalización. La fuente
+es este repo.
+
+## Para qué es
+
+Los mockups de los pedidos reales de Demian (diseño y sublimación de ropa
+deportiva), para mandarle al cliente una lámina de muestra y para sacar flyers
+y motion (PNG grande con fondo transparente, giros, el modelo 3D). Clientes y
+lo que piden:
+
+- **Pádel y marcas (LLAQTA):** casi siempre camiseta cuello redondo y tank top.
+- **Walter** (conjuntos de fútbol): camiseta redonda y en V, musculosa,
+  musculosa de básquet cuello en V, remera con molde femenino, chomba, short.
+- **Penuel + Worship Wear:** como Walter, un poco menos (redonda, V, femenina,
+  musculosa femenina, short). Worship hace además remerones de danza de mujer
+  y de varón (el molde de la camiseta alargado hacia abajo, con una abertura
+  al costado), remeras oversize y pantalones.
+
+Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
+
+## Decisiones (24 de octubre de 2026)
+
+- **Camiseta cuello redondo y tank top, congeladas.** Son las que están en
+  producción (artifacts «Camiseta Deportiva 3D» y «Tank Top Deportivo»,
+  publicados desde `eff8e34`). Sólo se tocan para arreglar algo de esas dos, y
+  antes de publicar se comparan con capturas de `eff8e34` en percha y con
+  broches.
+- **Prendas nuevas con la caída fija, no simulada en vivo.** Cambiar el cuello
+  o la manga movía toda la simulación (se inflaba de un lado, la percha y los
+  broches perdían forma) y arreglar una prenda rompía otra. Ahora cada prenda
+  nueva se cuelga una vez, se aprueba mirándola y su forma queda guardada en
+  un archivo por prenda y presentación. Colores, tela y diseño siguen en vivo
+  (son textura); el peso de la tela sí cambia la caída, así que se fija al
+  guardar. Cambiar de cuello es elegir otra prenda ya aprobada.
+- **La tela que se mueve con el mouse** queda para el perchero del catálogo
+  (todas camisetas cuello redondo, sin ajustes de forma).
+- **Orden:** 1) remerón de danza (Worship), 2) lo de Walter (básquet cuello V,
+  musculosa, remera femenina).
+- **La vara:** una prenda en 3D tiene que salir más rápido que el mockup a
+  mano. Si no, no está lista.
+- **Descartado:** coser los moldes SVG en Blender (artifact «Molde a 3D
+  LLAQTA», principios de octubre). De cerca no convencía y la página pesaba
+  mucho. La base es three.js con la tela de `fabric.js`.
+
+## Nombres compartidos con escalado
+
+Los scripts de Illustrator de `archivojoya/escalado` leen las piezas por
+nombre, y el mockup tiene que usar los mismos para que un diseño exportado
+de Illustrator caiga solo en su pieza:
+
+- Capa «Diseño» (diseño base, un talle): `frente`, `espalda`, `manga`
+  (`MANGA (derecha)` / `MANGA (izquierda)`), `manga larga`, `cuello`; el short,
+  `short derecha numero`, `short izquierda escudo` (el rol va en el nombre).
+- Capa «Escala» (moldes por talle): `L / frente (r)`, `L / frente (v)`,
+  `L / espalda`, `L / manga`. Los talles femeninos llevan F adelante (`FS`,
+  `FM`, `F2XL`, `F12`).
 
 ## Criterios estéticos (para todas las prendas)
 

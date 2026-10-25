@@ -97,10 +97,12 @@ function monotone(xs, ys) {
 // ancho y hondo adelante y alto atrás; tiras de 4,2 cm en el hombro; espalda
 // nadadora (las sisas de atrás, en C, dejan una columna en el centro); vivos
 // finos en el escote y las sisas.
-// Remerón de danza (de mujer): la camiseta con mangas y cuello redondo sobre
-// un cuerpo con busto, cintura y cadera, hombros más angostos, largo hasta
-// arriba de la rodilla y abierto hacia el ruedo (evasé), con pliegues que
-// bajan de la cadera y una abertura en cada costado (ver buildTorso).
+// Remerón de danza (de mujer): la camiseta con mangas y cuello redondo, con
+// las medidas del molde FXL de Worship Wear (así un diseño hecho sobre ese
+// molde cae casi igual): casi recto (contorno de 112 cm en la sisa, 107 en la
+// cintura, 111 en la cadera y 116 en el ruedo), hombros de 48 cm caídos, sisa
+// honda (31 cm), busto suave, largo de 97 cm, pliegues suaves hacia el ruedo
+// y una abertura en cada costado (ver buildTorso).
 const NECK_REF = 0.075; // escote de referencia (ver measures)
 const ARM_BAND = 0.024; // ancho del puño de la sisa
 const ARM_RISE = 0.0011; // con cuerpo, lo que el puño queda por encima de la tela
@@ -117,11 +119,21 @@ const TANK = {
   colsB: 26,
 };
 const TUNIC = {
-  hipY: -0.6, // altura de la cadera (de ahí se abre hasta el ruedo)
-  flareA: 0.24, // cuánto se abre hacia el ruedo, a lo ancho y de fondo (por metro de largo)
-  flareB: 0.1,
+  // Cortes (altura, medio ancho, medio fondo, centro) con calce 0,15: debajo
+  // de la sisa, cintura y cadera; de la cadera al ruedo se abre parejo.
+  rows: [
+    [-0.36, 0.2087, 0.1294, 0.006],
+    [-0.47, 0.2017, 0.1251, 0.004],
+  ],
+  pit: [0.211, 0.131], // en la sisa
+  hip: [-0.65, 0.2089, 0.1295], // altura, medio ancho, medio fondo
+  hem: [0.2179, 0.1351], // en el ruedo con 97 cm de largo
+  shA: 0.24, // medio ancho de hombros
+  shY: -0.051, // caída del hombro
+  pitY: -0.307, // altura de la sisa
+  rHem: 0.0627, // boca de manga (39,4 cm)
   folds: 9, // pliegues alrededor (del ruedo a la cadera)
-  fold: 0.009, // y su hondo en el ruedo
+  fold: 0.006, // y su hondo en el ruedo
   slitOpen: 0.05, // cuánto se separa cada borde de la abertura en el ruedo (radianes alrededor del cuerpo)
   slitLip: 0.022, // dobladillo de los bordes de la abertura (como el del ruedo)
 };
@@ -152,7 +164,7 @@ export function measures(p) {
     // espalda, no se mete hacia el cuello.
     deepNeck: tank,
     shY: -0.046, // altura de la punta del hombro
-    pitY: (tank ? -0.26 : basket ? -0.25 : -0.205) - 0.03 * f, // altura de la axila
+    pitY: tunic ? TUNIC.pitY - 0.02 * (f - 0.15) : (tank ? -0.26 : basket ? -0.25 : -0.205) - 0.03 * f, // altura de la axila
     n: 2.35, // exponente de los cortes (2 = elipse)
     garment,
     sleeveless,
@@ -165,16 +177,17 @@ export function measures(p) {
     racerGap: TANK.racerGap,
     // Busto: altura y separación de las puntas, relieve y caída arriba y
     // abajo (más suelta, menos relieve y cae más derecho).
-    // (En el remerón, la tela es más suelta: menos relieve y cae más derecho.)
+    // (En el remerón, suelto, la tela apenas lo marca y cae derecho.)
     bust: tank
       ? { x: 0.085, y: -0.245, h: 0.042 * (1 - 0.4 * f), sx: 0.045, sUp: 0.12, sDown: 0.05 + 0.07 * f }
       : tunic
-        ? { x: 0.085, y: -0.245, h: 0.034 * (1 - 0.4 * f), sx: 0.05, sUp: 0.12, sDown: 0.09 + 0.06 * f }
+        ? { x: 0.09, y: -0.27, h: 0.022 * (1 - 0.4 * f), sx: 0.05, sUp: 0.12, sDown: 0.14 }
         : null,
-    flare: tunic ? { y0: -Math.min(-TUNIC.hipY, L - 0.12), n: TUNIC.folds, h: TUNIC.fold * (1 + f), slit: Math.min(Math.max(0, p.slit ?? DEFAULTS.slit), L - 0.25) } : null,
+    flare: tunic ? { y0: -Math.min(-TUNIC.hip[0], L - 0.12), n: TUNIC.folds, h: TUNIC.fold * (1 + f), slit: Math.min(Math.max(0, p.slit ?? DEFAULTS.slit), L - 0.25) } : null,
   };
-  const shA = tank ? M.neck.a + TANK.strap : basket ? 0.173 + 0.026 * f : tunic ? 0.196 + 0.03 * f : 0.214 + 0.032 * f; // medio ancho de hombros
-  if (tank || basket || tunic) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
+  const shA = tank ? M.neck.a + TANK.strap : basket ? 0.173 + 0.026 * f : tunic ? TUNIC.shA + 0.02 * (f - 0.15) : 0.214 + 0.032 * f; // medio ancho de hombros
+  if (tank || basket) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
+  if (tunic) M.shY = TUNIC.shY;
   const aC = 0.176 + 0.046 * f; // medio ancho y media profundidad del pecho
   const bC = 0.112 + 0.022 * f;
   // Tank top: pecho (sin el busto), cintura y cadera.
@@ -184,25 +197,29 @@ export function measures(p) {
   const bW = 0.088 + 0.02 * f;
   const aH = 0.168 + 0.035 * f;
   const bH = 0.1 + 0.02 * f;
-  // Remerón: pecho (sin el busto), cintura, cadera y, de ahí al ruedo, se
-  // abre parejo (a lo ancho más que de fondo).
+  // Remerón (ver TUNIC): el calce agranda o achica todos los cortes parejo.
+  // De la cadera al ruedo se abre con la pendiente del molde (de 111 a 116
+  // cm de contorno en 32 cm), cualquiera sea el largo.
   const tunicRows = () => {
-    const aT = 0.168 + 0.04 * f;
-    const bT = 0.104 + 0.02 * f;
+    const da = 0.03 * (f - 0.15);
+    const db = 0.62 * da;
+    const [, aHt, bHt] = TUNIC.hip;
     const yH = M.flare.y0;
-    const aHt = 0.182 + 0.03 * f;
-    const bHt = 0.114 + 0.016 * f;
-    const open = (y) => [y, aHt + TUNIC.flareA * (yH - y), bHt + TUNIC.flareB * (yH - y), -0.006];
-    const tip = [M.shY, shA, 0.09 + 0.01 * f, -0.008];
+    const ka = (TUNIC.hem[0] - aHt) / (0.97 + TUNIC.hip[0]);
+    const kb = (TUNIC.hem[1] - bHt) / (0.97 + TUNIC.hip[0]);
+    const open = (y) => [y, aHt + da + ka * (yH - y), bHt + db + kb * (yH - y), -0.004];
+    const tip = [M.shY, shA, 0.1 + db, -0.008];
     const mid = [M.shY / 2, lerp(M.neck.a, shA, 0.5), lerp(M.neck.b, tip[2], 0.5), lerp(M.neck.c, -0.008, 0.5)];
-    const below = [-0.115, Math.max(shA - 0.008, aT + 0.006), bT - 0.006, 0];
+    const below = [-0.17, shA - 0.008, TUNIC.pit[1] - 0.006 + db, 0];
     return [
       open(-L - 0.2),
       open(-L),
-      [yH, aHt, bHt, -0.004],
-      [-0.4, 0.16 + 0.03 * f, 0.099 + 0.016 * f, 0.004],
-      [-0.31, aT - 0.004, bT - 0.006, 0.006],
-      [M.pitY, aT, bT, 0.006],
+      [yH, aHt + da, bHt + db, -0.004],
+      ...TUNIC.rows
+        .filter(([y]) => y > yH)
+        .reverse()
+        .map(([y, a, b, c]) => [y, a + da, b + db, c]),
+      [M.pitY, TUNIC.pit[0] + da, TUNIC.pit[1] + db, 0.006],
       below,
       ...shoulderRows(M, below, tip, mid),
       mid,
@@ -254,7 +271,7 @@ export function measures(p) {
   M.sleeve = {
     len: p.sleeveLength,
     angle: THREE.MathUtils.degToRad(p.sleeveAngle),
-    rHem: 0.058 + 0.016 * f,
+    rHem: tunic ? TUNIC.rHem + 0.01 * (f - 0.15) : 0.058 + 0.016 * f,
     cuff: 0.026,
   };
   return M;

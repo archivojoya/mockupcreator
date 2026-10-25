@@ -84,19 +84,22 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     las dos queda una columna de unos 9 cm de ancho, con un tramo casi
     vertical de 5 cm, y abajo la sisa se abre hasta el costado); vivos finos
     de un mismo color en el escote y las sisas. No lleva tapacostura.
-  - **Remerón** de danza (de mujer): la camiseta con mangas y cuello
-    redondo sobre un cuerpo con busto, cintura y cadera, con hombros 3,7 cm
-    más angostos; largo de 75 a 100 cm (de entrada 85, hasta arriba de la
-    rodilla) y, de la cadera para abajo, se abre parejo hasta el ruedo
-    (evasé: 99 cm de cadera, 127 de ruedo con 85 de largo), con pliegues que
-    bajan derechos y se abren hacia el ruedo. En cada costado, una abertura
+  - **Remerón** de danza (de mujer), con las medidas del molde FXL de
+    Worship Wear (`moldes/worship/remeron-danza-FXL.svg`): la camiseta con
+    mangas y cuello redondo, casi recta (112 cm de contorno en la sisa, 107
+    en la cintura, 111 en la cadera y 116 en el ruedo, que es lo que abre el
+    molde), hombros de 48 cm con 5 cm de caída, sisa honda (31 cm), busto
+    suave, pliegues suaves hacia el ruedo. Arranca con 97 cm de largo (de 80
+    a 105), manga de 24 cm sin puño (boca de 39 cm) y escote de 9 cm. Contra
+    el molde: centro del frente 89,7 cm (88), de la espalda 96,7 (95,5),
+    costado 66,4 (66,3); debajo de la sisa la pieza plana mide 1 o 2 cm de
+    ancho distinto. En cada costado, una abertura
     (**Abertura al costado**, de 0 a 30 cm, de entrada 20): ahí frente y
     espalda no están cosidos, cada pieza se angosta un poco alrededor del
     cuerpo y los bordes se separan (nada arriba, 2,4 cm en el ruedo); cada
     borde lleva el dobladillo del ruedo y su pespunte, y la costura del
     costado termina donde empieza la abertura. Por ahora sólo con cuerpo (la
-    caída colgada se fija aparte) y sin short. Las medidas salen de fotos:
-    se ajustan con el molde.
+    caída colgada se fija aparte) y sin short.
   Sin mangas se ocultan el largo, la apertura, el puño y el color de las
   mangas, y sus piezas en la personalización.
 - **Short** (`src/camiseta/shorts.js`): con cuerpo, un short de fútbol debajo

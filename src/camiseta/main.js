@@ -401,8 +401,12 @@ const BASE_PARAMS = { ...DEFAULTS, ...CONFIG.params };
 if (BASE_PARAMS.garment === 'tank' && CONFIG.params?.neckDepth === undefined) BASE_PARAMS.neckDepth = 0.13;
 // Largo según la prenda: mínimo, máximo y valor al elegirla. El remerón llega
 // hasta arriba de la rodilla.
-const LENGTH = { shirt: [0.62, 0.82, DEFAULTS.length], tunic: [0.75, 1, 0.85] };
-if (BASE_PARAMS.garment === 'tunic' && CONFIG.params?.length === undefined) BASE_PARAMS.length = LENGTH.tunic[2];
+const LENGTH = { shirt: [0.62, 0.82, DEFAULTS.length], tunic: [0.8, 1.05, 0.97] };
+// Con qué arranca el remerón (las medidas del molde FXL de Worship Wear: manga
+// de 24 cm sin puño, escote de 9 cm) y a qué vuelve la camiseta al dejarlo.
+const TUNIC_START = { length: LENGTH.tunic[2], sleeveLength: 0.24, neckDepth: 0.09, cuff: 'none' };
+const SHIRT_START = { length: DEFAULTS.length, sleeveLength: DEFAULTS.sleeveLength, neckDepth: DEFAULTS.neckDepth, cuff: DEFAULTS.cuff };
+if (BASE_PARAMS.garment === 'tunic') for (const [k, v] of Object.entries(TUNIC_START)) if (CONFIG.params?.[k] === undefined) BASE_PARAMS[k] = v;
 const BASE_COLORS = { ...COLORS, ...CONFIG.colors };
 const BASE_FABRIC = { ...FABRIC, ...CONFIG.fabric };
 const BASE_LIGHT = CONFIG.light in LIGHTS ? CONFIG.light : 'studio';
@@ -1083,7 +1087,7 @@ garmentButtons.forEach((b) =>
       params.neckDepth = neckRange()[2];
     }
     const tunic = was === 'tunic' || params.garment === 'tunic';
-    if (tunic) params.length = lengthRange()[2];
+    if (tunic) Object.assign(params, bodyOnly() ? TUNIC_START : SHIRT_START);
     if (bodyOnly() && view.mode !== 'body') {
       setMode('body');
       requestAnimationFrame(() => renderApps());

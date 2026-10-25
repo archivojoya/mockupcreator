@@ -53,7 +53,9 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   sola toma, frente y espalda del mismo tamaño (aunque estén giradas), y
   arriba el nombre del cliente (sin nombre, el título de la página) y «Esta
   imagen es ilustrativa». El archivo se llama `muestra-<cliente>.png`. Se
-  dibuja aparte, sin mover la vista.
+  dibuja aparte, sin mover la vista. **Sin fondo** baja sólo las dos
+  prendas, recortadas sobre transparente y sin textos, para armar un flyer
+  (`muestra-<cliente>-sin-fondo.png`).
 
 - **Presentación**: con cuerpo (forma fija, como puesta), en percha o con
   broches. La percha es de madera, plana y paralela a la camiseta, con el arco

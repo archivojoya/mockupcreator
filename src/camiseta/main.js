@@ -2546,6 +2546,12 @@ function makeSheet(opts = {}) {
     const sheet = document.createElement('canvas');
     [sheet.width, sheet.height] = [W, H];
     const g = sheet.getContext('2d');
+    // Sin fondo: sólo las prendas, recortadas (transparente alrededor), sin
+    // nombre ni aclaración, para ponerlas en un flyer.
+    if (opts.bg === 'none') {
+      g.drawImage(shoot(W, H, sheetPose(W / H, 0.92)), 0, 0);
+      return sheet;
+    }
     studioBackground(g, 0, 0, W, H, theme);
     const M = 90;
     drawHeader(g, M, M * 0.8, 68, theme, title);
@@ -2605,7 +2611,7 @@ async function downloadSheet() {
     const sheet = makeSheet(sheetOpts);
     const blob = await new Promise((ok) => sheet.toBlob(ok, 'image/png'));
     const slug = sheetOpts.client.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const name = `muestra-${slug || 'camiseta'}.png`;
+    const name = `muestra-${slug || 'camiseta'}${sheetOpts.bg === 'none' ? '-sin-fondo' : ''}.png`;
     const dl = await downloadsP;
     if (dl) {
       try {

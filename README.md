@@ -89,7 +89,12 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     más angostos; largo de 75 a 100 cm (de entrada 85, hasta arriba de la
     rodilla) y, de la cadera para abajo, se abre parejo hasta el ruedo
     (evasé: 99 cm de cadera, 127 de ruedo con 85 de largo), con pliegues que
-    bajan derechos y se abren hacia el ruedo. Por ahora sólo con cuerpo (la
+    bajan derechos y se abren hacia el ruedo. En cada costado, una abertura
+    (**Abertura al costado**, de 0 a 30 cm, de entrada 20): ahí frente y
+    espalda no están cosidos, cada pieza se angosta un poco alrededor del
+    cuerpo y los bordes se separan (nada arriba, 2,4 cm en el ruedo); cada
+    borde lleva el dobladillo del ruedo y su pespunte, y la costura del
+    costado termina donde empieza la abertura. Por ahora sólo con cuerpo (la
     caída colgada se fija aparte) y sin short. Las medidas salen de fotos:
     se ajustan con el molde.
   Sin mangas se ocultan el largo, la apertura, el puño y el color de las

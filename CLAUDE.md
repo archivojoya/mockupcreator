@@ -43,8 +43,8 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   musculosa, remera femenina).
 - **Remerón (25 de octubre):** prenda `tunic`, sólo con cuerpo hasta que se
   fije su caída colgada. Medidas sacadas de fotos (largo arriba de la rodilla,
-  silueta con cintura, evasé); falta ajustarlas al molde de Detrás de la
-  Puerta / Penuel y la abertura al costado.
+  silueta con cintura, evasé, abertura de 20 cm en cada costado); falta
+  ajustarlas al molde de Detrás de la Puerta / Penuel.
 - **La vara:** una prenda en 3D tiene que salir más rápido que el mockup a
   mano. Si no, no está lista.
 - **Descartado:** coser los moldes SVG en Blender (artifact «Molde a 3D

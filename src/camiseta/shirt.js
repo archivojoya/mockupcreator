@@ -32,6 +32,7 @@ export const DEFAULTS = {
   cuff: 'band', // 'band' con puño · 'none' sin puño (la manga sigue hasta el borde)
   garment: 'tee', // 'tee' camiseta · 'muscle' musculosa (sin mangas) · 'basket' musculosa de básquet (sisa grande) · 'tank' tank top (de mujer, espalda nadadora) · 'tunic' remerón de danza (de mujer, largo)
   short: true, // con cuerpo, el short de fútbol debajo (ver shorts.js)
+  slit: 0.2, // remerón: alto de la abertura de cada costado, desde el ruedo (0, sin abertura)
 };
 
 // Resolución de las mallas.
@@ -99,7 +100,7 @@ function monotone(xs, ys) {
 // Remerón de danza (de mujer): la camiseta con mangas y cuello redondo sobre
 // un cuerpo con busto, cintura y cadera, hombros más angostos, largo hasta
 // arriba de la rodilla y abierto hacia el ruedo (evasé), con pliegues que
-// bajan de la cadera.
+// bajan de la cadera y una abertura en cada costado (ver buildTorso).
 const NECK_REF = 0.075; // escote de referencia (ver measures)
 const ARM_BAND = 0.024; // ancho del puño de la sisa
 const ARM_RISE = 0.0011; // con cuerpo, lo que el puño queda por encima de la tela
@@ -121,6 +122,8 @@ const TUNIC = {
   flareB: 0.1,
   folds: 9, // pliegues alrededor (del ruedo a la cadera)
   fold: 0.009, // y su hondo en el ruedo
+  slitOpen: 0.05, // cuánto se separa cada borde de la abertura en el ruedo (radianes alrededor del cuerpo)
+  slitLip: 0.022, // dobladillo de los bordes de la abertura (como el del ruedo)
 };
 export function measures(p) {
   const f = p.fit;
@@ -168,7 +171,7 @@ export function measures(p) {
       : tunic
         ? { x: 0.085, y: -0.245, h: 0.034 * (1 - 0.4 * f), sx: 0.05, sUp: 0.12, sDown: 0.09 + 0.06 * f }
         : null,
-    flare: tunic ? { y0: -Math.min(-TUNIC.hipY, L - 0.12), n: TUNIC.folds, h: TUNIC.fold * (1 + f) } : null,
+    flare: tunic ? { y0: -Math.min(-TUNIC.hipY, L - 0.12), n: TUNIC.folds, h: TUNIC.fold * (1 + f), slit: Math.min(Math.max(0, p.slit ?? DEFAULTS.slit), L - 0.25) } : null,
   };
   const shA = tank ? M.neck.a + TANK.strap : basket ? 0.173 + 0.026 * f : tunic ? 0.196 + 0.03 * f : 0.214 + 0.032 * f; // medio ancho de hombros
   if (tank || basket || tunic) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
@@ -567,6 +570,13 @@ function buildTorso(M) {
     const k = lerp(1, rho / r, (1 - smoothstep(1, 2.4, rho)) * top);
     return [thc + p * k * dTh, tc + q * k * dT];
   };
+  // Abertura del remerón: en cada costado, del ruedo hasta `slit` más arriba,
+  // frente y espalda dejan de estar cosidos. Cada pieza se angosta un poco
+  // alrededor del cuerpo (parejo en toda la fila) y sus bordes se separan:
+  // nada arriba (la abertura cierra sin escalón) y más hacia el ruedo.
+  const slit = M.flare ? M.flare.slit : 0;
+  const tSlit = slit / M.L; // en el costado el escote no baja: y = -L + t·L
+  const slitOpen = (t) => (t < tSlit ? TUNIC.slitOpen * ((tSlit - t) / tSlit) ** 1.5 : 0);
   const panels = {};
   for (const key of ['front', 'back']) {
     const th0 = key === 'front' ? -Math.PI / 2 : Math.PI / 2;
@@ -596,6 +606,10 @@ function buildTorso(M) {
       for (let j = 0; j <= COLS; j++) {
         let th = th0 + (Math.PI * j) / COLS;
         let t = tRow(i);
+        if (slit) {
+          const o = slitOpen(t);
+          th = th0 + o + ((Math.PI - 2 * o) * j) / COLS;
+        }
         [th, t] = warp(th, t, th0);
         [th, t] = warp(th, t, th0 + Math.PI);
         t = lift(th, t);
@@ -622,7 +636,10 @@ function buildTorso(M) {
     orient(pos, idx, fromVertical);
     panels[key] = { pos, ang, idx, W, N, tw, tv };
   }
-  return { panels, i1, i2, N, armCols: A, armColsB: A };
+  // Filas que quedan abiertas en los costados (desde el ruedo).
+  let slitRows = 0;
+  while (slit && tRow(slitRows + 1) < tSlit) slitRows++;
+  return { panels, i1, i2, N, armCols: A, armColsB: A, slitRows: slit ? slitRows + 1 : 0 };
 }
 
 // Torso del tank top (espalda nadadora). La sisa es otra vez un hueco
@@ -1229,10 +1246,23 @@ export function buildShirt(params) {
   parts.collar = buildCollar(M, neck.map(([key, v, below]) => [panels[key].pos, v, below, panels[key].nrm]), COLS / 2);
 
   // ---------- dobladillos (espesor de la tela en ruedo y puños) ----------
-  const hemRing = [];
-  for (let j = 0; j <= COLS; j++) hemRing.push([panels.front.pos, j, W + j]);
-  for (let j = 1; j < COLS; j++) hemRing.push([panels.back.pos, j, W + j]);
-  parts.hem = buildLip(hemRing, 0.022, true);
+  if (torso.slitRows) {
+    // Con abertura (remerón), el ruedo son dos tiras sueltas, una por pieza,
+    // y cada borde de la abertura lleva el mismo dobladillo, del ruedo hasta
+    // la primera fila cosida.
+    const lips = [];
+    for (const key of ['front', 'back']) {
+      const p = panels[key].pos;
+      lips.push(buildLip(Array.from({ length: COLS + 1 }, (_, j) => [p, j, W + j]), 0.022, false, true));
+      for (const [j, k] of [[0, 1], [COLS, COLS - 1]]) lips.push(buildLip(Array.from({ length: torso.slitRows + 1 }, (_, i) => [p, i * W + j, i * W + k]), TUNIC.slitLip, false, true));
+    }
+    parts.hem = mergeParts(lips);
+  } else {
+    const hemRing = [];
+    for (let j = 0; j <= COLS; j++) hemRing.push([panels.front.pos, j, W + j]);
+    for (let j = 1; j < COLS; j++) hemRing.push([panels.back.pos, j, W + j]);
+    parts.hem = buildLip(hemRing, 0.022, true);
+  }
   for (const k of M.sleeveless ? [] : ['cuffL', 'cuffR']) {
     const c = parts[k];
     const SW = c.ring.length;
@@ -1246,7 +1276,7 @@ export function buildShirt(params) {
   // Normales, costuras soldadas y marcas de costura.
   for (const part of Object.values(parts)) part.nrm = computeNormals(part.pos, part.idx);
   weldNormals(['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR'].filter((k) => parts[k]).map((k) => parts[k]));
-  seamMarks(parts, N, W, params.cuff === 'none', M.vNeck ? COLS / 2 : -1);
+  seamMarks(parts, N, W, params.cuff === 'none', M.vNeck ? COLS / 2 : -1, torso.slitRows);
   zoneMarks(parts, M, W);
 
   const geos = {};
@@ -1808,7 +1838,10 @@ function buildCollar(M, neck, tip) {
 
 // Dobladillo: desde el borde, la tela se da vuelta hacia adentro y sube.
 // ring: [posiciones, índice del borde, índice de la fila de arriba].
-export function buildLip(ring, height, closed) {
+// Afuera es lejos del centro del borde, o, con `axis`, lejos del eje de la
+// prenda a la altura de cada punto (para un borde que no da la vuelta
+// entera: una tira del ruedo, el borde de una abertura).
+export function buildLip(ring, height, closed, axis = false) {
   const n = ring.length;
   const prof = [[0, 0], [-0.0008, -0.0009], [-0.0003, -0.0021], [0.002, -0.0024], [height, -0.0024]];
   const P = prof.length;
@@ -1818,6 +1851,7 @@ export function buildLip(ring, height, closed) {
   const center = new THREE.Vector3();
   for (const [p, v] of ring) center.add(new THREE.Vector3().fromArray(p, v * 3));
   center.divideScalar(n);
+  if (axis) center.x = center.z = 0;
   const e = new THREE.Vector3();
   const prev = new THREE.Vector3();
   const up = new THREE.Vector3();
@@ -1829,6 +1863,7 @@ export function buildLip(ring, height, closed) {
     e.fromArray(p, v * 3);
     up.fromArray(p, w * 3).sub(e).normalize();
     // Hacia afuera de la prenda: lejos del centro del borde.
+    if (axis) center.y = e.y;
     out.subVectors(e, center);
     out.addScaledVector(up, -out.dot(up)).normalize();
     if (i > 0) u += e.distanceTo(prev);
@@ -1841,7 +1876,21 @@ export function buildLip(ring, height, closed) {
     }
   }
   const idx = gridIndex(n - (closed ? 0 : 1), P - 1, SW);
-  return { pos, uv, idx: orient(pos, idx, (x, y, z) => [x - center.x, y - center.y, z - center.z]) };
+  return { pos, uv, idx: orient(pos, idx, axis ? fromVertical : (x, y, z) => [x - center.x, y - center.y, z - center.z]) };
+}
+// Varias mallas en una sola pieza (posiciones, UV e índices).
+function mergeParts(list) {
+  const pos = new Float32Array(list.reduce((s, m) => s + m.pos.length, 0));
+  const uv = new Float32Array(list.reduce((s, m) => s + m.uv.length, 0));
+  const idx = [];
+  let base = 0;
+  for (const m of list) {
+    pos.set(m.pos, base * 3);
+    uv.set(m.uv, base * 2);
+    for (const v of m.idx) idx.push(v + base);
+    base += m.pos.length / 3;
+  }
+  return { pos, uv, idx };
 }
 
 // Puño de la sisa (musculosa) o vivo (tank top): una tira doble cosida al
@@ -1977,8 +2026,10 @@ function zoneMarks(parts, M, W) {
 // (hundido de la costura), y = distancia al borde con pespunte (ruedos).
 // Sin puño (`noCuff`), entre la manga y el puño no hay costura: la manga
 // sigue, con la costura de abajo del brazo, hasta el borde. En V, la tira
-// lleva una costura en la punta (`vTip`, su columna).
-function seamMarks(parts, N, W, noCuff = false, vTip = -1) {
+// lleva una costura en la punta (`vTip`, su columna). Con abertura en los
+// costados (las primeras `slitRows` filas del torso), ahí el costado no es
+// costura sino borde: el pespunte del ruedo sube por él.
+function seamMarks(parts, N, W, noCuff = false, vTip = -1, slitRows = 0) {
   const set = (part, f) => {
     const n = part.pos.length / 3;
     part.seam = new Float32Array(n * 2);
@@ -2001,7 +2052,9 @@ function seamMarks(parts, N, W, noCuff = false, vTip = -1) {
       const uL = uvs[r0 * 2];
       const uR = uvs[(r0 + COLS) * 2];
       const u = uvs[v * 2];
-      let d = Math.min(u - uL, uR - u);
+      const side = Math.min(u - uL, uR - u);
+      const open = i < slitRows;
+      let d = open ? Infinity : side;
       const vTop = uvs[(N * W + j) * 2 + 1];
       d = Math.min(d, vTop - uvs[v * 2 + 1]);
       const x = p.pos[v * 3];
@@ -2014,7 +2067,7 @@ function seamMarks(parts, N, W, noCuff = false, vTip = -1) {
             if (dd < d) d = dd;
           }
       }
-      return [d, uvs[v * 2 + 1]];
+      return [d, open ? Math.min(uvs[v * 2 + 1], side) : uvs[v * 2 + 1]];
     });
   }
   for (const key of ['sleeveL', 'sleeveR']) {

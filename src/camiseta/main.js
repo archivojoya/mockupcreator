@@ -935,6 +935,7 @@ const fmtCm = (m) => `${Math.round(m * 100)} cm`;
 const OUT = {
   fit: (v) => (v < 0.3 ? 'Ajustado' : v < 0.7 ? 'Regular' : 'Holgado'),
   length: fmtCm,
+  slit: (v) => (v < 0.005 ? 'Sin abertura' : fmtCm(v)),
   sleeveLength: fmtCm,
   sleeveAngle: (v) => `${Math.round(v)}°`,
   neckDepth: (v) => `${(v * 100).toFixed(1).replace('.', ',')} cm`,
@@ -990,6 +991,7 @@ function syncControls() {
   depthButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.depth === params.neckDepth)));
   shortButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.short === (params.short === false ? 'off' : 'on'))));
   document.getElementById('short-control').hidden = view.mode === 'hanger' || bodyOnly();
+  document.getElementById('slit-control').hidden = !bodyOnly();
   // El remerón todavía no tiene su caída aprobada: sólo con cuerpo.
   modeButtons.forEach((b) => (b.hidden = bodyOnly() && b.dataset.mode !== 'body'));
   for (const sw of document.querySelectorAll('.sw-short')) sw.hidden = !withShort();

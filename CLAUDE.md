@@ -43,8 +43,9 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   musculosa, remera femenina).
 - **Remerón (25 de octubre):** prenda `tunic`, sólo con cuerpo hasta que se
   fije su caída colgada. Sale de las fotos de Worship Wear: con cintura,
-  hasta arriba de la rodilla (85 cm) y evasé de 99 a 120 cm (con 127
-  «debería acampanarse menos»), abertura de 20 cm en cada costado. Se probó
+  hasta arriba de la rodilla (85 cm) y casi recto de la cadera al ruedo (99
+  y 100 cm de contorno: Demian lo pidió así después de verlo con 127 y con
+  120), abertura de 20 cm en cada costado. Se probó
   con las medidas del molde FXL (`moldes/worship/`, casi recto, 97 de largo,
   manga de 24 sin puño) y a Demian le gustaba menos: la forma sale de las
   fotos. Que un diseño hecho sobre el molde caiga justo se resuelve en el

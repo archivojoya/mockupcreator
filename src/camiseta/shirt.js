@@ -99,7 +99,7 @@ function monotone(xs, ys) {
 // finos en el escote y las sisas.
 // Remerón de danza (de mujer): la camiseta con mangas y cuello redondo sobre
 // un cuerpo con busto, cintura y cadera, hombros más angostos, largo hasta
-// arriba de la rodilla y abierto hacia el ruedo (evasé), con pliegues que
+// arriba de la rodilla y casi recto de la cadera al ruedo, con pliegues que
 // bajan de la cadera y una abertura en cada costado (ver buildTorso).
 const NECK_REF = 0.075; // escote de referencia (ver measures)
 const ARM_BAND = 0.024; // ancho del puño de la sisa
@@ -118,8 +118,8 @@ const TANK = {
 };
 const TUNIC = {
   hipY: -0.6, // altura de la cadera (de ahí se abre hasta el ruedo)
-  flareA: 0.18, // cuánto se abre hacia el ruedo, a lo ancho y de fondo (por metro de largo)
-  flareB: 0.075,
+  flareA: 0.008, // cuánto se abre hacia el ruedo, a lo ancho y de fondo (por metro de largo)
+  flareB: 0.0033,
   folds: 9, // pliegues alrededor (del ruedo a la cadera)
   fold: 0.009, // y su hondo en el ruedo
   slitOpen: 0.05, // cuánto se separa cada borde de la abertura en el ruedo (radianes alrededor del cuerpo)

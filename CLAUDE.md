@@ -41,6 +41,10 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   (todas camisetas cuello redondo, sin ajustes de forma).
 - **Orden:** 1) remerón de danza (Worship), 2) lo de Walter (básquet cuello V,
   musculosa, remera femenina).
+- **Remerón (25 de octubre):** prenda `tunic`, sólo con cuerpo hasta que se
+  fije su caída colgada. Medidas sacadas de fotos (largo arriba de la rodilla,
+  silueta con cintura, evasé); falta ajustarlas al molde de Detrás de la
+  Puerta / Penuel y la abertura al costado.
 - **La vara:** una prenda en 3D tiene que salir más rápido que el mockup a
   mano. Si no, no está lista.
 - **Descartado:** coser los moldes SVG en Blender (artifact «Molde a 3D
@@ -130,6 +134,15 @@ Es un mockup: manda cómo se ve, no la física exacta.
   prenda en 2D antes de renderizar.
 
 ## Cómo probar
+
+Antes de cualquier cambio en `src/camiseta/`: `node tools/regresion.mjs`
+(unos 45 s). Compara camiseta, musculosa, básquet y tank top (con cuerpo,
+molde de estampado, short, en percha y con broches) contra las huellas de la
+versión 1; tiene que dar todo igual. Si un cambio en esas prendas es a
+propósito y Demian lo aprobó, `--guardar` y se commitea el JSON con el cambio.
+
+Para publicar: `node tools/pagina.mjs --out x.html --title … --heading …
+--config '{…}'` arma la página de un solo archivo, y se publica ese HTML.
 
 Playwright + Chromium sin pantalla (`--use-gl=angle --use-angle=swiftshader`):
 adelantar la simulación a mano (`d.step(1/60)` hasta `d.sleeping`), valores

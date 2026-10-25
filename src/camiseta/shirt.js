@@ -30,7 +30,7 @@ export const DEFAULTS = {
   neckDepth: 0.075, // profundidad del escote delantero
   neckStyle: 'round', // 'round' redondo · 'v' en V
   cuff: 'band', // 'band' con puño · 'none' sin puño (la manga sigue hasta el borde)
-  garment: 'tee', // 'tee' camiseta · 'muscle' musculosa (sin mangas) · 'basket' musculosa de básquet (sisa grande) · 'tank' tank top (de mujer, espalda nadadora)
+  garment: 'tee', // 'tee' camiseta · 'muscle' musculosa (sin mangas) · 'basket' musculosa de básquet (sisa grande) · 'tank' tank top (de mujer, espalda nadadora) · 'tunic' remerón de danza (de mujer, largo)
   short: true, // con cuerpo, el short de fútbol debajo (ver shorts.js)
 };
 
@@ -96,6 +96,10 @@ function monotone(xs, ys) {
 // ancho y hondo adelante y alto atrás; tiras de 4,2 cm en el hombro; espalda
 // nadadora (las sisas de atrás, en C, dejan una columna en el centro); vivos
 // finos en el escote y las sisas.
+// Remerón de danza (de mujer): la camiseta con mangas y cuello redondo sobre
+// un cuerpo con busto, cintura y cadera, hombros más angostos, largo hasta
+// arriba de la rodilla y abierto hacia el ruedo (evasé), con pliegues que
+// bajan de la cadera.
 const NECK_REF = 0.075; // escote de referencia (ver measures)
 const ARM_BAND = 0.024; // ancho del puño de la sisa
 const ARM_RISE = 0.0011; // con cuerpo, lo que el puño queda por encima de la tela
@@ -111,13 +115,21 @@ const TANK = {
   colsF: 14, // columnas de la sisa en el frente y en la espalda
   colsB: 26,
 };
+const TUNIC = {
+  hipY: -0.6, // altura de la cadera (de ahí se abre hasta el ruedo)
+  flareA: 0.24, // cuánto se abre hacia el ruedo, a lo ancho y de fondo (por metro de largo)
+  flareB: 0.1,
+  folds: 9, // pliegues alrededor (del ruedo a la cadera)
+  fold: 0.009, // y su hondo en el ruedo
+};
 export function measures(p) {
   const f = p.fit;
   const L = p.length;
-  const garment = ['muscle', 'basket', 'tank'].includes(p.garment) ? p.garment : 'tee';
-  const sleeveless = garment !== 'tee';
+  const garment = ['muscle', 'basket', 'tank', 'tunic'].includes(p.garment) ? p.garment : 'tee';
+  const sleeveless = garment !== 'tee' && garment !== 'tunic';
   const tank = garment === 'tank';
   const basket = garment === 'basket';
+  const tunic = garment === 'tunic';
   const M = {
     L,
     fit: f,
@@ -150,10 +162,16 @@ export function measures(p) {
     racerGap: TANK.racerGap,
     // Busto: altura y separación de las puntas, relieve y caída arriba y
     // abajo (más suelta, menos relieve y cae más derecho).
-    bust: tank ? { x: 0.085, y: -0.245, h: 0.042 * (1 - 0.4 * f), sx: 0.045, sUp: 0.12, sDown: 0.05 + 0.07 * f } : null,
+    // (En el remerón, la tela es más suelta: menos relieve y cae más derecho.)
+    bust: tank
+      ? { x: 0.085, y: -0.245, h: 0.042 * (1 - 0.4 * f), sx: 0.045, sUp: 0.12, sDown: 0.05 + 0.07 * f }
+      : tunic
+        ? { x: 0.085, y: -0.245, h: 0.034 * (1 - 0.4 * f), sx: 0.05, sUp: 0.12, sDown: 0.09 + 0.06 * f }
+        : null,
+    flare: tunic ? { y0: -Math.min(-TUNIC.hipY, L - 0.12), n: TUNIC.folds, h: TUNIC.fold * (1 + f) } : null,
   };
-  const shA = tank ? M.neck.a + TANK.strap : basket ? 0.173 + 0.026 * f : 0.214 + 0.032 * f; // medio ancho de hombros
-  if (tank || basket) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
+  const shA = tank ? M.neck.a + TANK.strap : basket ? 0.173 + 0.026 * f : tunic ? 0.196 + 0.03 * f : 0.214 + 0.032 * f; // medio ancho de hombros
+  if (tank || basket || tunic) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
   const aC = 0.176 + 0.046 * f; // medio ancho y media profundidad del pecho
   const bC = 0.112 + 0.022 * f;
   // Tank top: pecho (sin el busto), cintura y cadera.
@@ -163,7 +181,34 @@ export function measures(p) {
   const bW = 0.088 + 0.02 * f;
   const aH = 0.168 + 0.035 * f;
   const bH = 0.1 + 0.02 * f;
-  const rows = tank
+  // Remerón: pecho (sin el busto), cintura, cadera y, de ahí al ruedo, se
+  // abre parejo (a lo ancho más que de fondo).
+  const tunicRows = () => {
+    const aT = 0.168 + 0.04 * f;
+    const bT = 0.104 + 0.02 * f;
+    const yH = M.flare.y0;
+    const aHt = 0.182 + 0.03 * f;
+    const bHt = 0.114 + 0.016 * f;
+    const open = (y) => [y, aHt + TUNIC.flareA * (yH - y), bHt + TUNIC.flareB * (yH - y), -0.006];
+    const tip = [M.shY, shA, 0.09 + 0.01 * f, -0.008];
+    const mid = [M.shY / 2, lerp(M.neck.a, shA, 0.5), lerp(M.neck.b, tip[2], 0.5), lerp(M.neck.c, -0.008, 0.5)];
+    const below = [-0.115, Math.max(shA - 0.008, aT + 0.006), bT - 0.006, 0];
+    return [
+      open(-L - 0.2),
+      open(-L),
+      [yH, aHt, bHt, -0.004],
+      [-0.4, 0.16 + 0.03 * f, 0.099 + 0.016 * f, 0.004],
+      [-0.31, aT - 0.004, bT - 0.006, 0.006],
+      [M.pitY, aT, bT, 0.006],
+      below,
+      ...shoulderRows(M, below, tip, mid),
+      mid,
+      [0, M.neck.a, M.neck.b, M.neck.c],
+    ];
+  };
+  const rows = tunic
+    ? tunicRows()
+    : tank
     ? [
         [-L - 0.2, aH, bH, 0],
         [-L, aH, bH, 0],
@@ -832,8 +877,13 @@ function armholeLoop(torso, side) {
 // axila. Es un campo continuo en el espacio, así las costuras no se abren.
 function torsoFolds(M, x, y, z, th, armpits) {
   const f = M.fit;
-  const drapeA = (0.003 + 0.005 * f) * smoothstep(M.pitY - 0.04, M.pitY - 0.34, y);
+  let drapeA = (0.003 + 0.005 * f) * smoothstep(M.pitY - 0.04, M.pitY - 0.34, y);
+  // Remerón: de la cadera para abajo la caída son pliegues que bajan derechos
+  // y se abren hacia el ruedo (en vez de las ondas en diagonal).
+  const F = M.flare;
+  if (F) drapeA *= smoothstep(F.y0 - 0.12, F.y0 + 0.02, y);
   let d = drapeA * (0.6 * Math.sin(7 * th + 1.3 + 9 * y) + 0.4 * Math.sin(11 * th + 0.4 - 6 * y));
+  if (F) d += F.h * smoothstep(F.y0 + 0.04, -M.L, y) ** 1.3 * (0.75 * Math.sin(F.n * th + 0.6) + 0.25 * Math.sin((F.n + 4) * th + 2.1));
   for (const pa of armpits) {
     const dy = pa.y - y;
     const dh = (th - pa.th) * 0.17;

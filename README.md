@@ -84,6 +84,14 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     las dos queda una columna de unos 9 cm de ancho, con un tramo casi
     vertical de 5 cm, y abajo la sisa se abre hasta el costado); vivos finos
     de un mismo color en el escote y las sisas. No lleva tapacostura.
+  - **Remerón** de danza (de mujer): la camiseta con mangas y cuello
+    redondo sobre un cuerpo con busto, cintura y cadera, con hombros 3,7 cm
+    más angostos; largo de 75 a 100 cm (de entrada 85, hasta arriba de la
+    rodilla) y, de la cadera para abajo, se abre parejo hasta el ruedo
+    (evasé: 99 cm de cadera, 127 de ruedo con 85 de largo), con pliegues que
+    bajan derechos y se abren hacia el ruedo. Por ahora sólo con cuerpo (la
+    caída colgada se fija aparte) y sin short. Las medidas salen de fotos:
+    se ajustan con el molde.
   Sin mangas se ocultan el largo, la apertura, el puño y el color de las
   mangas, y sus piezas en la personalización.
 - **Short** (`src/camiseta/shorts.js`): con cuerpo, un short de fútbol debajo

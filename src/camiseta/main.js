@@ -399,6 +399,10 @@ const FABRIC = { weave: 'mesh', finish: 'matte', weight: 0.5 };
 const BASE_PARAMS = { ...DEFAULTS, ...CONFIG.params };
 // El tank top arranca con su escote típico (ver NECK.tank).
 if (BASE_PARAMS.garment === 'tank' && CONFIG.params?.neckDepth === undefined) BASE_PARAMS.neckDepth = 0.13;
+// Largo según la prenda: mínimo, máximo y valor al elegirla. El remerón llega
+// hasta arriba de la rodilla.
+const LENGTH = { shirt: [0.62, 0.82, DEFAULTS.length], tunic: [0.75, 1, 0.85] };
+if (BASE_PARAMS.garment === 'tunic' && CONFIG.params?.length === undefined) BASE_PARAMS.length = LENGTH.tunic[2];
 const BASE_COLORS = { ...COLORS, ...CONFIG.colors };
 const BASE_FABRIC = { ...FABRIC, ...CONFIG.fabric };
 const BASE_LIGHT = CONFIG.light in LIGHTS ? CONFIG.light : 'studio';
@@ -800,7 +804,7 @@ function fitPair() {
 // cuelga debajo de la camiseta de su propia barra con dos broches, de un
 // alambre que sube por dentro de la camiseta; no se simula (queda plano y
 // liso).
-const withShort = () => params.short !== false && view.mode !== 'hanger';
+const withShort = () => params.short !== false && view.mode !== 'hanger' && !bodyOnly();
 // Dónde cuelga el short (borde de arriba y plano del medio): bajo el ruedo de
 // la camiseta colgada (que baja 5 cm, el tank top 8,5).
 const shortHang = (M) => ({ top: -M.L - (M.deepNeck ? 0.085 : 0.05) - SHORT_DROP, z: -0.008 });
@@ -956,6 +960,10 @@ function syncControls() {
   sliders.neckDepth.min = lo;
   sliders.neckDepth.max = hi;
   params.neckDepth = params.garment === 'tank' ? Math.min(hi, Math.max(lo, params.neckDepth)) : snapDepth(params.neckDepth);
+  const [lLo, lHi] = lengthRange();
+  sliders.length.min = lLo;
+  sliders.length.max = lHi;
+  params.length = Math.min(lHi, Math.max(lLo, params.length));
   for (const [k, input] of Object.entries(sliders)) {
     input.value = params[k];
     document.getElementById(`${k}-out`).textContent = OUT[k](params[k]);
@@ -981,7 +989,9 @@ function syncControls() {
   document.getElementById('neckDepth-control').hidden = !tank;
   depthButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.depth === params.neckDepth)));
   shortButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.short === (params.short === false ? 'off' : 'on'))));
-  document.getElementById('short-control').hidden = view.mode === 'hanger';
+  document.getElementById('short-control').hidden = view.mode === 'hanger' || bodyOnly();
+  // El remerón todavía no tiene su caída aprobada: sólo con cuerpo.
+  modeButtons.forEach((b) => (b.hidden = bodyOnly() && b.dataset.mode !== 'body'));
   for (const sw of document.querySelectorAll('.sw-short')) sw.hidden = !withShort();
   document.getElementById('c-sleeves').closest('.swatch').hidden = bare;
   document.getElementById('sw-cuffs').hidden = tank || (!bare && params.cuff === 'none');
@@ -1048,13 +1058,18 @@ depthButtons.forEach((b) =>
   }),
 );
 // Prenda: camiseta, musculosa (el molde de la camiseta sin mangas, con un
-// puño en cada sisa), musculosa de básquet (sisa grande) o tank top (de
-// mujer, espalda nadadora). Al entrar o salir del tank top el escote vuelve
-// al típico (el del tank top es redondo y mucho más hondo).
-const GARMENT_NAMES = { muscle: 'Musculosa', basket: 'Musculosa de básquet', tank: 'Tank top' };
+// puño en cada sisa), musculosa de básquet (sisa grande), tank top (de
+// mujer, espalda nadadora) o remerón de danza (de mujer, largo hasta arriba
+// de la rodilla). Al entrar o salir del tank top el escote vuelve al típico
+// (el del tank top es redondo y mucho más hondo); al entrar o salir del
+// remerón, el largo. El remerón va sólo con cuerpo (todavía no tiene su
+// caída colgada aprobada) y sin short.
+const GARMENT_NAMES = { muscle: 'Musculosa', basket: 'Musculosa de básquet', tank: 'Tank top', tunic: 'Remerón' };
 const garmentOf = () => (params.garment in GARMENT_NAMES ? params.garment : 'tee');
-const sleeveless = () => garmentOf() !== 'tee';
+const sleeveless = () => !['tee', 'tunic'].includes(garmentOf());
+const bodyOnly = () => garmentOf() === 'tunic';
 const neckRange = () => (params.garment === 'tank' ? NECK.tank : NECK[params.neckStyle] || NECK.round);
+const lengthRange = () => (bodyOnly() ? LENGTH.tunic : LENGTH.shirt);
 const garmentButtons = [...document.querySelectorAll('[data-garment]')];
 garmentButtons.forEach((b) =>
   b.addEventListener('click', () => {
@@ -1064,6 +1079,17 @@ garmentButtons.forEach((b) =>
     if (was === 'tank' || params.garment === 'tank') {
       params.neckStyle = 'round';
       params.neckDepth = neckRange()[2];
+    }
+    const tunic = was === 'tunic' || params.garment === 'tunic';
+    if (tunic) params.length = lengthRange()[2];
+    if (bodyOnly() && view.mode !== 'body') {
+      setMode('body');
+      requestAnimationFrame(() => renderApps());
+      return;
+    }
+    if (tunic) {
+      const { target, position } = homePose();
+      flyTo(target, position);
     }
     syncControls();
     scheduleRebuild();
@@ -2240,6 +2266,7 @@ document.getElementById('reset').addEventListener('click', () => {
   Object.assign(colors, BASE_COLORS);
   Object.assign(fabric, BASE_FABRIC);
   setLight(BASE_LIGHT);
+  if (bodyOnly() && view.mode !== 'body') setMode('body');
   syncControls();
   applyFabric();
   rebuild();
@@ -2276,10 +2303,16 @@ const shortest = (d) => Math.atan2(Math.sin(d), Math.cos(d));
 function homePose() {
   const short = withShort();
   const body = view.mode === 'body';
+  // El remerón, largo: la vista se centra en su mitad y se aleja con el largo.
+  if (bodyOnly()) {
+    const target = new THREE.Vector3(0, -params.length / 2 - 0.02, 0);
+    return { target, position: target.clone().addScaledVector(CAM_OFF, TUNIC_CAM * (params.length + 0.06)) };
+  }
   const y = body ? (short ? SHORT_CENTER_Y : CENTER.y) : short ? SHORT_HANG_Y : HANG_Y;
   const target = new THREE.Vector3(0, y, 0);
   return { target, position: target.clone().addScaledVector(CAM_OFF, short ? (body ? SHORT_CAM : SHORT_HANG_CAM) : 1) };
 }
+const TUNIC_CAM = 1.06; // alejamiento por metro de largo del remerón
 function snapHome() {
   fly = null;
   const { target, position } = homePose();
@@ -2658,7 +2691,7 @@ syncControls();
 applyLights(view.light);
 applyFabric();
 document.getElementById('uvmap').checked = view.uvmap;
-if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
+if ((CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') && !bodyOnly()) setMode(CONFIG.mode);
 else {
   snapHome();
   rebuild();

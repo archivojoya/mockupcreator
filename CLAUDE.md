@@ -42,10 +42,13 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
 - **Orden:** 1) remerón de danza (Worship), 2) lo de Walter (básquet cuello V,
   musculosa, remera femenina).
 - **Remerón (25 de octubre):** prenda `tunic`, sólo con cuerpo hasta que se
-  fije su caída colgada. Medidas del molde FXL de Worship Wear
-  (`moldes/worship/`): casi recto (Demian: «debería acampanarse menos»),
-  largo 97, manga de 24 sin puño, abertura de 20 cm en cada costado. Los
-  diseños de Worship se hacen sobre ese molde: la prenda tiene su tamaño.
+  fije su caída colgada. Sale de las fotos de Worship Wear: con cintura,
+  hasta arriba de la rodilla (85 cm) y evasé de 99 a 120 cm (con 127
+  «debería acampanarse menos»), abertura de 20 cm en cada costado. Se probó
+  con las medidas del molde FXL (`moldes/worship/`, casi recto, 97 de largo,
+  manga de 24 sin puño) y a Demian le gustaba menos: la forma sale de las
+  fotos. Que un diseño hecho sobre el molde caiga justo se resuelve en el
+  estampado, sin cambiar la forma.
 - **La vara:** una prenda en 3D tiene que salir más rápido que el mockup a
   mano. Si no, no está lista.
 - **Descartado:** coser los moldes SVG en Blender (artifact «Molde a 3D

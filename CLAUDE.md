@@ -64,6 +64,26 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   propia remera, con el diseño del pedido estampado encima, grabado como
   video. No es la camiseta de producción puesta en otro cuerpo: con las
   proporciones de un dibujo no calzaría.
+- **Con cuerpo y en movimiento** (propuesta del 26 de octubre, sin
+  arrancar): el conjunto con el cuerpo invisible en una pose de jugador, en
+  movimiento pero frenado (`referencias/conjunto-en-movimiento.webp`: zancada,
+  una pierna adelante con la boca del short hacia la cámara, la otra atrás,
+  el torso apenas girado). Nada de maniquí: «le saca la magia». Propuesta:
+  un esqueleto invisible que dobla la prenda ya armada (una pose es una lista
+  de ángulos y sirve para todas las prendas) y el movimiento de la tela
+  agregado a mano (ruedo, mangas, short), no simulado. Demian piensa quedarse
+  con una sola presentación colgada para las prendas nuevas (percha o
+  broches; propuesta: broches, que muestra el conjunto).
+- **Short con elástico** (`referencias/short-elastico.png`, Demian: «una
+  forma muy acertada»). Se muestra al lado de la camiseta, no debajo: se ve
+  entero, con la cintura. Contra el nuestro (`shorts.js`), las proporciones
+  se parecen (entrepierna al 60 % del largo, el nuestro 62 %; ruedo 8 % más
+  ancho que la cadera, el nuestro 10 %; unos 4 cm entre las piernas en el
+  ruedo, como el nuestro). Lo distinto: la cintura elástica fruncida (dos o
+  tres canales) con pliegues suaves que bajan derechos de ella; un poco más
+  largo (de la cintura al ruedo, 1,4 veces el ancho de la cintura visto de
+  frente; el nuestro, 40 cm, 1,2 veces); el ruedo apenas caído hacia
+  afuera.
 
 ## Nombres compartidos con escalado
 

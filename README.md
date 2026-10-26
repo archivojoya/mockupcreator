@@ -57,8 +57,20 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   prendas, recortadas sobre transparente y sin textos, para armar un flyer
   (`muestra-<cliente>-sin-fondo.png`).
 
-- **Presentación**: con cuerpo (forma fija, como puesta), en percha o con
-  broches. La percha es de madera, plana y paralela a la camiseta, con el arco
+- **Presentación**: con cuerpo (forma fija, como puesta), en movimiento, en
+  percha o con broches. **En movimiento** es la de con cuerpo doblada por un
+  esqueleto invisible, como un jugador en plena zancada pero frenado
+  (`src/camiseta/pose.js`, referencia en `referencias/`): la cadera gira
+  13° llevando el costado derecho hacia adelante y los hombros 14° al revés,
+  el pecho se inclina 8° hacia adelante, el brazo izquierdo va 24° adelante y
+  el derecho 32° atrás, y el ruedo llega tarde al giro: se abre hasta 5,5 cm
+  hacia atrás del lado derecho, con unas ondas, y sube un poco. No se
+  simula: cada punto se lleva con una función de su lugar en la camiseta
+  puesta (la misma para todas las piezas, así las costuras siguen
+  cerradas), y el estampado sale del molde de la camiseta con cuerpo (un
+  diseño cae igual). Adentro de la tela la luz directa baja (la boca de una
+  manga puede mirar a la cámara) y las mangas no hacen sombra (tiraban una
+  mancha gris sobre el pecho). Por ahora sin short. La percha es de madera, plana y paralela a la camiseta, con el arco
   de una percha de verdad y bordes definidos; apoya bajo la costura de los
   hombros. Los dos broches cuelgan de una barra y pellizcan la costura de cada
   hombro, como un broche de pinza: la costura arriba, el frente contra la
@@ -499,8 +511,8 @@ El molde de ejemplo de fútbol se genera sobre el molde canónico con
   costura y mapa de relieve del tejido.
 - `src/main.js` — escena, iluminación de estudio suave y panel de control.
 - `camiseta.html` y `src/camiseta/` — la camiseta deportiva paramétrica:
-  `shirt.js` (geometría), `drape.js` (versión colgada: percha, broches y
-  simulación de la tela), `fabric.js` (texturas de la tela), `main.js` (escena y controles) y
+  `shirt.js` (geometría), `pose.js` (en movimiento), `drape.js` (versión
+  colgada: percha, broches y simulación de la tela), `fabric.js` (texturas de la tela), `main.js` (escena y controles) y
   `style.css`.
 
 ## Rendimiento

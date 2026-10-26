@@ -39,8 +39,20 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   guardar. Cambiar de cuello es elegir otra prenda ya aprobada.
 - **La tela que se mueve con el mouse** queda para el perchero del catálogo
   (todas camisetas cuello redondo, sin ajustes de forma).
-- **Orden:** 1) remerón de danza (Worship), 2) lo de Walter (básquet cuello V,
-  musculosa, remera femenina).
+- **Orden:** 1) remerón de danza (Worship), 2) la camiseta en movimiento,
+  3) lo de Walter (básquet cuello V, musculosa, remera femenina), colgado
+  con broches.
+- **En movimiento** (26 de octubre, Demian: «dale, arrancá con la pose»):
+  el conjunto con el cuerpo invisible en una pose de jugador, en movimiento
+  pero frenado (`referencias/conjunto-en-movimiento.webp`: zancada, una
+  pierna adelante con la boca del short hacia la cámara, la otra atrás, el
+  torso apenas girado). Nada de maniquí: «le saca la magia». Hecho en
+  `pose.js`: un esqueleto invisible dobla la camiseta con cuerpo ya armada
+  (una pose es una lista de ángulos y sirve para todas las prendas) y el
+  movimiento de la tela se agrega a mano (el ruedo), no se simula. Por ahora
+  sin short: se suma cuando se mejore el short. Para las prendas nuevas,
+  colgada sólo con broches (muestra el conjunto); la percha queda para la
+  camiseta y el tank top, que ya la tienen, y para el perchero del catálogo.
 - **Remerón (25 de octubre):** prenda `tunic`, sólo con cuerpo hasta que se
   fije su caída colgada. Sale de las fotos de Worship Wear: con cintura,
   hasta arriba de la rodilla (85 cm) y casi recto de la cadera al ruedo (99
@@ -64,16 +76,6 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   propia remera, con el diseño del pedido estampado encima, grabado como
   video. No es la camiseta de producción puesta en otro cuerpo: con las
   proporciones de un dibujo no calzaría.
-- **Con cuerpo y en movimiento** (propuesta del 26 de octubre, sin
-  arrancar): el conjunto con el cuerpo invisible en una pose de jugador, en
-  movimiento pero frenado (`referencias/conjunto-en-movimiento.webp`: zancada,
-  una pierna adelante con la boca del short hacia la cámara, la otra atrás,
-  el torso apenas girado). Nada de maniquí: «le saca la magia». Propuesta:
-  un esqueleto invisible que dobla la prenda ya armada (una pose es una lista
-  de ángulos y sirve para todas las prendas) y el movimiento de la tela
-  agregado a mano (ruedo, mangas, short), no simulado. Demian piensa quedarse
-  con una sola presentación colgada para las prendas nuevas (percha o
-  broches; propuesta: broches, que muestra el conjunto).
 - **Short con elástico** (`referencias/short-elastico.png`, Demian: «una
   forma muy acertada»). Se muestra al lado de la camiseta, no debajo: se ve
   entero, con la cintura. Contra el nuestro (`shorts.js`), las proporciones

@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS, flattenPrint } from './shirt.js';
 import { buildShorts } from './shorts.js';
+import { poseShirt, POSES } from './pose.js';
 import { makeHanger, makeClipHanger, HangingShirt, RAIL_R } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
 import { printTexture, pieceSizes, pieceCanvases, pieceOutline, coverRect, BLEED, placeTape, placeLabel, buildApplique, pieceKeys, PIECE_LABELS, PIECES, PRINT_WITH } from './print.js';
@@ -159,6 +160,9 @@ const blankTex = new THREE.DataTexture(new Uint8Array([128, 128, 0, 0]), 1, 1);
 blankTex.needsUpdate = true;
 const ribNormal = makeRibNormalMap();
 const shared = {
+  // Luz directa que llega al revés de la tela (en movimiento, la boca de una
+  // manga puede mirar a la cámara: adentro queda en sombra, como en una foto).
+  insideLight: { value: 1 },
   macroMap: { value: makeMacroMap() },
   macroTile: { value: MACRO_TILE },
   feature: { value: 0.002 },
@@ -215,7 +219,7 @@ varying vec2 vCloth;
 varying float vZone;
 uniform sampler2D detailMap, macroMap, zoneNormal, zoneDetail;
 uniform vec2 detailTile, zoneTile;
-uniform float macroTile, feature, roughAdd, irregular, zoneOn;
+uniform float macroTile, feature, roughAdd, irregular, zoneOn, insideLight;
 uniform vec3 insideColor;
 uniform sampler2D appColor, appShape;
 uniform float appOn;
@@ -335,7 +339,7 @@ void main() {
       .replace(
         '#include <lights_fragment_end>',
         `#include <lights_fragment_end>
-  if (!gl_FrontFacing) { reflectedLight.indirectDiffuse *= 0.45; reflectedLight.indirectSpecular *= 0.3; }`,
+  if (!gl_FrontFacing) { reflectedLight.indirectDiffuse *= 0.45; reflectedLight.indirectSpecular *= 0.3; reflectedLight.directDiffuse *= insideLight; reflectedLight.directSpecular *= insideLight; }`,
       );
   };
   return m;
@@ -416,7 +420,7 @@ function spinLevel(v) {
 const params = { ...BASE_PARAMS };
 const colors = { ...BASE_COLORS };
 const fabric = { ...BASE_FABRIC };
-const view = { spin: spinLevel(CONFIG.spin), uvmap: !!CONFIG.uvmap, mode: 'body', light: BASE_LIGHT, pair: 0, tab: 'ajustes' }; // body: con cuerpo · hanger: en percha · clips: con broches
+const view = { spin: spinLevel(CONFIG.spin), uvmap: !!CONFIG.uvmap, mode: 'body', light: BASE_LIGHT, pair: 0, tab: 'ajustes' }; // body: con cuerpo · pose: en movimiento · hanger: en percha · clips: con broches
 
 // Cada camiseta (con su percha o sus broches) cuelga de su soporte, que la
 // ubica y la gira sobre el eje del gancho; adentro (`inner`), las
@@ -493,14 +497,17 @@ function dominantColor(canvas, rect = [0, 0, canvas.width, canvas.height]) {
 // control queda quieto, se recalcula partiendo de él.
 let lastFlat = null;
 let flatTimer = 0;
+// En movimiento, el molde sale de la camiseta puesta (built.rest): un diseño
+// cae igual que con cuerpo.
+const flatBase = () => built.rest || built;
 function ensureFlat() {
   clearTimeout(flatTimer);
-  flattenPrint(built, lastFlat);
-  lastFlat = built;
+  flattenPrint(flatBase(), lastFlat);
+  lastFlat = flatBase();
 }
 // Sin cancelar el recálculo pendiente si ya está aplanado.
 function flatNow() {
-  if (!built.flatPrint) ensureFlat();
+  if (!flatBase().flatPrint) ensureFlat();
 }
 function followFlat() {
   if (!hasDress() && !sizesBox.open) return;
@@ -577,7 +584,11 @@ const rail = new THREE.Group();
 function syncCurls() {
   supports.forEach((sp, i) => (sp.curl.position.x = rigs[i].position.x));
 }
-const hanging = () => view.mode !== 'body';
+const hanging = () => view.mode === 'hanger' || view.mode === 'clips';
+// En movimiento: la camiseta con cuerpo en una pose (pose.js), sin short
+// por ahora.
+const posed = () => view.mode === 'pose';
+const POSE_INSIDE = 0.25;
 
 let built = null;
 let drape = null;
@@ -804,13 +815,18 @@ function fitPair() {
 // cuelga debajo de la camiseta de su propia barra con dos broches, de un
 // alambre que sube por dentro de la camiseta; no se simula (queda plano y
 // liso).
-const withShort = () => params.short !== false && view.mode !== 'hanger' && !bodyOnly();
+const withShort = () => params.short !== false && view.mode !== 'hanger' && !posed() && !bodyOnly();
 // Dónde cuelga el short (borde de arriba y plano del medio): bajo el ruedo de
 // la camiseta colgada (que baja 5 cm, el tank top 8,5).
 const shortHang = (M) => ({ top: -M.L - (M.deepNeck ? 0.085 : 0.05) - SHORT_DROP, z: -0.008 });
 const SHORT_DROP = 0.095;
 function rebuild() {
   built = buildShirt(params);
+  if (posed()) built = poseShirt(built, POSES.run);
+  shared.insideLight.value = posed() ? POSE_INSIDE : 1;
+  // En movimiento, la manga de adelante tiraba una mancha gris sobre el
+  // pecho: las mangas no hacen sombra.
+  for (const k of ['sleeveL', 'sleeveR', 'cuffL', 'cuffR', 'cuffLLip', 'cuffRLip']) meshes[k].castShadow = twins[k].castShadow = !posed();
   let shortClips = null;
   if (withShort()) {
     if (view.mode === 'body') Object.assign(built.geos, buildShorts(built.measures));
@@ -990,7 +1006,7 @@ function syncControls() {
   document.getElementById('neckDepth-control').hidden = !tank;
   depthButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.depth === params.neckDepth)));
   shortButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.short === (params.short === false ? 'off' : 'on'))));
-  document.getElementById('short-control').hidden = view.mode === 'hanger' || bodyOnly();
+  document.getElementById('short-control').hidden = view.mode === 'hanger' || posed() || bodyOnly();
   document.getElementById('slit-control').hidden = !bodyOnly();
   // El remerón todavía no tiene su caída aprobada: sólo con cuerpo.
   modeButtons.forEach((b) => (b.hidden = bodyOnly() && b.dataset.mode !== 'body'));
@@ -1187,8 +1203,8 @@ document.getElementById('uvmap').addEventListener('change', (e) => {
   view.uvmap = e.target.checked;
   applyLook();
 });
-// Presentación: con cuerpo (forma fija) o colgada, en percha o con broches
-// (tela simulada).
+// Presentación: con cuerpo (forma fija), en movimiento (con cuerpo, en una
+// pose) o colgada, en percha o con broches (tela simulada).
 const modeButtons = [...document.querySelectorAll('.mode button')];
 function setMode(mode) {
   // La colgada queda más baja (la barra y el gancho arriba, la tela
@@ -2256,7 +2272,7 @@ function updateHint() {
   document.querySelector('.hint').textContent =
     view.tab === 'perso'
       ? 'Arrastrá una imagen de la biblioteca a una pieza · arrastrá un escudo para moverlo'
-      : view.mode === 'body'
+      : !hanging()
         ? 'Arrastrá sobre una camiseta para girarla · rueda o pellizco para acercar'
         : matchMedia('(hover: none)').matches
           ? 'Tocá la tela para moverla · arrastrá para girar cada camiseta'
@@ -2304,7 +2320,7 @@ const shortest = (d) => Math.atan2(Math.sin(d), Math.cos(d));
 // y se aleja (entra el conjunto entero).
 function homePose() {
   const short = withShort();
-  const body = view.mode === 'body';
+  const body = !hanging();
   // El remerón, largo: la vista se centra en su mitad y se aleja con el largo.
   if (bodyOnly()) {
     const target = new THREE.Vector3(0, -params.length / 2 - 0.02, 0);
@@ -2699,7 +2715,7 @@ syncControls();
 applyLights(view.light);
 applyFabric();
 document.getElementById('uvmap').checked = view.uvmap;
-if ((CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') && !bodyOnly()) setMode(CONFIG.mode);
+if (['pose', 'hanger', 'clips'].includes(CONFIG.mode) && !bodyOnly()) setMode(CONFIG.mode);
 else {
   snapHome();
   rebuild();
@@ -2714,4 +2730,4 @@ try {
 showTab(tabs.some((t) => t.dataset.tab === savedTab) ? savedTab : 'ajustes');
 initLibrary();
 
-window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, zoomTo, setMode, design, drape: () => drape, lib, dress, addImages, assign, renderDress, showTab, pieceAt, sizesNow, appXY, makeSheet };
+window.__camiseta = { poses: POSES, params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, zoomTo, setMode, design, drape: () => drape, lib, dress, addImages, assign, renderDress, showTab, pieceAt, sizesNow, appXY, makeSheet };

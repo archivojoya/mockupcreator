@@ -50,11 +50,14 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   `pose.js`: un esqueleto invisible dobla la camiseta con cuerpo ya armada
   (una pose es una lista de ángulos y sirve para todas las prendas) y el
   movimiento de la tela se agrega a mano (el ruedo), no se simula. Por ahora
-  sin short: se suma cuando se mejore el short. Para las prendas nuevas,
+  sin short: se suma cuando se mejore el short. Demian: «me encantó, está
+  perfecto». Para el remerón, además del mismo movimiento («es como
+  movimiento genérico»), un giro de danza (`spin`): la falda abierta toda
+  alrededor, con ondas, y las aberturas separadas. Para las prendas nuevas,
   colgada sólo con broches (muestra el conjunto); la percha queda para la
   camiseta y el tank top, que ya la tienen, y para el perchero del catálogo.
-- **Remerón (25 de octubre):** prenda `tunic`, sólo con cuerpo hasta que se
-  fije su caída colgada. Sale de las fotos de Worship Wear: con cintura,
+- **Remerón (25 de octubre):** prenda `tunic`, con cuerpo o en movimiento
+  hasta que se fije su caída colgada. Sale de las fotos de Worship Wear: con cintura,
   hasta arriba de la rodilla (85 cm) y casi recto de la cadera al ruedo (99
   y 100 cm de contorno: Demian lo pidió así después de verlo con 127 y con
   120), abertura de 20 cm en cada costado. Se probó

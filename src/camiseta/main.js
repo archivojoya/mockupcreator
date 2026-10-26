@@ -420,7 +420,7 @@ function spinLevel(v) {
 const params = { ...BASE_PARAMS };
 const colors = { ...BASE_COLORS };
 const fabric = { ...BASE_FABRIC };
-const view = { spin: spinLevel(CONFIG.spin), uvmap: !!CONFIG.uvmap, mode: 'body', light: BASE_LIGHT, pair: 0, tab: 'ajustes' }; // body: con cuerpo · pose: en movimiento · hanger: en percha · clips: con broches
+const view = { spin: spinLevel(CONFIG.spin), uvmap: !!CONFIG.uvmap, mode: 'body', pose: CONFIG.pose in POSES ? CONFIG.pose : 'run', light: BASE_LIGHT, pair: 0, tab: 'ajustes' }; // body: con cuerpo · pose: en movimiento (con la pose `pose`: zancada o giro) · hanger: en percha · clips: con broches
 
 // Cada camiseta (con su percha o sus broches) cuelga de su soporte, que la
 // ubica y la gira sobre el eje del gancho; adentro (`inner`), las
@@ -815,14 +815,14 @@ function fitPair() {
 // cuelga debajo de la camiseta de su propia barra con dos broches, de un
 // alambre que sube por dentro de la camiseta; no se simula (queda plano y
 // liso).
-const withShort = () => params.short !== false && view.mode !== 'hanger' && !posed() && !bodyOnly();
+const withShort = () => params.short !== false && view.mode !== 'hanger' && !posed() && !isTunic();
 // Dónde cuelga el short (borde de arriba y plano del medio): bajo el ruedo de
 // la camiseta colgada (que baja 5 cm, el tank top 8,5).
 const shortHang = (M) => ({ top: -M.L - (M.deepNeck ? 0.085 : 0.05) - SHORT_DROP, z: -0.008 });
 const SHORT_DROP = 0.095;
 function rebuild() {
   built = buildShirt(params);
-  if (posed()) built = poseShirt(built, POSES.run);
+  if (posed()) built = poseShirt(built, POSES[view.pose]);
   shared.insideLight.value = posed() ? POSE_INSIDE : 1;
   // En movimiento, la manga de adelante tiraba una mancha gris sobre el
   // pecho: las mangas no hacen sombra.
@@ -1006,10 +1006,13 @@ function syncControls() {
   document.getElementById('neckDepth-control').hidden = !tank;
   depthButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.depth === params.neckDepth)));
   shortButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.short === (params.short === false ? 'off' : 'on'))));
-  document.getElementById('short-control').hidden = view.mode === 'hanger' || posed() || bodyOnly();
-  document.getElementById('slit-control').hidden = !bodyOnly();
-  // El remerón todavía no tiene su caída aprobada: sólo con cuerpo.
-  modeButtons.forEach((b) => (b.hidden = bodyOnly() && b.dataset.mode !== 'body'));
+  document.getElementById('short-control').hidden = view.mode === 'hanger' || posed() || isTunic();
+  document.getElementById('slit-control').hidden = !isTunic();
+  // El remerón todavía no tiene su caída aprobada: con cuerpo o en
+  // movimiento, no colgado.
+  modeButtons.forEach((b) => (b.hidden = isTunic() && !['body', 'pose'].includes(b.dataset.mode)));
+  document.getElementById('pose-control').hidden = !posed();
+  poseButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pose === view.pose)));
   for (const sw of document.querySelectorAll('.sw-short')) sw.hidden = !withShort();
   document.getElementById('c-sleeves').closest('.swatch').hidden = bare;
   document.getElementById('sw-cuffs').hidden = tank || (!bare && params.cuff === 'none');
@@ -1085,9 +1088,9 @@ depthButtons.forEach((b) =>
 const GARMENT_NAMES = { muscle: 'Musculosa', basket: 'Musculosa de básquet', tank: 'Tank top', tunic: 'Remerón' };
 const garmentOf = () => (params.garment in GARMENT_NAMES ? params.garment : 'tee');
 const sleeveless = () => !['tee', 'tunic'].includes(garmentOf());
-const bodyOnly = () => garmentOf() === 'tunic';
+const isTunic = () => garmentOf() === 'tunic';
 const neckRange = () => (params.garment === 'tank' ? NECK.tank : NECK[params.neckStyle] || NECK.round);
-const lengthRange = () => (bodyOnly() ? LENGTH.tunic : LENGTH.shirt);
+const lengthRange = () => (isTunic() ? LENGTH.tunic : LENGTH.shirt);
 const garmentButtons = [...document.querySelectorAll('[data-garment]')];
 garmentButtons.forEach((b) =>
   b.addEventListener('click', () => {
@@ -1100,7 +1103,7 @@ garmentButtons.forEach((b) =>
     }
     const tunic = was === 'tunic' || params.garment === 'tunic';
     if (tunic) params.length = lengthRange()[2];
-    if (bodyOnly() && view.mode !== 'body') {
+    if (isTunic() && hanging()) {
       setMode('body');
       requestAnimationFrame(() => renderApps());
       return;
@@ -1220,6 +1223,16 @@ function setMode(mode) {
   if (hasDress()) renderDress();
 }
 modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+// En movimiento: zancada o giro.
+const poseButtons = [...document.querySelectorAll('[data-pose]')];
+poseButtons.forEach((b) =>
+  b.addEventListener('click', () => {
+    if (view.pose === b.dataset.pose) return;
+    view.pose = b.dataset.pose;
+    syncControls();
+    rebuild();
+  }),
+);
 
 // El mouse empuja la tela al pasar y levanta una brisa suave. Se toca
 // cualquiera de las dos camisetas: el punto y las direcciones pasan a las
@@ -2284,7 +2297,7 @@ document.getElementById('reset').addEventListener('click', () => {
   Object.assign(colors, BASE_COLORS);
   Object.assign(fabric, BASE_FABRIC);
   setLight(BASE_LIGHT);
-  if (bodyOnly() && view.mode !== 'body') setMode('body');
+  if (isTunic() && hanging()) setMode('body');
   syncControls();
   applyFabric();
   rebuild();
@@ -2322,7 +2335,7 @@ function homePose() {
   const short = withShort();
   const body = !hanging();
   // El remerón, largo: la vista se centra en su mitad y se aleja con el largo.
-  if (bodyOnly()) {
+  if (isTunic()) {
     const target = new THREE.Vector3(0, -params.length / 2 - 0.02, 0);
     return { target, position: target.clone().addScaledVector(CAM_OFF, TUNIC_CAM * (params.length + 0.06)) };
   }
@@ -2715,7 +2728,7 @@ syncControls();
 applyLights(view.light);
 applyFabric();
 document.getElementById('uvmap').checked = view.uvmap;
-if (['pose', 'hanger', 'clips'].includes(CONFIG.mode) && !bodyOnly()) setMode(CONFIG.mode);
+if (CONFIG.mode === 'pose' || (['hanger', 'clips'].includes(CONFIG.mode) && !isTunic())) setMode(CONFIG.mode);
 else {
   snapHome();
   rebuild();

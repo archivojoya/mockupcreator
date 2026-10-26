@@ -70,7 +70,13 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   cerradas), y el estampado sale del molde de la camiseta con cuerpo (un
   diseño cae igual). Adentro de la tela la luz directa baja (la boca de una
   manga puede mirar a la cámara) y las mangas no hacen sombra (tiraban una
-  mancha gris sobre el pecho). Por ahora sin short. La percha es de madera, plana y paralela a la camiseta, con el arco
+  mancha gris sobre el pecho). Por ahora sin short. Con **Giro** (abajo de
+  la presentación), una pose de danza para el remerón: el torso derecho y
+  apenas hacia atrás, los brazos abiertos, y la falda que se abre toda
+  alrededor (5 cm parejo y 3,5 más atrás a la izquierda), con siete ondas, y
+  gira 16° menos que la cadera: los pliegues y las aberturas quedan en
+  espiral y las aberturas se separan. El remerón va con cuerpo o en
+  movimiento (colgado todavía no). La percha es de madera, plana y paralela a la camiseta, con el arco
   de una percha de verdad y bordes definidos; apoya bajo la costura de los
   hombros. Los dos broches cuelgan de una barra y pellizcan la costura de cada
   hombro, como un broche de pinza: la costura arriba, el frente contra la

@@ -39,6 +39,33 @@ export const POSES = {
       rise: 0.3, // desde cuánto más arriba del ruedo empieza a abrirse (m)
     },
   },
+  // Giro de danza (el remerón): el torso derecho y apenas hacia atrás, los
+  // brazos abiertos, y la falda que se abre toda alrededor, con ondas, y llega
+  // tarde al giro (los pliegues y las aberturas de los costados quedan en
+  // espiral).
+  spin: {
+    hips: 4,
+    shoulders: -6,
+    lean: -2,
+    side: -3,
+    tilt: 2,
+    arms: {
+      L: { swing: -10, close: -26 },
+      R: { swing: 8, close: -20 },
+    },
+    hem: {
+      flare: 0.035,
+      at: 150,
+      spread: 90,
+      base: 0.05,
+      waves: 7,
+      wave: 0.35,
+      around: true, // las ondas, todo alrededor (no sólo donde más se abre)
+      lift: 0.5,
+      lag: 16,
+      rise: 0.32,
+    },
+  },
 };
 
 const HIPS_Y = -0.55; // de aquí para abajo, todo gira con la cadera
@@ -103,7 +130,7 @@ export function poseShirt(rest, pose) {
       const g = s * s;
       const th = Math.atan2(x, z);
       const bell = Math.exp(-((wrap(th - rad(H.at)) / rad(H.spread)) ** 2));
-      const open = (H.base + H.flare * bell) * (1 + H.wave * bell * Math.sin(H.waves * th + 1.3)) * g;
+      const open = (H.base + H.flare * bell) * (1 + H.wave * (H.around ? 1 : bell) * Math.sin(H.waves * th + 1.3)) * g;
       P.x += Math.sin(th) * open;
       P.z += Math.cos(th) * open;
       P.y += H.lift * open * s;

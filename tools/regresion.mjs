@@ -16,7 +16,8 @@ import { buildShorts } from '../src/camiseta/shorts.js';
 import { HangingShirt, makeHanger } from '../src/camiseta/drape.js';
 
 const FILE = new URL('./regresion-v1.json', import.meta.url);
-const GARMENTS = ['tee', 'muscle', 'basket', 'tank'];
+// (La musculosa y la de básquet se sacaron el 27 de octubre: se rehacen.)
+const GARMENTS = ['tee', 'tank'];
 // Variantes de forma (sobre los valores de entrada de cada prenda).
 const SHAPES = {
   base: {},

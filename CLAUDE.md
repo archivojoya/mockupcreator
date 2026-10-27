@@ -39,9 +39,19 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   guardar. Cambiar de cuello es elegir otra prenda ya aprobada.
 - **La tela que se mueve con el mouse** queda para el perchero del catálogo
   (todas camisetas cuello redondo, sin ajustes de forma).
-- **Orden:** 1) remerón de danza (Worship), 2) la camiseta en movimiento,
-  3) lo de Walter (básquet cuello V, musculosa, remera femenina), colgado
-  con broches.
+- **Orden** (al 27 de octubre; hechos el remerón y la camiseta en
+  movimiento): 1) remera femenina, 2) short nuevo (el de elástico) en la
+  zancada, 3) caída fija con broches para las prendas nuevas, 4) rehacer la
+  musculosa y la de básquet partiendo de la camiseta (la de básquet con su
+  molde, que Demian tiene: más ancha, sisa más grande), 5) refinar el tank
+  top («tiene algunos detalles raros»: se descongela para eso, con su
+  aprobación, y se guardan sus huellas nuevas).
+- **Musculosa y básquet, sacadas** (27 de octubre): «las veo diferentes a la
+  camiseta». Se borraron de la página y de la prueba; el código de la sisa
+  sin manga con puño queda para cuando se rehagan.
+- **Remera femenina** (`ftee`, 27 de octubre): el cuerpo de mujer del
+  remerón con el largo de la camiseta, de la cintura a la cadera abierta a lo
+  ancho (de fondo apenas: hacía panza de perfil) y recta hasta el ruedo.
 - **En movimiento** (26 de octubre, Demian: «dale, arrancá con la pose»):
   el conjunto con el cuerpo invisible en una pose de jugador, en movimiento
   pero frenado (`referencias/conjunto-en-movimiento.webp`: zancada, una

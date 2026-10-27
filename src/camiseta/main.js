@@ -1008,9 +1008,7 @@ function syncControls() {
   shortButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.short === (params.short === false ? 'off' : 'on'))));
   document.getElementById('short-control').hidden = view.mode === 'hanger' || posed() || isTunic();
   document.getElementById('slit-control').hidden = !isTunic();
-  // El remerón todavía no tiene su caída aprobada: con cuerpo o en
-  // movimiento, no colgado.
-  modeButtons.forEach((b) => (b.hidden = isTunic() && !['body', 'pose'].includes(b.dataset.mode)));
+  modeButtons.forEach((b) => (b.hidden = unhung() && !['body', 'pose'].includes(b.dataset.mode)));
   document.getElementById('pose-control').hidden = !posed();
   poseButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pose === view.pose)));
   for (const sw of document.querySelectorAll('.sw-short')) sw.hidden = !withShort();
@@ -1078,17 +1076,18 @@ depthButtons.forEach((b) =>
     scheduleRebuild();
   }),
 );
-// Prenda: camiseta, musculosa (el molde de la camiseta sin mangas, con un
-// puño en cada sisa), musculosa de básquet (sisa grande), tank top (de
-// mujer, espalda nadadora) o remerón de danza (de mujer, largo hasta arriba
+// Prenda: camiseta, remera femenina (el cuerpo del remerón, corto), tank top
+// (de mujer, espalda nadadora) o remerón de danza (de mujer, largo hasta arriba
 // de la rodilla). Al entrar o salir del tank top el escote vuelve al típico
 // (el del tank top es redondo y mucho más hondo); al entrar o salir del
-// remerón, el largo. El remerón va sólo con cuerpo (todavía no tiene su
-// caída colgada aprobada) y sin short.
-const GARMENT_NAMES = { muscle: 'Musculosa', basket: 'Musculosa de básquet', tank: 'Tank top', tunic: 'Remerón' };
+// remerón, el largo. El remerón va sin short.
+const GARMENT_NAMES = { ftee: 'Remera femenina', tank: 'Tank top', tunic: 'Remerón' };
 const garmentOf = () => (params.garment in GARMENT_NAMES ? params.garment : 'tee');
-const sleeveless = () => !['tee', 'tunic'].includes(garmentOf());
+const sleeveless = () => garmentOf() === 'tank';
 const isTunic = () => garmentOf() === 'tunic';
+// Prendas nuevas: hasta que se fije su caída colgada, con cuerpo o en
+// movimiento.
+const unhung = () => ['ftee', 'tunic'].includes(garmentOf());
 const neckRange = () => (params.garment === 'tank' ? NECK.tank : NECK[params.neckStyle] || NECK.round);
 const lengthRange = () => (isTunic() ? LENGTH.tunic : LENGTH.shirt);
 const garmentButtons = [...document.querySelectorAll('[data-garment]')];
@@ -1103,7 +1102,7 @@ garmentButtons.forEach((b) =>
     }
     const tunic = was === 'tunic' || params.garment === 'tunic';
     if (tunic) params.length = lengthRange()[2];
-    if (isTunic() && hanging()) {
+    if (unhung() && hanging()) {
       setMode('body');
       requestAnimationFrame(() => renderApps());
       return;
@@ -2297,7 +2296,7 @@ document.getElementById('reset').addEventListener('click', () => {
   Object.assign(colors, BASE_COLORS);
   Object.assign(fabric, BASE_FABRIC);
   setLight(BASE_LIGHT);
-  if (isTunic() && hanging()) setMode('body');
+  if (unhung() && hanging()) setMode('body');
   syncControls();
   applyFabric();
   rebuild();
@@ -2728,7 +2727,7 @@ syncControls();
 applyLights(view.light);
 applyFabric();
 document.getElementById('uvmap').checked = view.uvmap;
-if (CONFIG.mode === 'pose' || (['hanger', 'clips'].includes(CONFIG.mode) && !isTunic())) setMode(CONFIG.mode);
+if (CONFIG.mode === 'pose' || (['hanger', 'clips'].includes(CONFIG.mode) && !unhung())) setMode(CONFIG.mode);
 else {
   snapHome();
   rebuild();

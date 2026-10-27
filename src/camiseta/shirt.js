@@ -30,7 +30,7 @@ export const DEFAULTS = {
   neckDepth: 0.075, // profundidad del escote delantero
   neckStyle: 'round', // 'round' redondo · 'v' en V
   cuff: 'band', // 'band' con puño · 'none' sin puño (la manga sigue hasta el borde)
-  garment: 'tee', // 'tee' camiseta · 'muscle' musculosa (sin mangas) · 'basket' musculosa de básquet (sisa grande) · 'tank' tank top (de mujer, espalda nadadora) · 'tunic' remerón de danza (de mujer, largo)
+  garment: 'tee', // 'tee' camiseta · 'ftee' remera femenina · 'tank' tank top (de mujer, espalda nadadora) · 'tunic' remerón de danza (de mujer, largo)
   short: true, // con cuerpo, el short de fútbol debajo (ver shorts.js)
   slit: 0.2, // remerón: alto de la abertura de cada costado, desde el ruedo (0, sin abertura)
 };
@@ -90,13 +90,16 @@ function monotone(xs, ys) {
 }
 
 // Medidas del cuerpo de la prenda según los controles.
-// Musculosa: el mismo molde de la camiseta sin mangas, con un puño en cada
-// sisa. La de básquet tiene la sisa grande: baja 4,5 cm más, entra más en el
-// frente y la espalda, y el hombro termina antes, con la misma pendiente.
+// (La musculosa y la de básquet se sacaron el 27 de octubre: no se parecían a
+// la camiseta. Se rehacen partiendo de ella; la de básquet, de su molde. El
+// puño de la sisa sin manga, que llevaban, queda para ellas.)
 // Tank top (de mujer): cuerpo con busto, cintura y cadera; escote redondo
 // ancho y hondo adelante y alto atrás; tiras de 4,2 cm en el hombro; espalda
 // nadadora (las sisas de atrás, en C, dejan una columna en el centro); vivos
 // finos en el escote y las sisas.
+// Remera femenina: el cuerpo del remerón (abajo) con el largo de la
+// camiseta, recto de la cadera al ruedo y sin aberturas; la caída, la de la
+// camiseta.
 // Remerón de danza (de mujer): la camiseta con mangas y cuello redondo sobre
 // un cuerpo con busto, cintura y cadera, hombros más angostos, largo hasta
 // arriba de la rodilla y casi recto de la cadera al ruedo, con pliegues que
@@ -128,11 +131,11 @@ const TUNIC = {
 export function measures(p) {
   const f = p.fit;
   const L = p.length;
-  const garment = ['muscle', 'basket', 'tank', 'tunic'].includes(p.garment) ? p.garment : 'tee';
-  const sleeveless = garment !== 'tee' && garment !== 'tunic';
+  const garment = ['ftee', 'tank', 'tunic'].includes(p.garment) ? p.garment : 'tee';
+  const sleeveless = garment === 'tank';
   const tank = garment === 'tank';
-  const basket = garment === 'basket';
   const tunic = garment === 'tunic';
+  const fem = tunic || garment === 'ftee'; // cuerpo de mujer con mangas
   const M = {
     L,
     fit: f,
@@ -152,13 +155,13 @@ export function measures(p) {
     // espalda, no se mete hacia el cuello.
     deepNeck: tank,
     shY: -0.046, // altura de la punta del hombro
-    pitY: (tank ? -0.26 : basket ? -0.25 : -0.205) - 0.03 * f, // altura de la axila
+    pitY: (tank ? -0.26 : -0.205) - 0.03 * f, // altura de la axila
     n: 2.35, // exponente de los cortes (2 = elipse)
     garment,
     sleeveless,
     armBand: tank ? TANK.binding : ARM_BAND,
-    armCols: tank ? TANK.colsF : basket ? 12 : ARM_COLS, // la de básquet entra más en el frente y la espalda
-    armColsB: tank ? TANK.colsB : basket ? 12 : ARM_COLS,
+    armCols: tank ? TANK.colsF : ARM_COLS,
+    armColsB: tank ? TANK.colsB : ARM_COLS,
     racer: tank,
     strap: TANK.strap,
     racerTop: TANK.racerTop,
@@ -168,13 +171,13 @@ export function measures(p) {
     // (En el remerón, la tela es más suelta: menos relieve y cae más derecho.)
     bust: tank
       ? { x: 0.085, y: -0.245, h: 0.042 * (1 - 0.4 * f), sx: 0.045, sUp: 0.12, sDown: 0.05 + 0.07 * f }
-      : tunic
+      : fem
         ? { x: 0.085, y: -0.245, h: 0.034 * (1 - 0.4 * f), sx: 0.05, sUp: 0.12, sDown: 0.09 + 0.06 * f }
         : null,
     flare: tunic ? { y0: -Math.min(-TUNIC.hipY, L - 0.12), n: TUNIC.folds, h: TUNIC.fold * (1 + f), slit: Math.min(Math.max(0, p.slit ?? DEFAULTS.slit), L - 0.25) } : null,
   };
-  const shA = tank ? M.neck.a + TANK.strap : basket ? 0.173 + 0.026 * f : tunic ? 0.196 + 0.03 * f : 0.214 + 0.032 * f; // medio ancho de hombros
-  if (tank || basket || tunic) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
+  const shA = tank ? M.neck.a + TANK.strap : fem ? 0.196 + 0.03 * f : 0.214 + 0.032 * f; // medio ancho de hombros
+  if (tank || fem) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
   const aC = 0.176 + 0.046 * f; // medio ancho y media profundidad del pecho
   const bC = 0.112 + 0.022 * f;
   // Tank top: pecho (sin el busto), cintura y cadera.
@@ -184,22 +187,30 @@ export function measures(p) {
   const bW = 0.088 + 0.02 * f;
   const aH = 0.168 + 0.035 * f;
   const bH = 0.1 + 0.02 * f;
-  // Remerón: pecho (sin el busto), cintura, cadera y, de ahí al ruedo, se
-  // abre parejo (a lo ancho más que de fondo).
+  // Remerón y remera femenina: pecho (sin el busto), cintura, cadera y, de
+  // ahí al ruedo, el remerón se abre parejo (a lo ancho más que de fondo).
   const tunicRows = () => {
     const aT = 0.168 + 0.04 * f;
     const bT = 0.104 + 0.02 * f;
-    const yH = M.flare.y0;
-    const aHt = 0.182 + 0.03 * f;
-    const bHt = 0.114 + 0.016 * f;
-    const open = (y) => [y, aHt + TUNIC.flareA * (yH - y), bHt + TUNIC.flareB * (yH - y), -0.006];
     const tip = [M.shY, shA, 0.09 + 0.01 * f, -0.008];
     const mid = [M.shY / 2, lerp(M.neck.a, shA, 0.5), lerp(M.neck.b, tip[2], 0.5), lerp(M.neck.c, -0.008, 0.5)];
     const below = [-0.115, Math.max(shA - 0.008, aT + 0.006), bT - 0.006, 0];
+    // Remera femenina: de la cintura se abre parejo hasta la cadera (a lo
+    // ancho; de fondo apenas, si no hace panza de perfil) y de ahí cae
+    // derecha.
+    const yHf = -Math.min(L, 0.62);
+    const hipF = [0.178 + 0.03 * f, 0.104 + 0.016 * f];
+    const lower = tunic
+      ? (() => {
+          const yH = -Math.min(-TUNIC.hipY, L - 0.12);
+          const aHt = 0.182 + 0.03 * f;
+          const bHt = 0.114 + 0.016 * f;
+          const open = (y) => [y, aHt + TUNIC.flareA * (yH - y), bHt + TUNIC.flareB * (yH - y), -0.006];
+          return [open(-L - 0.2), open(-L), [yH, aHt, bHt, -0.004]];
+        })()
+      : [[-L - 0.2, ...hipF, -0.004], [-L, ...hipF, -0.004], ...(L > 0.63 ? [[yHf, ...hipF, -0.004]] : [])];
     return [
-      open(-L - 0.2),
-      open(-L),
-      [yH, aHt, bHt, -0.004],
+      ...lower,
       [-0.4, 0.16 + 0.03 * f, 0.099 + 0.016 * f, 0.004],
       [-0.31, aT - 0.004, bT - 0.006, 0.006],
       [M.pitY, aT, bT, 0.006],
@@ -209,7 +220,7 @@ export function measures(p) {
       [0, M.neck.a, M.neck.b, M.neck.c],
     ];
   };
-  const rows = tunic
+  const rows = fem
     ? tunicRows()
     : tank
     ? [

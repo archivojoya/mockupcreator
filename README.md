@@ -85,18 +85,16 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   en la barra y la percha gira debajo. Colgada, la tela se simula en vivo: al pasar el mouse
   se empuja y se balancea, y después se acomoda sola (en el celular, con un
   toque).
-- **Prenda**: camiseta, musculosa, básquet o tank top.
-  - **Musculosa** (de varón): el mismo molde de la camiseta sin mangas, con
-    el hombro 2 cm más angosto (la sisa sube por la misma tela hacia el
-    cuello, arriba 2 cm y nada en la axila); en cada sisa va un puño como el
-    de las mangas (tira doble de 2,4 cm, del color de los puños). Con cuerpo
-    envuelve el borde y se apoya sobre la tela, como un ribete: de frente y
-    de espalda se ve como una franja a lo largo de la sisa, y arriba cruza el
-    hombro derecho, de frente a espalda. Colgada sale del borde siguiendo la
-    tela, y la percha llega más cerca de la punta del hombro.
-  - **Básquet**: la musculosa de sisa grande (baja 4,5 cm más, entra más en
-    el frente y la espalda, y el hombro termina antes), con el hombro 3,5 cm
-    más angosto (cada tira del hombro mide 9,8 cm de ancho, sin el puño).
+- **Prenda**: camiseta, remera femenina, tank top o remerón. (La musculosa y
+  la de básquet se sacaron el 27 de octubre: no se parecían a la camiseta; se
+  rehacen partiendo de ella, y la de básquet de su molde.)
+  - **Remera femenina**: el cuerpo de mujer del remerón (la camiseta con los
+    hombros 3,7 cm más angostos, busto, cintura y cadera) con el largo de la
+    camiseta. De la cintura (33 cm de ancho visto de frente) se abre parejo
+    hasta la cadera (36,4 cm), casi sólo a lo ancho (de fondo apenas: si no,
+    de perfil hace panza), y de ahí cae derecha; sin aberturas, con la caída
+    de la camiseta. Cuello redondo o en V, mangas y puños como la camiseta;
+    con cuerpo (con short) o en movimiento; colgada todavía no.
   - **Tank top** (de mujer): cuerpo con busto, cintura y cadera; escote
     redondo ancho y hondo adelante (13 cm de entrada, de 9 a 18) y alto
     atrás (4 cm); tiras de 4,2 cm en el hombro; espalda nadadora (cada sisa

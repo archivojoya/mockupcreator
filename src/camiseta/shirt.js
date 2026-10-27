@@ -200,6 +200,9 @@ export function measures(p) {
     // derecha.
     const yHf = -Math.min(L, 0.62);
     const hipF = [0.178 + 0.03 * f, 0.104 + 0.016 * f];
+    // Y su cintura, 6 mm más adentro de cada lado que la del remerón (Demian:
+    // «un poquitito más de forma»).
+    const waistIn = tunic ? 0 : 0.006;
     const lower = tunic
       ? (() => {
           const yH = -Math.min(-TUNIC.hipY, L - 0.12);
@@ -211,7 +214,7 @@ export function measures(p) {
       : [[-L - 0.2, ...hipF, -0.004], [-L, ...hipF, -0.004], ...(L > 0.63 ? [[yHf, ...hipF, -0.004]] : [])];
     return [
       ...lower,
-      [-0.4, 0.16 + 0.03 * f, 0.099 + 0.016 * f, 0.004],
+      [-0.4, 0.16 + 0.03 * f - waistIn, 0.099 + 0.016 * f, 0.004],
       [-0.31, aT - 0.004, bT - 0.006, 0.006],
       [M.pitY, aT, bT, 0.006],
       below,

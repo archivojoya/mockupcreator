@@ -90,7 +90,7 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   rehacen partiendo de ella, y la de básquet de su molde.)
   - **Remera femenina**: el cuerpo de mujer del remerón (la camiseta con los
     hombros 3,7 cm más angostos, busto, cintura y cadera) con el largo de la
-    camiseta. De la cintura (33 cm de ancho visto de frente) se abre parejo
+    camiseta. De la cintura (31,8 cm de ancho visto de frente) se abre parejo
     hasta la cadera (36,4 cm), casi sólo a lo ancho (de fondo apenas: si no,
     de perfil hace panza), y de ahí cae derecha; sin aberturas, con la caída
     de la camiseta. Cuello redondo o en V, mangas y puños como la camiseta;

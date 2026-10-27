@@ -52,6 +52,8 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
 - **Remera femenina** (`ftee`, 27 de octubre): el cuerpo de mujer del
   remerón con el largo de la camiseta, de la cintura a la cadera abierta a lo
   ancho (de fondo apenas: hacía panza de perfil) y recta hasta el ruedo.
+  La cintura, 6 mm más adentro de cada lado que la del remerón («un
+  poquitito más angosta, para darle apenas más de forma»).
 - **En movimiento** (26 de octubre, Demian: «dale, arrancá con la pose»):
   el conjunto con el cuerpo invisible en una pose de jugador, en movimiento
   pero frenado (`referencias/conjunto-en-movimiento.webp`: zancada, una

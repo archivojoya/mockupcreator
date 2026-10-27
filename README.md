@@ -53,10 +53,30 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   sola toma, frente y espalda del mismo tamaño (aunque estén giradas), y
   arriba el nombre del cliente (sin nombre, el título de la página) y «Esta
   imagen es ilustrativa». El archivo se llama `muestra-<cliente>.png`. Se
-  dibuja aparte, sin mover la vista.
+  dibuja aparte, sin mover la vista. **Sin fondo** baja sólo las dos
+  prendas, recortadas sobre transparente y sin textos, para armar un flyer
+  (`muestra-<cliente>-sin-fondo.png`).
 
-- **Presentación**: con cuerpo (forma fija, como puesta), en percha o con
-  broches. La percha es de madera, plana y paralela a la camiseta, con el arco
+- **Presentación**: con cuerpo (forma fija, como puesta), en movimiento, en
+  percha o con broches. **En movimiento** es la de con cuerpo doblada por un
+  esqueleto invisible, como un jugador en plena zancada pero frenado
+  (`src/camiseta/pose.js`, referencia en `referencias/`): la cadera gira
+  13° llevando el costado derecho hacia adelante y los hombros 14° al revés,
+  el pecho se inclina 8° hacia adelante, el brazo izquierdo va 24° adelante y
+  el derecho 32° atrás, y el ruedo llega tarde al giro: se abre hasta 5,5 cm
+  hacia atrás del lado derecho, con unas ondas, y sube un poco. No se
+  simula: cada punto se lleva con una función de su lugar en la camiseta
+  puesta (la misma para todas las piezas, así las costuras siguen
+  cerradas), y el estampado sale del molde de la camiseta con cuerpo (un
+  diseño cae igual). Adentro de la tela la luz directa baja (la boca de una
+  manga puede mirar a la cámara) y las mangas no hacen sombra (tiraban una
+  mancha gris sobre el pecho). Por ahora sin short. Con **Giro** (abajo de
+  la presentación), una pose de danza para el remerón: el torso derecho y
+  apenas hacia atrás, los brazos abiertos, y la falda que se abre toda
+  alrededor (5 cm parejo y 3,5 más atrás a la izquierda), con siete ondas, y
+  gira 16° menos que la cadera: los pliegues y las aberturas quedan en
+  espiral y las aberturas se separan. El remerón va con cuerpo o en
+  movimiento (colgado todavía no). La percha es de madera, plana y paralela a la camiseta, con el arco
   de una percha de verdad y bordes definidos; apoya bajo la costura de los
   hombros. Los dos broches cuelgan de una barra y pellizcan la costura de cada
   hombro, como un broche de pinza: la costura arriba, el frente contra la
@@ -65,18 +85,16 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   en la barra y la percha gira debajo. Colgada, la tela se simula en vivo: al pasar el mouse
   se empuja y se balancea, y después se acomoda sola (en el celular, con un
   toque).
-- **Prenda**: camiseta, musculosa, básquet o tank top.
-  - **Musculosa** (de varón): el mismo molde de la camiseta sin mangas, con
-    el hombro 2 cm más angosto (la sisa sube por la misma tela hacia el
-    cuello, arriba 2 cm y nada en la axila); en cada sisa va un puño como el
-    de las mangas (tira doble de 2,4 cm, del color de los puños). Con cuerpo
-    envuelve el borde y se apoya sobre la tela, como un ribete: de frente y
-    de espalda se ve como una franja a lo largo de la sisa, y arriba cruza el
-    hombro derecho, de frente a espalda. Colgada sale del borde siguiendo la
-    tela, y la percha llega más cerca de la punta del hombro.
-  - **Básquet**: la musculosa de sisa grande (baja 4,5 cm más, entra más en
-    el frente y la espalda, y el hombro termina antes), con el hombro 3,5 cm
-    más angosto (cada tira del hombro mide 9,8 cm de ancho, sin el puño).
+- **Prenda**: camiseta, remera femenina, tank top o remerón. (La musculosa y
+  la de básquet se sacaron el 27 de octubre: no se parecían a la camiseta; se
+  rehacen partiendo de ella, y la de básquet de su molde.)
+  - **Remera femenina**: el cuerpo de mujer del remerón (la camiseta con los
+    hombros 3,7 cm más angostos, busto, cintura y cadera) con el largo de la
+    camiseta. De la cintura (31,7 cm de ancho visto de frente) se abre parejo
+    hasta la cadera (36,4 cm), casi sólo a lo ancho (de fondo apenas: si no,
+    de perfil hace panza), y de ahí cae derecha; sin aberturas, con la caída
+    de la camiseta. Cuello redondo o en V, mangas y puños como la camiseta;
+    con cuerpo (con short) o en movimiento; colgada todavía no.
   - **Tank top** (de mujer): cuerpo con busto, cintura y cadera; escote
     redondo ancho y hondo adelante (13 cm de entrada, de 9 a 18) y alto
     atrás (4 cm); tiras de 4,2 cm en el hombro; espalda nadadora (cada sisa
@@ -84,6 +102,20 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     las dos queda una columna de unos 9 cm de ancho, con un tramo casi
     vertical de 5 cm, y abajo la sisa se abre hasta el costado); vivos finos
     de un mismo color en el escote y las sisas. No lleva tapacostura.
+  - **Remerón** de danza (de mujer): la camiseta con mangas y cuello
+    redondo sobre un cuerpo con busto, cintura y cadera, con hombros 3,7 cm
+    más angostos; largo de 75 a 100 cm (de entrada 85, hasta arriba de la
+    rodilla) y casi recto de la cadera para abajo (99 cm de cadera, 100 de
+    ruedo con 85 de largo), con pliegues suaves que bajan de la cadera. Sale de las fotos de Worship
+    Wear, no del molde: con las medidas del molde FXL
+    (`moldes/worship/remeron-danza-FXL.svg`, casi recto) a Demian le gustaba
+    menos. En cada costado, una abertura
+    (**Abertura al costado**, de 0 a 30 cm, de entrada 20): ahí frente y
+    espalda no están cosidos, cada pieza se angosta un poco alrededor del
+    cuerpo y los bordes se separan (nada arriba, 2,4 cm en el ruedo); cada
+    borde lleva el dobladillo del ruedo y su pespunte, y la costura del
+    costado termina donde empieza la abertura. Por ahora sólo con cuerpo (la
+    caída colgada se fija aparte) y sin short.
   Sin mangas se ocultan el largo, la apertura, el puño y el color de las
   mangas, y sus piezas en la personalización.
 - **Short** (`src/camiseta/shorts.js`): con cuerpo, un short de fútbol debajo
@@ -483,8 +515,8 @@ El molde de ejemplo de fútbol se genera sobre el molde canónico con
   costura y mapa de relieve del tejido.
 - `src/main.js` — escena, iluminación de estudio suave y panel de control.
 - `camiseta.html` y `src/camiseta/` — la camiseta deportiva paramétrica:
-  `shirt.js` (geometría), `drape.js` (versión colgada: percha, broches y
-  simulación de la tela), `fabric.js` (texturas de la tela), `main.js` (escena y controles) y
+  `shirt.js` (geometría), `pose.js` (en movimiento), `drape.js` (versión
+  colgada: percha, broches y simulación de la tela), `fabric.js` (texturas de la tela), `main.js` (escena y controles) y
   `style.css`.
 
 ## Rendimiento

@@ -33,9 +33,10 @@
             <div class="seg" role="group" aria-labelledby="sheet-bg-label">
               <button type="button" data-sheetbg="light" aria-pressed="true">Claro</button>
               <button type="button" data-sheetbg="dark" aria-pressed="false">Oscuro</button>
+              <button type="button" data-sheetbg="none" aria-pressed="false">Sin fondo</button>
             </div>
           </div>
-          <p class="note">Debajo del nombre: «Esta imagen es ilustrativa».</p>
+          <p class="note">Con fondo, debajo del nombre va «Esta imagen es ilustrativa». Sin fondo salen sólo las prendas, recortadas, para armar un flyer.</p>
           <div class="sheet-actions">
             <button type="button" id="sheet-cancel">Cancelar</button>
             <button type="button" id="sheet-go">Descargar</button>
@@ -52,8 +53,13 @@
 
         <div class="mode" role="group" aria-label="Presentación">
           <button type="button" data-mode="body" aria-pressed="true">Con cuerpo</button>
+          <button type="button" data-mode="pose" aria-pressed="false">En movimiento</button>
           <button type="button" data-mode="hanger" aria-pressed="false">En percha</button>
           <button type="button" data-mode="clips" aria-pressed="false">Con broches</button>
+        </div>
+        <div class="seg" id="pose-control" role="group" aria-label="Pose" hidden>
+          <button type="button" data-pose="run" aria-pressed="true">Zancada</button>
+          <button type="button" data-pose="spin" aria-pressed="false">Giro</button>
         </div>
 
 
@@ -70,9 +76,9 @@
               <span class="label" id="garment-label">Prenda</span>
               <div class="seg two-rows" role="group" aria-labelledby="garment-label">
                 <button type="button" data-garment="tee" aria-pressed="true">Camiseta</button>
-                <button type="button" data-garment="muscle" aria-pressed="false">Musculosa</button>
-                <button type="button" data-garment="basket" aria-pressed="false">Básquet</button>
+                <button type="button" data-garment="ftee" aria-pressed="false">Femenina</button>
                 <button type="button" data-garment="tank" aria-pressed="false">Tank top</button>
+                <button type="button" data-garment="tunic" aria-pressed="false">Remerón</button>
               </div>
             </div>
             <div class="control" id="short-control">
@@ -91,6 +97,11 @@
               <label for="length">Largo</label>
               <output id="length-out" for="length"></output>
               <input id="length" type="range" min="0.62" max="0.82" step="0.005" />
+            </div>
+            <div class="control" id="slit-control" hidden>
+              <label for="slit">Abertura al costado</label>
+              <output id="slit-out" for="slit"></output>
+              <input id="slit" type="range" min="0" max="0.3" step="0.01" />
             </div>
             <div class="control">
               <label for="sleeveLength">Largo de manga</label>

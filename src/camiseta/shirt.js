@@ -30,8 +30,9 @@ export const DEFAULTS = {
   neckDepth: 0.075, // profundidad del escote delantero
   neckStyle: 'round', // 'round' redondo · 'v' en V
   cuff: 'band', // 'band' con puño · 'none' sin puño (la manga sigue hasta el borde)
-  garment: 'tee', // 'tee' camiseta · 'muscle' musculosa (sin mangas) · 'basket' musculosa de básquet (sisa grande) · 'tank' tank top (de mujer, espalda nadadora)
+  garment: 'tee', // 'tee' camiseta · 'ftee' remera femenina · 'tank' tank top (de mujer, espalda nadadora) · 'tunic' remerón de danza (de mujer, largo)
   short: true, // con cuerpo, el short de fútbol debajo (ver shorts.js)
+  slit: 0.2, // remerón: alto de la abertura de cada costado, desde el ruedo (0, sin abertura)
 };
 
 // Resolución de las mallas.
@@ -89,13 +90,20 @@ function monotone(xs, ys) {
 }
 
 // Medidas del cuerpo de la prenda según los controles.
-// Musculosa: el mismo molde de la camiseta sin mangas, con un puño en cada
-// sisa. La de básquet tiene la sisa grande: baja 4,5 cm más, entra más en el
-// frente y la espalda, y el hombro termina antes, con la misma pendiente.
+// (La musculosa y la de básquet se sacaron el 27 de octubre: no se parecían a
+// la camiseta. Se rehacen partiendo de ella; la de básquet, de su molde. El
+// puño de la sisa sin manga, que llevaban, queda para ellas.)
 // Tank top (de mujer): cuerpo con busto, cintura y cadera; escote redondo
 // ancho y hondo adelante y alto atrás; tiras de 4,2 cm en el hombro; espalda
 // nadadora (las sisas de atrás, en C, dejan una columna en el centro); vivos
 // finos en el escote y las sisas.
+// Remera femenina: el cuerpo del remerón (abajo) con el largo de la
+// camiseta, recto de la cadera al ruedo y sin aberturas; la caída, la de la
+// camiseta.
+// Remerón de danza (de mujer): la camiseta con mangas y cuello redondo sobre
+// un cuerpo con busto, cintura y cadera, hombros más angostos, largo hasta
+// arriba de la rodilla y casi recto de la cadera al ruedo, con pliegues que
+// bajan de la cadera y una abertura en cada costado (ver buildTorso).
 const NECK_REF = 0.075; // escote de referencia (ver measures)
 const ARM_BAND = 0.024; // ancho del puño de la sisa
 const ARM_RISE = 0.0011; // con cuerpo, lo que el puño queda por encima de la tela
@@ -111,13 +119,23 @@ const TANK = {
   colsF: 14, // columnas de la sisa en el frente y en la espalda
   colsB: 26,
 };
+const TUNIC = {
+  hipY: -0.6, // altura de la cadera (de ahí se abre hasta el ruedo)
+  flareA: 0.008, // cuánto se abre hacia el ruedo, a lo ancho y de fondo (por metro de largo)
+  flareB: 0.0033,
+  folds: 9, // pliegues alrededor (del ruedo a la cadera)
+  fold: 0.009, // y su hondo en el ruedo
+  slitOpen: 0.05, // cuánto se separa cada borde de la abertura en el ruedo (radianes alrededor del cuerpo)
+  slitLip: 0.022, // dobladillo de los bordes de la abertura (como el del ruedo)
+};
 export function measures(p) {
   const f = p.fit;
   const L = p.length;
-  const garment = ['muscle', 'basket', 'tank'].includes(p.garment) ? p.garment : 'tee';
-  const sleeveless = garment !== 'tee';
+  const garment = ['ftee', 'tank', 'tunic'].includes(p.garment) ? p.garment : 'tee';
+  const sleeveless = garment === 'tank';
   const tank = garment === 'tank';
-  const basket = garment === 'basket';
+  const tunic = garment === 'tunic';
+  const fem = tunic || garment === 'ftee'; // cuerpo de mujer con mangas
   const M = {
     L,
     fit: f,
@@ -137,23 +155,29 @@ export function measures(p) {
     // espalda, no se mete hacia el cuello.
     deepNeck: tank,
     shY: -0.046, // altura de la punta del hombro
-    pitY: (tank ? -0.26 : basket ? -0.25 : -0.205) - 0.03 * f, // altura de la axila
+    pitY: (tank ? -0.26 : -0.205) - 0.03 * f, // altura de la axila
     n: 2.35, // exponente de los cortes (2 = elipse)
     garment,
     sleeveless,
     armBand: tank ? TANK.binding : ARM_BAND,
-    armCols: tank ? TANK.colsF : basket ? 12 : ARM_COLS, // la de básquet entra más en el frente y la espalda
-    armColsB: tank ? TANK.colsB : basket ? 12 : ARM_COLS,
+    armCols: tank ? TANK.colsF : ARM_COLS,
+    armColsB: tank ? TANK.colsB : ARM_COLS,
     racer: tank,
     strap: TANK.strap,
     racerTop: TANK.racerTop,
     racerGap: TANK.racerGap,
     // Busto: altura y separación de las puntas, relieve y caída arriba y
     // abajo (más suelta, menos relieve y cae más derecho).
-    bust: tank ? { x: 0.085, y: -0.245, h: 0.042 * (1 - 0.4 * f), sx: 0.045, sUp: 0.12, sDown: 0.05 + 0.07 * f } : null,
+    // (En el remerón, la tela es más suelta: menos relieve y cae más derecho.)
+    bust: tank
+      ? { x: 0.085, y: -0.245, h: 0.042 * (1 - 0.4 * f), sx: 0.045, sUp: 0.12, sDown: 0.05 + 0.07 * f }
+      : fem
+        ? { x: 0.085, y: -0.245, h: 0.034 * (1 - 0.4 * f), sx: 0.05, sUp: 0.12, sDown: 0.09 + 0.06 * f }
+        : null,
+    flare: tunic ? { y0: -Math.min(-TUNIC.hipY, L - 0.12), n: TUNIC.folds, h: TUNIC.fold * (1 + f), slit: Math.min(Math.max(0, p.slit ?? DEFAULTS.slit), L - 0.25) } : null,
   };
-  const shA = tank ? M.neck.a + TANK.strap : basket ? 0.173 + 0.026 * f : 0.214 + 0.032 * f; // medio ancho de hombros
-  if (tank || basket) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
+  const shA = tank ? M.neck.a + TANK.strap : fem ? 0.196 + 0.03 * f : 0.214 + 0.032 * f; // medio ancho de hombros
+  if (tank || fem) M.shY = (-0.046 * (shA - M.neck.a)) / (0.214 - M.neck.a);
   const aC = 0.176 + 0.046 * f; // medio ancho y media profundidad del pecho
   const bC = 0.112 + 0.022 * f;
   // Tank top: pecho (sin el busto), cintura y cadera.
@@ -163,7 +187,45 @@ export function measures(p) {
   const bW = 0.088 + 0.02 * f;
   const aH = 0.168 + 0.035 * f;
   const bH = 0.1 + 0.02 * f;
-  const rows = tank
+  // Remerón y remera femenina: pecho (sin el busto), cintura, cadera y, de
+  // ahí al ruedo, el remerón se abre parejo (a lo ancho más que de fondo).
+  const tunicRows = () => {
+    const aT = 0.168 + 0.04 * f;
+    const bT = 0.104 + 0.02 * f;
+    const tip = [M.shY, shA, 0.09 + 0.01 * f, -0.008];
+    const mid = [M.shY / 2, lerp(M.neck.a, shA, 0.5), lerp(M.neck.b, tip[2], 0.5), lerp(M.neck.c, -0.008, 0.5)];
+    const below = [-0.115, Math.max(shA - 0.008, aT + 0.006), bT - 0.006, 0];
+    // Remera femenina: de la cintura se abre parejo hasta la cadera (a lo
+    // ancho; de fondo apenas, si no hace panza de perfil) y de ahí cae
+    // derecha.
+    const yHf = -Math.min(L, 0.62);
+    const hipF = [0.178 + 0.03 * f, 0.104 + 0.016 * f];
+    // Y su cintura, 6 mm más adentro de cada lado que la del remerón (Demian:
+    // «un poquitito más de forma»).
+    const waistIn = tunic ? 0 : 0.006;
+    const lower = tunic
+      ? (() => {
+          const yH = -Math.min(-TUNIC.hipY, L - 0.12);
+          const aHt = 0.182 + 0.03 * f;
+          const bHt = 0.114 + 0.016 * f;
+          const open = (y) => [y, aHt + TUNIC.flareA * (yH - y), bHt + TUNIC.flareB * (yH - y), -0.006];
+          return [open(-L - 0.2), open(-L), [yH, aHt, bHt, -0.004]];
+        })()
+      : [[-L - 0.2, ...hipF, -0.004], [-L, ...hipF, -0.004], ...(L > 0.63 ? [[yHf, ...hipF, -0.004]] : [])];
+    return [
+      ...lower,
+      [-0.4, 0.16 + 0.03 * f - waistIn, 0.099 + 0.016 * f, 0.004],
+      [-0.31, aT - 0.004, bT - 0.006, 0.006],
+      [M.pitY, aT, bT, 0.006],
+      below,
+      ...shoulderRows(M, below, tip, mid),
+      mid,
+      [0, M.neck.a, M.neck.b, M.neck.c],
+    ];
+  };
+  const rows = fem
+    ? tunicRows()
+    : tank
     ? [
         [-L - 0.2, aH, bH, 0],
         [-L, aH, bH, 0],
@@ -522,6 +584,13 @@ function buildTorso(M) {
     const k = lerp(1, rho / r, (1 - smoothstep(1, 2.4, rho)) * top);
     return [thc + p * k * dTh, tc + q * k * dT];
   };
+  // Abertura del remerón: en cada costado, del ruedo hasta `slit` más arriba,
+  // frente y espalda dejan de estar cosidos. Cada pieza se angosta un poco
+  // alrededor del cuerpo (parejo en toda la fila) y sus bordes se separan:
+  // nada arriba (la abertura cierra sin escalón) y más hacia el ruedo.
+  const slit = M.flare ? M.flare.slit : 0;
+  const tSlit = slit / M.L; // en el costado el escote no baja: y = -L + t·L
+  const slitOpen = (t) => (t < tSlit ? TUNIC.slitOpen * ((tSlit - t) / tSlit) ** 1.5 : 0);
   const panels = {};
   for (const key of ['front', 'back']) {
     const th0 = key === 'front' ? -Math.PI / 2 : Math.PI / 2;
@@ -551,6 +620,10 @@ function buildTorso(M) {
       for (let j = 0; j <= COLS; j++) {
         let th = th0 + (Math.PI * j) / COLS;
         let t = tRow(i);
+        if (slit) {
+          const o = slitOpen(t);
+          th = th0 + o + ((Math.PI - 2 * o) * j) / COLS;
+        }
         [th, t] = warp(th, t, th0);
         [th, t] = warp(th, t, th0 + Math.PI);
         t = lift(th, t);
@@ -577,7 +650,10 @@ function buildTorso(M) {
     orient(pos, idx, fromVertical);
     panels[key] = { pos, ang, idx, W, N, tw, tv };
   }
-  return { panels, i1, i2, N, armCols: A, armColsB: A };
+  // Filas que quedan abiertas en los costados (desde el ruedo).
+  let slitRows = 0;
+  while (slit && tRow(slitRows + 1) < tSlit) slitRows++;
+  return { panels, i1, i2, N, armCols: A, armColsB: A, slitRows: slit ? slitRows + 1 : 0 };
 }
 
 // Torso del tank top (espalda nadadora). La sisa es otra vez un hueco
@@ -832,8 +908,13 @@ function armholeLoop(torso, side) {
 // axila. Es un campo continuo en el espacio, así las costuras no se abren.
 function torsoFolds(M, x, y, z, th, armpits) {
   const f = M.fit;
-  const drapeA = (0.003 + 0.005 * f) * smoothstep(M.pitY - 0.04, M.pitY - 0.34, y);
+  let drapeA = (0.003 + 0.005 * f) * smoothstep(M.pitY - 0.04, M.pitY - 0.34, y);
+  // Remerón: de la cadera para abajo la caída son pliegues que bajan derechos
+  // y se abren hacia el ruedo (en vez de las ondas en diagonal).
+  const F = M.flare;
+  if (F) drapeA *= smoothstep(F.y0 - 0.12, F.y0 + 0.02, y);
   let d = drapeA * (0.6 * Math.sin(7 * th + 1.3 + 9 * y) + 0.4 * Math.sin(11 * th + 0.4 - 6 * y));
+  if (F) d += F.h * smoothstep(F.y0 + 0.04, -M.L, y) ** 1.3 * (0.75 * Math.sin(F.n * th + 0.6) + 0.25 * Math.sin((F.n + 4) * th + 2.1));
   for (const pa of armpits) {
     const dy = pa.y - y;
     const dh = (th - pa.th) * 0.17;
@@ -1179,10 +1260,23 @@ export function buildShirt(params) {
   parts.collar = buildCollar(M, neck.map(([key, v, below]) => [panels[key].pos, v, below, panels[key].nrm]), COLS / 2);
 
   // ---------- dobladillos (espesor de la tela en ruedo y puños) ----------
-  const hemRing = [];
-  for (let j = 0; j <= COLS; j++) hemRing.push([panels.front.pos, j, W + j]);
-  for (let j = 1; j < COLS; j++) hemRing.push([panels.back.pos, j, W + j]);
-  parts.hem = buildLip(hemRing, 0.022, true);
+  if (torso.slitRows) {
+    // Con abertura (remerón), el ruedo son dos tiras sueltas, una por pieza,
+    // y cada borde de la abertura lleva el mismo dobladillo, del ruedo hasta
+    // la primera fila cosida.
+    const lips = [];
+    for (const key of ['front', 'back']) {
+      const p = panels[key].pos;
+      lips.push(buildLip(Array.from({ length: COLS + 1 }, (_, j) => [p, j, W + j]), 0.022, false, true));
+      for (const [j, k] of [[0, 1], [COLS, COLS - 1]]) lips.push(buildLip(Array.from({ length: torso.slitRows + 1 }, (_, i) => [p, i * W + j, i * W + k]), TUNIC.slitLip, false, true));
+    }
+    parts.hem = mergeParts(lips);
+  } else {
+    const hemRing = [];
+    for (let j = 0; j <= COLS; j++) hemRing.push([panels.front.pos, j, W + j]);
+    for (let j = 1; j < COLS; j++) hemRing.push([panels.back.pos, j, W + j]);
+    parts.hem = buildLip(hemRing, 0.022, true);
+  }
   for (const k of M.sleeveless ? [] : ['cuffL', 'cuffR']) {
     const c = parts[k];
     const SW = c.ring.length;
@@ -1196,7 +1290,7 @@ export function buildShirt(params) {
   // Normales, costuras soldadas y marcas de costura.
   for (const part of Object.values(parts)) part.nrm = computeNormals(part.pos, part.idx);
   weldNormals(['front', 'back', 'sleeveL', 'sleeveR', 'cuffL', 'cuffR'].filter((k) => parts[k]).map((k) => parts[k]));
-  seamMarks(parts, N, W, params.cuff === 'none', M.vNeck ? COLS / 2 : -1);
+  seamMarks(parts, N, W, params.cuff === 'none', M.vNeck ? COLS / 2 : -1, torso.slitRows);
   zoneMarks(parts, M, W);
 
   const geos = {};
@@ -1758,7 +1852,10 @@ function buildCollar(M, neck, tip) {
 
 // Dobladillo: desde el borde, la tela se da vuelta hacia adentro y sube.
 // ring: [posiciones, índice del borde, índice de la fila de arriba].
-export function buildLip(ring, height, closed) {
+// Afuera es lejos del centro del borde, o, con `axis`, lejos del eje de la
+// prenda a la altura de cada punto (para un borde que no da la vuelta
+// entera: una tira del ruedo, el borde de una abertura).
+export function buildLip(ring, height, closed, axis = false) {
   const n = ring.length;
   const prof = [[0, 0], [-0.0008, -0.0009], [-0.0003, -0.0021], [0.002, -0.0024], [height, -0.0024]];
   const P = prof.length;
@@ -1768,6 +1865,7 @@ export function buildLip(ring, height, closed) {
   const center = new THREE.Vector3();
   for (const [p, v] of ring) center.add(new THREE.Vector3().fromArray(p, v * 3));
   center.divideScalar(n);
+  if (axis) center.x = center.z = 0;
   const e = new THREE.Vector3();
   const prev = new THREE.Vector3();
   const up = new THREE.Vector3();
@@ -1779,6 +1877,7 @@ export function buildLip(ring, height, closed) {
     e.fromArray(p, v * 3);
     up.fromArray(p, w * 3).sub(e).normalize();
     // Hacia afuera de la prenda: lejos del centro del borde.
+    if (axis) center.y = e.y;
     out.subVectors(e, center);
     out.addScaledVector(up, -out.dot(up)).normalize();
     if (i > 0) u += e.distanceTo(prev);
@@ -1791,7 +1890,21 @@ export function buildLip(ring, height, closed) {
     }
   }
   const idx = gridIndex(n - (closed ? 0 : 1), P - 1, SW);
-  return { pos, uv, idx: orient(pos, idx, (x, y, z) => [x - center.x, y - center.y, z - center.z]) };
+  return { pos, uv, idx: orient(pos, idx, axis ? fromVertical : (x, y, z) => [x - center.x, y - center.y, z - center.z]) };
+}
+// Varias mallas en una sola pieza (posiciones, UV e índices).
+function mergeParts(list) {
+  const pos = new Float32Array(list.reduce((s, m) => s + m.pos.length, 0));
+  const uv = new Float32Array(list.reduce((s, m) => s + m.uv.length, 0));
+  const idx = [];
+  let base = 0;
+  for (const m of list) {
+    pos.set(m.pos, base * 3);
+    uv.set(m.uv, base * 2);
+    for (const v of m.idx) idx.push(v + base);
+    base += m.pos.length / 3;
+  }
+  return { pos, uv, idx };
 }
 
 // Puño de la sisa (musculosa) o vivo (tank top): una tira doble cosida al
@@ -1927,8 +2040,10 @@ function zoneMarks(parts, M, W) {
 // (hundido de la costura), y = distancia al borde con pespunte (ruedos).
 // Sin puño (`noCuff`), entre la manga y el puño no hay costura: la manga
 // sigue, con la costura de abajo del brazo, hasta el borde. En V, la tira
-// lleva una costura en la punta (`vTip`, su columna).
-function seamMarks(parts, N, W, noCuff = false, vTip = -1) {
+// lleva una costura en la punta (`vTip`, su columna). Con abertura en los
+// costados (las primeras `slitRows` filas del torso), ahí el costado no es
+// costura sino borde: el pespunte del ruedo sube por él.
+function seamMarks(parts, N, W, noCuff = false, vTip = -1, slitRows = 0) {
   const set = (part, f) => {
     const n = part.pos.length / 3;
     part.seam = new Float32Array(n * 2);
@@ -1951,7 +2066,9 @@ function seamMarks(parts, N, W, noCuff = false, vTip = -1) {
       const uL = uvs[r0 * 2];
       const uR = uvs[(r0 + COLS) * 2];
       const u = uvs[v * 2];
-      let d = Math.min(u - uL, uR - u);
+      const side = Math.min(u - uL, uR - u);
+      const open = i < slitRows;
+      let d = open ? Infinity : side;
       const vTop = uvs[(N * W + j) * 2 + 1];
       d = Math.min(d, vTop - uvs[v * 2 + 1]);
       const x = p.pos[v * 3];
@@ -1964,7 +2081,7 @@ function seamMarks(parts, N, W, noCuff = false, vTip = -1) {
             if (dd < d) d = dd;
           }
       }
-      return [d, uvs[v * 2 + 1]];
+      return [d, open ? Math.min(uvs[v * 2 + 1], side) : uvs[v * 2 + 1]];
     });
   }
   for (const key of ['sleeveL', 'sleeveR']) {

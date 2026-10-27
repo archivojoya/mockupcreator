@@ -2,7 +2,118 @@
 
 Mockups 3D de prendas deportivas con three.js (`camiseta.html`, código en
 `src/camiseta/`). El README explica cada parte; la skill de cuenta
-`camiseta-3d` lleva la misma página y sus lecciones (`references/motor.md`).
+`camiseta-3d` lleva la página y sus lecciones (`references/motor.md`), pero
+quedó atrás: no tiene musculosa, tank top, short ni personalización. La fuente
+es este repo.
+
+## Para qué es
+
+Los mockups de los pedidos reales de Demian (diseño y sublimación de ropa
+deportiva), para mandarle al cliente una lámina de muestra y para sacar flyers
+y motion (PNG grande con fondo transparente, giros, el modelo 3D). Clientes y
+lo que piden:
+
+- **Pádel y marcas (LLAQTA):** casi siempre camiseta cuello redondo y tank top.
+- **Walter** (conjuntos de fútbol): camiseta redonda y en V, musculosa,
+  musculosa de básquet cuello en V, remera con molde femenino, chomba, short.
+- **Penuel + Worship Wear:** como Walter, un poco menos (redonda, V, femenina,
+  musculosa femenina, short). Worship hace además remerones de danza de mujer
+  y de varón (el molde de la camiseta alargado hacia abajo, con una abertura
+  al costado), remeras oversize y pantalones.
+
+Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
+
+## Decisiones (24 de octubre de 2026)
+
+- **Camiseta cuello redondo y tank top, congeladas.** Son las que están en
+  producción (artifacts «Camiseta Deportiva 3D» y «Tank Top Deportivo»,
+  publicados desde `eff8e34`). Sólo se tocan para arreglar algo de esas dos, y
+  antes de publicar se comparan con capturas de `eff8e34` en percha y con
+  broches.
+- **Prendas nuevas con la caída fija, no simulada en vivo.** Cambiar el cuello
+  o la manga movía toda la simulación (se inflaba de un lado, la percha y los
+  broches perdían forma) y arreglar una prenda rompía otra. Ahora cada prenda
+  nueva se cuelga una vez, se aprueba mirándola y su forma queda guardada en
+  un archivo por prenda y presentación. Colores, tela y diseño siguen en vivo
+  (son textura); el peso de la tela sí cambia la caída, así que se fija al
+  guardar. Cambiar de cuello es elegir otra prenda ya aprobada.
+- **La tela que se mueve con el mouse** queda para el perchero del catálogo
+  (todas camisetas cuello redondo, sin ajustes de forma).
+- **Orden** (al 27 de octubre; hechos el remerón y la camiseta en
+  movimiento): 1) remera femenina, 2) short nuevo (el de elástico) en la
+  zancada, 3) caída fija con broches para las prendas nuevas, 4) rehacer la
+  musculosa y la de básquet partiendo de la camiseta (la de básquet con su
+  molde, que Demian tiene: más ancha, sisa más grande), 5) refinar el tank
+  top («tiene algunos detalles raros»: se descongela para eso, con su
+  aprobación, y se guardan sus huellas nuevas).
+- **Musculosa y básquet, sacadas** (27 de octubre): «las veo diferentes a la
+  camiseta». Se borraron de la página y de la prueba; el código de la sisa
+  sin manga con puño queda para cuando se rehagan.
+- **Remera femenina** (`ftee`, 27 de octubre): el cuerpo de mujer del
+  remerón con el largo de la camiseta, de la cintura a la cadera abierta a lo
+  ancho (de fondo apenas: hacía panza de perfil) y recta hasta el ruedo.
+  La cintura, 6 mm más adentro de cada lado que la del remerón («un
+  poquitito más angosta, para darle apenas más de forma»).
+- **En movimiento** (26 de octubre, Demian: «dale, arrancá con la pose»):
+  el conjunto con el cuerpo invisible en una pose de jugador, en movimiento
+  pero frenado (`referencias/conjunto-en-movimiento.webp`: zancada, una
+  pierna adelante con la boca del short hacia la cámara, la otra atrás, el
+  torso apenas girado). Nada de maniquí: «le saca la magia». Hecho en
+  `pose.js`: un esqueleto invisible dobla la camiseta con cuerpo ya armada
+  (una pose es una lista de ángulos y sirve para todas las prendas) y el
+  movimiento de la tela se agrega a mano (el ruedo), no se simula. Por ahora
+  sin short: se suma cuando se mejore el short. Demian: «me encantó, está
+  perfecto». Para el remerón, además del mismo movimiento («es como
+  movimiento genérico»), un giro de danza (`spin`): la falda abierta toda
+  alrededor, con ondas, y las aberturas separadas. Para las prendas nuevas,
+  colgada sólo con broches (muestra el conjunto); la percha queda para la
+  camiseta y el tank top, que ya la tienen, y para el perchero del catálogo.
+- **Remerón (25 de octubre):** prenda `tunic`, con cuerpo o en movimiento
+  hasta que se fije su caída colgada. Sale de las fotos de Worship Wear: con cintura,
+  hasta arriba de la rodilla (85 cm) y casi recto de la cadera al ruedo (99
+  y 100 cm de contorno: Demian lo pidió así después de verlo con 127 y con
+  120), abertura de 20 cm en cada costado. Se probó
+  con las medidas del molde FXL (`moldes/worship/`, casi recto, 97 de largo,
+  manga de 24 sin puño) y a Demian le gustaba menos: la forma sale de las
+  fotos. Que un diseño hecho sobre el molde caiga justo se resuelve en el
+  estampado, sin cambiar la forma.
+- **La vara:** una prenda en 3D tiene que salir más rápido que el mockup a
+  mano. Si no, no está lista.
+- **Descartado:** coser los moldes SVG en Blender (artifact «Molde a 3D
+  LLAQTA», principios de octubre). De cerca no convencía y la página pesaba
+  mucho. La base es three.js con la tela de `fabric.js`.
+
+## Más adelante
+
+- **Exportar el modelo en GLB.** Es la puerta a todo lo demás: Blender (para
+  una foto más realista que la de tiempo real), motion, realidad aumentada.
+- **Personajes animados para los pedidos de niños:** un personaje con su
+  propia remera, con el diseño del pedido estampado encima, grabado como
+  video. No es la camiseta de producción puesta en otro cuerpo: con las
+  proporciones de un dibujo no calzaría.
+- **Short con elástico** (`referencias/short-elastico.png`, Demian: «una
+  forma muy acertada»). Se muestra al lado de la camiseta, no debajo: se ve
+  entero, con la cintura. Contra el nuestro (`shorts.js`), las proporciones
+  se parecen (entrepierna al 60 % del largo, el nuestro 62 %; ruedo 8 % más
+  ancho que la cadera, el nuestro 10 %; unos 4 cm entre las piernas en el
+  ruedo, como el nuestro). Lo distinto: la cintura elástica fruncida (dos o
+  tres canales) con pliegues suaves que bajan derechos de ella; un poco más
+  largo (de la cintura al ruedo, 1,4 veces el ancho de la cintura visto de
+  frente; el nuestro, 40 cm, 1,2 veces); el ruedo apenas caído hacia
+  afuera.
+
+## Nombres compartidos con escalado
+
+Los scripts de Illustrator de `archivojoya/escalado` leen las piezas por
+nombre, y el mockup tiene que usar los mismos para que un diseño exportado
+de Illustrator caiga solo en su pieza:
+
+- Capa «Diseño» (diseño base, un talle): `frente`, `espalda`, `manga`
+  (`MANGA (derecha)` / `MANGA (izquierda)`), `manga larga`, `cuello`; el short,
+  `short derecha numero`, `short izquierda escudo` (el rol va en el nombre).
+- Capa «Escala» (moldes por talle): `L / frente (r)`, `L / frente (v)`,
+  `L / espalda`, `L / manga`. Los talles femeninos llevan F adelante (`FS`,
+  `FM`, `F2XL`, `F12`).
 
 ## Criterios estéticos (para todas las prendas)
 
@@ -65,6 +176,15 @@ Es un mockup: manda cómo se ve, no la física exacta.
   prenda en 2D antes de renderizar.
 
 ## Cómo probar
+
+Antes de cualquier cambio en `src/camiseta/`: `node tools/regresion.mjs`
+(unos 45 s). Compara camiseta, musculosa, básquet y tank top (con cuerpo,
+molde de estampado, short, en percha y con broches) contra las huellas de la
+versión 1; tiene que dar todo igual. Si un cambio en esas prendas es a
+propósito y Demian lo aprobó, `--guardar` y se commitea el JSON con el cambio.
+
+Para publicar: `node tools/pagina.mjs --out x.html --title … --heading …
+--config '{…}'` arma la página de un solo archivo, y se publica ese HTML.
 
 Playwright + Chromium sin pantalla (`--use-gl=angle --use-angle=swiftshader`):
 adelantar la simulación a mano (`d.step(1/60)` hasta `d.sleeping`), valores

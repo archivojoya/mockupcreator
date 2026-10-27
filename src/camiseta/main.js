@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS, flattenPrint } from './shirt.js';
 import { buildShorts } from './shorts.js';
+import { poseShirt, POSES } from './pose.js';
 import { makeHanger, makeClipHanger, HangingShirt, RAIL_R } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
 import { printTexture, pieceSizes, pieceCanvases, pieceOutline, coverRect, BLEED, placeTape, placeLabel, buildApplique, pieceKeys, PIECE_LABELS, PIECES, PRINT_WITH } from './print.js';
@@ -159,6 +160,9 @@ const blankTex = new THREE.DataTexture(new Uint8Array([128, 128, 0, 0]), 1, 1);
 blankTex.needsUpdate = true;
 const ribNormal = makeRibNormalMap();
 const shared = {
+  // Luz directa que llega al revés de la tela (en movimiento, la boca de una
+  // manga puede mirar a la cámara: adentro queda en sombra, como en una foto).
+  insideLight: { value: 1 },
   macroMap: { value: makeMacroMap() },
   macroTile: { value: MACRO_TILE },
   feature: { value: 0.002 },
@@ -215,7 +219,7 @@ varying vec2 vCloth;
 varying float vZone;
 uniform sampler2D detailMap, macroMap, zoneNormal, zoneDetail;
 uniform vec2 detailTile, zoneTile;
-uniform float macroTile, feature, roughAdd, irregular, zoneOn;
+uniform float macroTile, feature, roughAdd, irregular, zoneOn, insideLight;
 uniform vec3 insideColor;
 uniform sampler2D appColor, appShape;
 uniform float appOn;
@@ -335,7 +339,7 @@ void main() {
       .replace(
         '#include <lights_fragment_end>',
         `#include <lights_fragment_end>
-  if (!gl_FrontFacing) { reflectedLight.indirectDiffuse *= 0.45; reflectedLight.indirectSpecular *= 0.3; }`,
+  if (!gl_FrontFacing) { reflectedLight.indirectDiffuse *= 0.45; reflectedLight.indirectSpecular *= 0.3; reflectedLight.directDiffuse *= insideLight; reflectedLight.directSpecular *= insideLight; }`,
       );
   };
   return m;
@@ -399,6 +403,10 @@ const FABRIC = { weave: 'mesh', finish: 'matte', weight: 0.5 };
 const BASE_PARAMS = { ...DEFAULTS, ...CONFIG.params };
 // El tank top arranca con su escote típico (ver NECK.tank).
 if (BASE_PARAMS.garment === 'tank' && CONFIG.params?.neckDepth === undefined) BASE_PARAMS.neckDepth = 0.13;
+// Largo según la prenda: mínimo, máximo y valor al elegirla. El remerón llega
+// hasta arriba de la rodilla.
+const LENGTH = { shirt: [0.62, 0.82, DEFAULTS.length], tunic: [0.75, 1, 0.85] };
+if (BASE_PARAMS.garment === 'tunic' && CONFIG.params?.length === undefined) BASE_PARAMS.length = LENGTH.tunic[2];
 const BASE_COLORS = { ...COLORS, ...CONFIG.colors };
 const BASE_FABRIC = { ...FABRIC, ...CONFIG.fabric };
 const BASE_LIGHT = CONFIG.light in LIGHTS ? CONFIG.light : 'studio';
@@ -412,7 +420,7 @@ function spinLevel(v) {
 const params = { ...BASE_PARAMS };
 const colors = { ...BASE_COLORS };
 const fabric = { ...BASE_FABRIC };
-const view = { spin: spinLevel(CONFIG.spin), uvmap: !!CONFIG.uvmap, mode: 'body', light: BASE_LIGHT, pair: 0, tab: 'ajustes' }; // body: con cuerpo · hanger: en percha · clips: con broches
+const view = { spin: spinLevel(CONFIG.spin), uvmap: !!CONFIG.uvmap, mode: 'body', pose: CONFIG.pose in POSES ? CONFIG.pose : 'run', light: BASE_LIGHT, pair: 0, tab: 'ajustes' }; // body: con cuerpo · pose: en movimiento (con la pose `pose`: zancada o giro) · hanger: en percha · clips: con broches
 
 // Cada camiseta (con su percha o sus broches) cuelga de su soporte, que la
 // ubica y la gira sobre el eje del gancho; adentro (`inner`), las
@@ -489,14 +497,17 @@ function dominantColor(canvas, rect = [0, 0, canvas.width, canvas.height]) {
 // control queda quieto, se recalcula partiendo de él.
 let lastFlat = null;
 let flatTimer = 0;
+// En movimiento, el molde sale de la camiseta puesta (built.rest): un diseño
+// cae igual que con cuerpo.
+const flatBase = () => built.rest || built;
 function ensureFlat() {
   clearTimeout(flatTimer);
-  flattenPrint(built, lastFlat);
-  lastFlat = built;
+  flattenPrint(flatBase(), lastFlat);
+  lastFlat = flatBase();
 }
 // Sin cancelar el recálculo pendiente si ya está aplanado.
 function flatNow() {
-  if (!built.flatPrint) ensureFlat();
+  if (!flatBase().flatPrint) ensureFlat();
 }
 function followFlat() {
   if (!hasDress() && !sizesBox.open) return;
@@ -573,7 +584,11 @@ const rail = new THREE.Group();
 function syncCurls() {
   supports.forEach((sp, i) => (sp.curl.position.x = rigs[i].position.x));
 }
-const hanging = () => view.mode !== 'body';
+const hanging = () => view.mode === 'hanger' || view.mode === 'clips';
+// En movimiento: la camiseta con cuerpo en una pose (pose.js), sin short
+// por ahora.
+const posed = () => view.mode === 'pose';
+const POSE_INSIDE = 0.25;
 
 let built = null;
 let drape = null;
@@ -800,13 +815,18 @@ function fitPair() {
 // cuelga debajo de la camiseta de su propia barra con dos broches, de un
 // alambre que sube por dentro de la camiseta; no se simula (queda plano y
 // liso).
-const withShort = () => params.short !== false && view.mode !== 'hanger';
+const withShort = () => params.short !== false && view.mode !== 'hanger' && !posed() && !isTunic();
 // Dónde cuelga el short (borde de arriba y plano del medio): bajo el ruedo de
 // la camiseta colgada (que baja 5 cm, el tank top 8,5).
 const shortHang = (M) => ({ top: -M.L - (M.deepNeck ? 0.085 : 0.05) - SHORT_DROP, z: -0.008 });
 const SHORT_DROP = 0.095;
 function rebuild() {
   built = buildShirt(params);
+  if (posed()) built = poseShirt(built, POSES[view.pose]);
+  shared.insideLight.value = posed() ? POSE_INSIDE : 1;
+  // En movimiento, la manga de adelante tiraba una mancha gris sobre el
+  // pecho: las mangas no hacen sombra.
+  for (const k of ['sleeveL', 'sleeveR', 'cuffL', 'cuffR', 'cuffLLip', 'cuffRLip']) meshes[k].castShadow = twins[k].castShadow = !posed();
   let shortClips = null;
   if (withShort()) {
     if (view.mode === 'body') Object.assign(built.geos, buildShorts(built.measures));
@@ -931,6 +951,7 @@ const fmtCm = (m) => `${Math.round(m * 100)} cm`;
 const OUT = {
   fit: (v) => (v < 0.3 ? 'Ajustado' : v < 0.7 ? 'Regular' : 'Holgado'),
   length: fmtCm,
+  slit: (v) => (v < 0.005 ? 'Sin abertura' : fmtCm(v)),
   sleeveLength: fmtCm,
   sleeveAngle: (v) => `${Math.round(v)}°`,
   neckDepth: (v) => `${(v * 100).toFixed(1).replace('.', ',')} cm`,
@@ -956,6 +977,10 @@ function syncControls() {
   sliders.neckDepth.min = lo;
   sliders.neckDepth.max = hi;
   params.neckDepth = params.garment === 'tank' ? Math.min(hi, Math.max(lo, params.neckDepth)) : snapDepth(params.neckDepth);
+  const [lLo, lHi] = lengthRange();
+  sliders.length.min = lLo;
+  sliders.length.max = lHi;
+  params.length = Math.min(lHi, Math.max(lLo, params.length));
   for (const [k, input] of Object.entries(sliders)) {
     input.value = params[k];
     document.getElementById(`${k}-out`).textContent = OUT[k](params[k]);
@@ -981,7 +1006,11 @@ function syncControls() {
   document.getElementById('neckDepth-control').hidden = !tank;
   depthButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.depth === params.neckDepth)));
   shortButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.short === (params.short === false ? 'off' : 'on'))));
-  document.getElementById('short-control').hidden = view.mode === 'hanger';
+  document.getElementById('short-control').hidden = view.mode === 'hanger' || posed() || isTunic();
+  document.getElementById('slit-control').hidden = !isTunic();
+  modeButtons.forEach((b) => (b.hidden = unhung() && !['body', 'pose'].includes(b.dataset.mode)));
+  document.getElementById('pose-control').hidden = !posed();
+  poseButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pose === view.pose)));
   for (const sw of document.querySelectorAll('.sw-short')) sw.hidden = !withShort();
   document.getElementById('c-sleeves').closest('.swatch').hidden = bare;
   document.getElementById('sw-cuffs').hidden = tank || (!bare && params.cuff === 'none');
@@ -1047,14 +1076,20 @@ depthButtons.forEach((b) =>
     scheduleRebuild();
   }),
 );
-// Prenda: camiseta, musculosa (el molde de la camiseta sin mangas, con un
-// puño en cada sisa), musculosa de básquet (sisa grande) o tank top (de
-// mujer, espalda nadadora). Al entrar o salir del tank top el escote vuelve
-// al típico (el del tank top es redondo y mucho más hondo).
-const GARMENT_NAMES = { muscle: 'Musculosa', basket: 'Musculosa de básquet', tank: 'Tank top' };
+// Prenda: camiseta, remera femenina (el cuerpo del remerón, corto), tank top
+// (de mujer, espalda nadadora) o remerón de danza (de mujer, largo hasta arriba
+// de la rodilla). Al entrar o salir del tank top el escote vuelve al típico
+// (el del tank top es redondo y mucho más hondo); al entrar o salir del
+// remerón, el largo. El remerón va sin short.
+const GARMENT_NAMES = { ftee: 'Remera femenina', tank: 'Tank top', tunic: 'Remerón' };
 const garmentOf = () => (params.garment in GARMENT_NAMES ? params.garment : 'tee');
-const sleeveless = () => garmentOf() !== 'tee';
+const sleeveless = () => garmentOf() === 'tank';
+const isTunic = () => garmentOf() === 'tunic';
+// Prendas nuevas: hasta que se fije su caída colgada, con cuerpo o en
+// movimiento.
+const unhung = () => ['ftee', 'tunic'].includes(garmentOf());
 const neckRange = () => (params.garment === 'tank' ? NECK.tank : NECK[params.neckStyle] || NECK.round);
+const lengthRange = () => (isTunic() ? LENGTH.tunic : LENGTH.shirt);
 const garmentButtons = [...document.querySelectorAll('[data-garment]')];
 garmentButtons.forEach((b) =>
   b.addEventListener('click', () => {
@@ -1064,6 +1099,17 @@ garmentButtons.forEach((b) =>
     if (was === 'tank' || params.garment === 'tank') {
       params.neckStyle = 'round';
       params.neckDepth = neckRange()[2];
+    }
+    const tunic = was === 'tunic' || params.garment === 'tunic';
+    if (tunic) params.length = lengthRange()[2];
+    if (unhung() && hanging()) {
+      setMode('body');
+      requestAnimationFrame(() => renderApps());
+      return;
+    }
+    if (tunic) {
+      const { target, position } = homePose();
+      flyTo(target, position);
     }
     syncControls();
     scheduleRebuild();
@@ -1159,8 +1205,8 @@ document.getElementById('uvmap').addEventListener('change', (e) => {
   view.uvmap = e.target.checked;
   applyLook();
 });
-// Presentación: con cuerpo (forma fija) o colgada, en percha o con broches
-// (tela simulada).
+// Presentación: con cuerpo (forma fija), en movimiento (con cuerpo, en una
+// pose) o colgada, en percha o con broches (tela simulada).
 const modeButtons = [...document.querySelectorAll('.mode button')];
 function setMode(mode) {
   // La colgada queda más baja (la barra y el gancho arriba, la tela
@@ -1176,6 +1222,16 @@ function setMode(mode) {
   if (hasDress()) renderDress();
 }
 modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+// En movimiento: zancada o giro.
+const poseButtons = [...document.querySelectorAll('[data-pose]')];
+poseButtons.forEach((b) =>
+  b.addEventListener('click', () => {
+    if (view.pose === b.dataset.pose) return;
+    view.pose = b.dataset.pose;
+    syncControls();
+    rebuild();
+  }),
+);
 
 // El mouse empuja la tela al pasar y levanta una brisa suave. Se toca
 // cualquiera de las dos camisetas: el punto y las direcciones pasan a las
@@ -2228,7 +2284,7 @@ function updateHint() {
   document.querySelector('.hint').textContent =
     view.tab === 'perso'
       ? 'Arrastrá una imagen de la biblioteca a una pieza · arrastrá un escudo para moverlo'
-      : view.mode === 'body'
+      : !hanging()
         ? 'Arrastrá sobre una camiseta para girarla · rueda o pellizco para acercar'
         : matchMedia('(hover: none)').matches
           ? 'Tocá la tela para moverla · arrastrá para girar cada camiseta'
@@ -2240,6 +2296,7 @@ document.getElementById('reset').addEventListener('click', () => {
   Object.assign(colors, BASE_COLORS);
   Object.assign(fabric, BASE_FABRIC);
   setLight(BASE_LIGHT);
+  if (unhung() && hanging()) setMode('body');
   syncControls();
   applyFabric();
   rebuild();
@@ -2275,11 +2332,17 @@ const shortest = (d) => Math.atan2(Math.sin(d), Math.cos(d));
 // y se aleja (entra el conjunto entero).
 function homePose() {
   const short = withShort();
-  const body = view.mode === 'body';
+  const body = !hanging();
+  // El remerón, largo: la vista se centra en su mitad y se aleja con el largo.
+  if (isTunic()) {
+    const target = new THREE.Vector3(0, -params.length / 2 - 0.02, 0);
+    return { target, position: target.clone().addScaledVector(CAM_OFF, TUNIC_CAM * (params.length + 0.06)) };
+  }
   const y = body ? (short ? SHORT_CENTER_Y : CENTER.y) : short ? SHORT_HANG_Y : HANG_Y;
   const target = new THREE.Vector3(0, y, 0);
   return { target, position: target.clone().addScaledVector(CAM_OFF, short ? (body ? SHORT_CAM : SHORT_HANG_CAM) : 1) };
 }
+const TUNIC_CAM = 1.06; // alejamiento por metro de largo del remerón
 function snapHome() {
   fly = null;
   const { target, position } = homePose();
@@ -2507,6 +2570,12 @@ function makeSheet(opts = {}) {
     const sheet = document.createElement('canvas');
     [sheet.width, sheet.height] = [W, H];
     const g = sheet.getContext('2d');
+    // Sin fondo: sólo las prendas, recortadas (transparente alrededor), sin
+    // nombre ni aclaración, para ponerlas en un flyer.
+    if (opts.bg === 'none') {
+      g.drawImage(shoot(W, H, sheetPose(W / H, 0.92)), 0, 0);
+      return sheet;
+    }
     studioBackground(g, 0, 0, W, H, theme);
     const M = 90;
     drawHeader(g, M, M * 0.8, 68, theme, title);
@@ -2566,7 +2635,7 @@ async function downloadSheet() {
     const sheet = makeSheet(sheetOpts);
     const blob = await new Promise((ok) => sheet.toBlob(ok, 'image/png'));
     const slug = sheetOpts.client.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const name = `muestra-${slug || 'camiseta'}.png`;
+    const name = `muestra-${slug || 'camiseta'}${sheetOpts.bg === 'none' ? '-sin-fondo' : ''}.png`;
     const dl = await downloadsP;
     if (dl) {
       try {
@@ -2658,7 +2727,7 @@ syncControls();
 applyLights(view.light);
 applyFabric();
 document.getElementById('uvmap').checked = view.uvmap;
-if (CONFIG.mode === 'hanger' || CONFIG.mode === 'clips') setMode(CONFIG.mode);
+if (CONFIG.mode === 'pose' || (['hanger', 'clips'].includes(CONFIG.mode) && !unhung())) setMode(CONFIG.mode);
 else {
   snapHome();
   rebuild();
@@ -2673,4 +2742,4 @@ try {
 showTab(tabs.some((t) => t.dataset.tab === savedTab) ? savedTab : 'ajustes');
 initLibrary();
 
-window.__camiseta = { params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, zoomTo, setMode, design, drape: () => drape, lib, dress, addImages, assign, renderDress, showTab, pieceAt, sizesNow, appXY, makeSheet };
+window.__camiseta = { poses: POSES, params, colors, fabric, rebuild, applyLook, applyFabric, setLight, syncControls, camera, controls, scene, meshes, rigs, view, goToView, zoomTo, setMode, design, drape: () => drape, lib, dress, addImages, assign, renderDress, showTab, pieceAt, sizesNow, appXY, makeSheet };

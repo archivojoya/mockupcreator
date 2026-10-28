@@ -171,7 +171,9 @@ function gather(pos, W, uv, secOf, z0 = 0, k = 1, under = () => 0) {
       const d =
         k *
         (1 - under(pos[v * 3 + 1])) *
-        (GATHER * band * (0.6 * Math.sin((2 * Math.PI * u) / 0.013) + 0.4 * Math.sin((2 * Math.PI * u) / 0.0085 + 1.7)) +
+        // (El frunce, sólo hacia afuera: hacia adentro pasaba detrás del
+        // dobladillo de la cintura y se veía su revés, como tajos.)
+        (GATHER * band * (0.5 + 0.5 * (0.6 * Math.sin((2 * Math.PI * u) / 0.013) + 0.4 * Math.sin((2 * Math.PI * u) / 0.0085 + 1.7))) +
           FOLD * fold * (0.65 * Math.sin((2 * Math.PI * u) / 0.048 + 0.5) + 0.35 * Math.sin((2 * Math.PI * u) / 0.029 + 2.3)));
       if (!d) continue;
       const c = secOf(pos[v * 3 + 1]);
@@ -382,7 +384,7 @@ export function buildShorts(M, hung = null, opts = {}) {
   const rt = WAIST_ROWS * W;
   for (let j = 0; j < COLS; j++) waistRing.push([L, rt + j, rt - W + j]);
   for (let j = COLS; j > 0; j--) waistRing.push([R, rt + j, rt - W + j]);
-  parts.waistLip = buildLip(waistRing, 0.03, true);
+  parts.waistLip = buildLip(waistRing, 0.012, true);
   for (const part of Object.values(parts)) part.nrm = computeNormals(part.pos, part.idx);
   weldNormals(['legL', 'legR', 'waistL', 'waistR'].map((k) => parts[k]));
   // Al lado de la camiseta: todo corrido (no cambia las normales).

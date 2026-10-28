@@ -85,10 +85,16 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   una pieza por pierna, 63 cm de alto): 50 cm de costado, tiro de 30,
   entrepierna de 20, 108 de cadera, la pierna de 73 a 64 cm de vuelta.
   Demian: el elástico frunce la tela; el dobladillo igual que el de la
-  camiseta (la misma tela, sin otro color); sin cordón; con cuerpo «un
-  poco más adentro de la camiseta». Dos opciones, adentro y al lado
-  (`referencias/short-elastico.png`): «mandame captura y yo decido; podría
-  ser que el de con cuerpo quede al lado y el de movimiento adentro».
+  camiseta (la misma tela, sin otro color); sin cordón. Visto (28 de
+  octubre): «las caderas tienen que estar tapadas por la remera» (al salir
+  de ella el short no pasa del 95 % de su ruedo: achicado a la camiseta, un
+  M, 92 de cadera); «se ve como dividido a la mitad, cambia la textura desde
+  el tiro hacia abajo» (el frente liso por el medio hasta la curva del tiro
+  y la malla sin arruga en la entrepierna); «lo veo largo desde abajo del
+  tiro, le sacaría unos 10 centímetros» (entrepierna de 10); «no me gustan
+  los pliegues que le haces al tiro, el que te mandé es más liso» (sólo el
+  frunce del elástico); al lado de la camiseta «se ve muy grande»: va
+  debajo. Le gustan el elástico y la forma («antes se veía aplastado»).
   Falta: las piernas en la zancada.
 - **La vara:** una prenda en 3D tiene que salir más rápido que el mockup a
   mano. Si no, no está lista.

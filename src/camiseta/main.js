@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildShirt, girth, DEFAULTS, flattenPrint } from './shirt.js';
-import { buildShorts, besideOffset } from './shorts.js';
+import { buildShorts } from './shorts.js';
 import { poseShirt, POSES } from './pose.js';
 import { makeHanger, makeClipHanger, HangingShirt, RAIL_R } from './drape.js';
 import { WEAVES, weaveTextures, weaveSwatch, makeRibNormalMap, makeFlatDetail, makeMacroMap, MACRO_TILE, makeUVMap } from './fabric.js';
@@ -48,10 +48,8 @@ const SWATCHES = { body: 'c-body', sleeves: 'c-sleeves', collar: 'c-collar', cuf
 const NO_GEO = new THREE.BufferGeometry();
 const CENTER = new THREE.Vector3(0, -0.36, 0);
 const HANG_Y = -0.38; // centro de la vista colgada
-const SHORT_CENTER_Y = -0.48; // centro de la vista con cuerpo y short
-const SHORT_CAM = 1.2; // con el short, la cámara se aleja así
-const SIDE_CENTER_Y = -0.42; // con el short al lado: centro de la vista
-const SIDE_CAM = 1.75; // y alejamiento (entran las dos camisetas con su short)
+const SHORT_CENTER_Y = -0.45; // centro de la vista con cuerpo y short
+const SHORT_CAM = 1.12; // con el short, la cámara se aleja así
 const SHORT_HANG_Y = -0.58; // centro de la vista con broches y short
 const SHORT_HANG_CAM = 1.45;
 const CAM_OFF = new THREE.Vector3(0, 0.08, 2.15); // cámara respecto del centro, de entrada
@@ -797,27 +795,16 @@ function updateLabel() {
 function fitPair() {
   let w = 0;
   let d = 0;
-  let x0 = 0;
-  let x1 = 0;
   for (const g of Object.values(built.geos)) {
     const a = g.attributes.position.array;
     for (let i = 0; i < a.length; i += 3) {
       w = Math.max(w, Math.abs(a[i]));
       d = Math.max(d, Math.abs(a[i + 2]));
-      x0 = Math.min(x0, a[i]);
-      x1 = Math.max(x1, a[i]);
     }
   }
   const M = built.measures;
   if (M.sleeveless && hanging()) w = Math.max(w, girth(M, -M.L) / 4, girth(M, M.pitY) / 4);
   VIEWS[0].gap = w + PAIR_MARGIN;
-  // Con el short al lado, cada par (camiseta y short) va corrido a la
-  // derecha: los dos pares quedan a PAIR_MARGIN y la vista, en su medio.
-  view.pairShift = 0;
-  if (shortSide()) {
-    VIEWS[0].gap = (x1 - x0) / 2 + PAIR_MARGIN;
-    view.pairShift = (x0 + x1) / 2;
-  }
   VIEWS[1].gap = Math.max(0.22, d + 0.06);
   if (turn) turn.gap[1] = VIEWS[turn.view].gap - turn.gap[0];
   else rigs.forEach((rig, j) => (rig.position.x = (j ? 1 : -1) * VIEWS[view.pair].gap));
@@ -828,11 +815,6 @@ function fitPair() {
 // alambre que sube por dentro de la camiseta; no se simula (queda plano y
 // liso).
 const withShort = () => params.short !== false && view.mode !== 'hanger' && !posed() && !isTunic();
-// Con cuerpo va adentro (debajo de la camiseta) o al lado de ella, entero.
-const SHORT_VALUES = { on: true, side: 'side', off: false };
-const SHORT_PARTS = ['legR', 'legL', 'waistR', 'waistL', 'waistLip', 'hemRLip', 'hemLLip'];
-const shortKind = () => (params.short === false ? 'off' : params.short === 'side' ? 'side' : 'on');
-const shortSide = () => withShort() && !hanging() && params.short === 'side';
 // Dónde cuelga el short (borde de arriba y plano del medio): bajo el ruedo de
 // la camiseta colgada (que baja 5 cm, el tank top 8,5).
 const shortHang = (M) => ({ top: -M.L - (M.deepNeck ? 0.085 : 0.05) - SHORT_DROP, z: -0.008 });
@@ -846,7 +828,7 @@ function rebuild() {
   for (const k of ['sleeveL', 'sleeveR', 'cuffL', 'cuffR', 'cuffLLip', 'cuffRLip']) meshes[k].castShadow = twins[k].castShadow = !posed();
   let shortClips = null;
   if (withShort()) {
-    if (view.mode === 'body') Object.assign(built.geos, buildShorts(built.measures, null, { beside: shortSide() }));
+    if (view.mode === 'body') Object.assign(built.geos, buildShorts(built.measures));
     else {
       const h = buildShorts(built.measures, shortHang(built.measures));
       Object.assign(built.geos, h.geos);
@@ -867,9 +849,6 @@ function rebuild() {
     if (mesh.geometry !== NO_GEO) mesh.geometry.dispose();
     mesh.geometry = twins[k].geometry = built.geos[k] || NO_GEO;
     mesh.visible = twins[k].visible = !!built.geos[k];
-    // Short al lado: en la de espalda (dada vuelta) también a la derecha de
-    // la camiseta.
-    twins[k].position.x = shortSide() && SHORT_PARTS.includes(k) ? -2 * besideOffset(built.measures).x : 0;
   }
   buildTape();
   buildLabel();
@@ -1025,7 +1004,7 @@ function syncControls() {
   document.getElementById('depth-control').hidden = tank;
   document.getElementById('neckDepth-control').hidden = !tank;
   depthButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.depth === params.neckDepth)));
-  shortButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.short === shortKind())));
+  shortButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.short === (params.short === false ? 'off' : 'on'))));
   document.getElementById('short-control').hidden = view.mode === 'hanger' || posed() || isTunic();
   document.getElementById('slit-control').hidden = !isTunic();
   modeButtons.forEach((b) => (b.hidden = unhung() && !['body', 'pose'].includes(b.dataset.mode)));
@@ -1072,14 +1051,14 @@ neckButtons.forEach((b) =>
     scheduleRebuild();
   }),
 );
-// Short: con cuerpo, adentro (debajo de la camiseta) o al lado de ella,
-// entero; o sin short.
+// Short: con cuerpo, debajo de la camiseta. (Al lado de ella, entero, se
+// veía muy grande: Demian lo prefiere abajo.)
 const shortButtons = [...document.querySelectorAll('[data-short]')];
 shortButtons.forEach((b) =>
   b.addEventListener('click', () => {
-    const v = SHORT_VALUES[b.dataset.short];
-    if (shortKind() === b.dataset.short) return;
-    params.short = v;
+    const on = b.dataset.short === 'on';
+    if ((params.short !== false) === on) return;
+    params.short = on;
     syncControls();
     rebuild();
     renderSlots();
@@ -2358,10 +2337,6 @@ function homePose() {
   if (isTunic()) {
     const target = new THREE.Vector3(0, -params.length / 2 - 0.02, 0);
     return { target, position: target.clone().addScaledVector(CAM_OFF, TUNIC_CAM * (params.length + 0.06)) };
-  }
-  if (shortSide()) {
-    const target = new THREE.Vector3(view.pairShift || 0, SIDE_CENTER_Y, 0);
-    return { target, position: target.clone().addScaledVector(CAM_OFF, SIDE_CAM) };
   }
   const y = body ? (short ? SHORT_CENTER_Y : CENTER.y) : short ? SHORT_HANG_Y : HANG_Y;
   const target = new THREE.Vector3(0, y, 0);

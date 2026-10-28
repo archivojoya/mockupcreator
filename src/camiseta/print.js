@@ -17,10 +17,10 @@ export const PIECES = [
   { key: 'cuffL', w: 500, h: 50, ax: 250, ay: 10 },
   { key: 'collar', w: 1240, h: 75, ax: 620, ay: 65 },
   // Short: cada pierna con su cintura (el anclaje es la cintura en el
-  // costado; arriba, la cintura y el tiro, que sube 9 cm hacia atrás como en
-  // el molde). Con el dobladillo, 74 × 59 cm.
-  { key: 'legR', w: 780, h: 610, ax: 390, ay: 100 },
-  { key: 'legL', w: 780, h: 610, ax: 390, ay: 100 },
+  // costado; arriba, la cintura y el tiro, que sube 7 cm hacia atrás como en
+  // el molde). La pieza, 67 × 47 cm.
+  { key: 'legR', w: 720, h: 510, ax: 360, ay: 90 },
+  { key: 'legL', w: 720, h: 510, ax: 360, ay: 90 },
 ];
 // Piezas que llevan el mismo estampado que otra (la cintura del short, el
 // de su pierna).

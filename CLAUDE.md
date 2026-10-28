@@ -81,6 +81,15 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   ruedo), los bordes limpios, el ruedo termina en ellos (antes doblaba hacia
   arriba con su pespunte y parecía cosido para arriba) y la costura del
   costado empieza arriba del corte; sin presilla.
+- **Short nuevo** (28 de octubre), del molde de Demian (`moldes/short/`,
+  una pieza por pierna, 63 cm de alto): 50 cm de costado, tiro de 30,
+  entrepierna de 20, 108 de cadera, la pierna de 73 a 64 cm de vuelta.
+  Demian: el elástico frunce la tela; el dobladillo igual que el de la
+  camiseta (la misma tela, sin otro color); sin cordón; con cuerpo «un
+  poco más adentro de la camiseta». Dos opciones, adentro y al lado
+  (`referencias/short-elastico.png`): «mandame captura y yo decido; podría
+  ser que el de con cuerpo quede al lado y el de movimiento adentro».
+  Falta: las piernas en la zancada.
 - **La vara:** una prenda en 3D tiene que salir más rápido que el mockup a
   mano. Si no, no está lista.
 - **Descartado:** coser los moldes SVG en Blender (artifact «Molde a 3D
@@ -95,17 +104,6 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   propia remera, con el diseño del pedido estampado encima, grabado como
   video. No es la camiseta de producción puesta en otro cuerpo: con las
   proporciones de un dibujo no calzaría.
-- **Short con elástico** (`referencias/short-elastico.png`, Demian: «una
-  forma muy acertada»). Se muestra al lado de la camiseta, no debajo: se ve
-  entero, con la cintura. Contra el nuestro (`shorts.js`), las proporciones
-  se parecen (entrepierna al 60 % del largo, el nuestro 62 %; ruedo 8 % más
-  ancho que la cadera, el nuestro 10 %; unos 4 cm entre las piernas en el
-  ruedo, como el nuestro). Lo distinto: la cintura elástica fruncida (dos o
-  tres canales) con pliegues suaves que bajan derechos de ella; un poco más
-  largo (de la cintura al ruedo, 1,4 veces el ancho de la cintura visto de
-  frente; el nuestro, 40 cm, 1,2 veces); el ruedo apenas caído hacia
-  afuera.
-
 ## Nombres compartidos con escalado
 
 Los scripts de Illustrator de `archivojoya/escalado` leen las piezas por

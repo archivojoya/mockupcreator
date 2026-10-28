@@ -121,26 +121,34 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     cuerpo o en movimiento (la caída colgada se fija aparte) y sin short.
   Sin mangas se ocultan el largo, la apertura, el puño y el color de las
   mangas, y sus piezas en la personalización.
-- **Short** (`src/camiseta/shorts.js`): con cuerpo, un short de fútbol debajo
-  de la camiseta (con cualquier prenda; se apaga con **Sin short**). Dos
-  piernas, cada una de una sola pieza: la tela da la vuelta desde la costura
-  del tiro de adelante, por afuera, hasta la de atrás, y debajo de la
-  entrepierna esas dos costuras se juntan (la de la entrepierna). Cada fila
-  es una superelipse: arriba la cadera entera (cada pierna, su mitad); en los
-  7 cm de arriba de la entrepierna se corre hacia afuera y se achica con el
-  borde de afuera derecho, hasta tocar el medio justo en la entrepierna; más
-  abajo, cada pierna sola, separadas 4 cm en el ruedo y 10 % más anchas que
-  la cadera. Cintura en -53 cm (la tapa la camiseta), entrepierna en -78 y
-  ruedo en -93 (39 cm de costado). Debajo de la camiseta la cadera queda al
-  menos 5 mm adentro de su tela en su parte más angosta (si no, asoma); al
-  salir del ruedo se ensancha en 3 cm hasta casi su ancho. El ruedo es como
-  el puño de la manga (las 4 filas de abajo, 2,2 cm, apoyadas 1,2 mm por
-  fuera, con su dobladillo) y la cintura elástica, las 7 de arriba (3,9 cm).
-  Colores: pierna 1 (la derecha de quien lo lleva), pierna 2, ruedo 1 y
-  ruedo 2; cada mitad de la cintura, del color de su pierna. Estampado: un
-  molde por pierna (con su cintura), visto de afuera, con el anclaje en la
-  cintura en el costado; una imagen que se llame «pierna 1», «pierna
-  derecha» o «leg 1» va a la pierna 1 (sin número, a las dos). Con el short
+- **Short** (`src/camiseta/shorts.js`), del molde de Demian
+  (`moldes/short/`): 50 cm de costado, tiro de 30, entrepierna de 20, 108 cm
+  de cadera, cada pierna de 73 cm de vuelta en la entrepierna y 64 en el
+  ruedo. Con cuerpo va **Adentro** (debajo de la camiseta, que lo tapa
+  desde la cintura, en -48 cm, 14 cm adentro) o **Al lado** (entero, a la
+  derecha de la camiseta, con la cintura a media camiseta: abajo de la
+  manga), o **Sin short**; con cualquier prenda. Dos piernas, cada una de una
+  sola pieza: la tela da la vuelta desde la costura del tiro de adelante,
+  por afuera, hasta la de atrás, y debajo de la entrepierna esas dos
+  costuras se juntan (la de la entrepierna). Cada fila es una superelipse:
+  arriba la cadera entera (cada pierna, su mitad); en los 11 cm de arriba de
+  la entrepierna se corre hacia afuera y se achica, hasta tocar el medio
+  justo en la entrepierna; más abajo, cada pierna sola (más honda que
+  ancha: el muslo y la cola), separadas 2 cm en el ruedo; visto de frente
+  el costado baja de la cadera al ruedo apenas abierto. La cintura elástica
+  (las 7 filas de arriba, 3,9 cm, con dos canales) junta la tela: más
+  angosta que la cadera, con un frunce fino, y debajo pliegues suaves que
+  bajan derechos y se apagan en 14 cm. Abajo, el dobladillo como el de la
+  camiseta: la misma tela, con doble pespunte. Adentro, debajo de la
+  camiseta queda al menos 5 mm adentro de su tela (hoy 6,6 con la camiseta
+  de 82 cm; ahí no hay frunce, que no se ve y la haría asomar) y al salir de
+  su ruedo se abre en 9 cm hasta su ancho. Colores: pierna 1 (la derecha de
+  quien lo lleva) y pierna 2; cada mitad de la cintura y cada dobladillo,
+  del color de su pierna. Estampado: un molde por pierna (con su cintura,
+  74 × 59 cm, el tiro sube 9 cm hacia atrás como en el molde), visto de
+  afuera, con el anclaje en la cintura en el costado; una imagen que se
+  llame «pierna 1», «pierna derecha» o «leg 1» va a la pierna 1 (sin
+  número, a las dos). Con el short
   la vista baja y se aleja un poco. En la percha no va. Con broches cuelga
   debajo de la camiseta (9,5 cm bajo su ruedo colgado), de su propia barra
   con dos broches que aprietan la cintura a 1,6 cm de cada costado (el

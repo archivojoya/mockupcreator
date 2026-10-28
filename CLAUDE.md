@@ -86,16 +86,21 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   entrepierna de 20, 108 de cadera, la pierna de 73 a 64 cm de vuelta.
   Demian: el elástico frunce la tela; el dobladillo igual que el de la
   camiseta (la misma tela, sin otro color); sin cordón. Visto (28 de
-  octubre): «las caderas tienen que estar tapadas por la remera» (al salir
-  de ella el short no pasa del 95 % de su ruedo: achicado a la camiseta, un
-  M, 92 de cadera); «se ve como dividido a la mitad, cambia la textura desde
-  el tiro hacia abajo» (el frente liso por el medio hasta la curva del tiro
-  y la malla sin arruga en la entrepierna); «lo veo largo desde abajo del
-  tiro, le sacaría unos 10 centímetros» (entrepierna de 10); «no me gustan
+  octubre): «las caderas tienen que estar tapadas por la remera»; «se ve
+  como dividido a la mitad, cambia la textura desde el tiro hacia abajo» (el
+  frente liso por el medio hasta la curva del tiro y la malla sin arruga en
+  la entrepierna); «lo veo largo desde abajo del tiro, le sacaría unos 10
+  centímetros» (entrepierna de 10: el largo, «bastante bien»); «no me gustan
   los pliegues que le haces al tiro, el que te mandé es más liso» (sólo el
   frunce del elástico); al lado de la camiseta «se ve muy grande»: va
   debajo. Le gustan el elástico y la forma («antes se veía aplastado»).
-  Falta: las piernas en la zancada.
+  Achicado al 95 % del ruedo de la camiseta quedaba «un espacio» a los
+  costados: va pegado a ella, «como si fueran exactamente del mismo ancho,
+  pero el short queda por adentro», unos milímetros (su contorno, con las
+  ondas de la camiseta); «que caiga recto y ya» (sin curva al costado ni
+  pliegue de perfil). La remera femenina, sin short: el de mujer es otro
+  molde, «más corto, estilo los masculinos de rugby, y un poquito más ancho
+  de cada pierna». Falta: las piernas en la zancada.
 - **La vara:** una prenda en 3D tiene que salir más rápido que el mockup a
   mano. Si no, no está lista.
 - **Descartado:** coser los moldes SVG en Blender (artifact «Molde a 3D
@@ -176,10 +181,13 @@ Es un mockup: manda cómo se ve, no la física exacta.
   los dobleces de verdad. Es el primer recurso contra arrugas: endurecer la
   flexión o ablandar el apoyo en la madera las empeoraba o no la dejaba
   quieta.
-- Una prenda que va debajo de otra (el short bajo la camiseta) entra con
-  margen en la parte más angosta de la de arriba: medir por rayos que no
-  asome (hoy ≥ 5 mm). Lo que se arregla sólo para que no asome no cambia el
-  molde (sale de la pieza sin ese arreglo).
+- Una prenda que va debajo de otra (el short bajo la camiseta) va pegada a
+  ella, del mismo ancho y apenas adentro (si no, se ve el escalón): medir
+  contra la malla de verdad, con sus ondas y su dobladillo, el radio de la
+  de arriba en el mismo ángulo (interpolado: cerca de los costados cambia 2
+  mm por grado) y altura (hoy ≥ 1 mm del dobladillo). Lo que se arregla
+  sólo para que no asome no cambia el molde (sale de la pieza sin ese
+  arreglo).
 - Si el pedido viene dibujado, pasar el trazo a medidas y superponerlo a la
   prenda en 2D antes de renderizar.
 

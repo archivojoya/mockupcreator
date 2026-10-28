@@ -813,8 +813,9 @@ function fitPair() {
 // El short va con cuerpo o con broches (en la percha no va). Con broches
 // cuelga debajo de la camiseta de su propia barra con dos broches, de un
 // alambre que sube por dentro de la camiseta; no se simula (queda plano y
-// liso).
-const withShort = () => params.short !== false && view.mode !== 'hanger' && !posed() && !isTunic();
+// liso). El remerón y la remera femenina van sin short (el de mujer es otro
+// molde: más corto y un poco más ancho de pierna).
+const withShort = () => params.short !== false && view.mode !== 'hanger' && !posed() && !noShort();
 // Dónde cuelga el short (borde de arriba y plano del medio): bajo el ruedo de
 // la camiseta colgada (que baja 5 cm, el tank top 8,5).
 const shortHang = (M) => ({ top: -M.L - (M.deepNeck ? 0.085 : 0.05) - SHORT_DROP, z: -0.008 });
@@ -1005,7 +1006,7 @@ function syncControls() {
   document.getElementById('neckDepth-control').hidden = !tank;
   depthButtons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.depth === params.neckDepth)));
   shortButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.short === (params.short === false ? 'off' : 'on'))));
-  document.getElementById('short-control').hidden = view.mode === 'hanger' || posed() || isTunic();
+  document.getElementById('short-control').hidden = view.mode === 'hanger' || posed() || noShort();
   document.getElementById('slit-control').hidden = !isTunic();
   modeButtons.forEach((b) => (b.hidden = unhung() && !['body', 'pose'].includes(b.dataset.mode)));
   document.getElementById('pose-control').hidden = !posed();
@@ -1085,6 +1086,7 @@ const GARMENT_NAMES = { ftee: 'Remera femenina', tank: 'Tank top', tunic: 'Remer
 const garmentOf = () => (params.garment in GARMENT_NAMES ? params.garment : 'tee');
 const sleeveless = () => garmentOf() === 'tank';
 const isTunic = () => garmentOf() === 'tunic';
+const noShort = () => ['ftee', 'tunic'].includes(garmentOf());
 // Prendas nuevas: hasta que se fije su caída colgada, con cuerpo o en
 // movimiento.
 const unhung = () => ['ftee', 'tunic'].includes(garmentOf());

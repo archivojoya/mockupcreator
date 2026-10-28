@@ -928,6 +928,9 @@ function torsoFolds(M, x, y, z, th, armpits) {
   d += 0.0009 * noise3(x * 18, y * 18, z * 18);
   return d;
 }
+// Lo mismo lejos de las axilas (el short, debajo de la camiseta, sigue sus
+// ondas para quedar a la misma distancia de su tela).
+export const torsoFold = (M, x, y, z, th) => torsoFolds(M, x, y, z, th, []);
 
 // ---------- utilidades de malla ----------
 

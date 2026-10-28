@@ -122,60 +122,59 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
   Sin mangas se ocultan el largo, la apertura, el puño y el color de las
   mangas, y sus piezas en la personalización.
 - **Short** (`src/camiseta/shorts.js`), del molde de Demian
-  (`moldes/short/`, un L: tiro de 30, adelante liso hasta la entrepierna),
-  achicado a la camiseta: 92 cm de cadera, cada pierna de 62 cm de vuelta en
-  la entrepierna y 59 en el ruedo, y la entrepierna de 10 cm (Demian: «lo
-  veo largo desde abajo del tiro, le sacaría unos 10 centímetros»): 40 cm
-  de costado. Con cuerpo va debajo de la camiseta, que tapa la cintura (en
-  -48 cm, 14 cm adentro) y las caderas: al salir de su ruedo el short no
-  pasa del 95 % de él (con el ancho del molde las caderas asomaban a los
-  costados); con una camiseta más angosta, el short entero se achica.
-  **Con short** o **Sin short**. (Al lado de la camiseta, entero, se probó
-  y se veía muy grande.) Dos piernas, cada una de una sola pieza: la
-  tela da la vuelta desde la costura del tiro de adelante, por afuera, hasta
-  la de atrás, y debajo de la entrepierna esas dos costuras se juntan (la de
-  la entrepierna). Cada fila es una superelipse con el lado de afuera y el
-  de adentro distintos: arriba la cadera entera (cada pierna, su mitad); en
-  los 11 cm de arriba de la entrepierna el centro de cada pierna se corre
-  hacia afuera con el costado derecho, y el lado de adentro es plano, así el
-  frente sigue derecho por el medio hasta los últimos 6 cm, la curva del
-  tiro, donde la costura del medio va hacia atrás hasta la entrepierna (con
-  el lado de adentro redondo se hundía en una V desde arriba y el short se
-  veía partido a la mitad); más abajo, cada pierna sola (más honda que
-  ancha: el muslo y la cola), separadas 2 cm en el ruedo; visto de frente
-  el costado baja de la cadera al ruedo apenas abierto, y el hondo de la
-  pierna cambia suave en la entrepierna. Las columnas de la malla: la del
-  medio en el costado y, hacia cada costura, a una distancia que cambia
-  suave de fila en fila; lo que sobra (la vuelta de la pierna, más larga que
-  la mitad de la cadera) lo toman las columnas más cerca de las costuras,
-  como la extensión del tiro en el molde (repartidas parejo, al cerrarse la
-  pierna todas se corrían de golpe y marcaban una arruga a lo ancho). La
-  cintura elástica (las 7 filas de arriba, 3,9 cm, con dos canales) junta
-  la tela: más angosta que la cadera, con un frunce fino; abajo, el short
-  liso (sin los pliegues que bajaban al tiro). Abajo, el dobladillo como el
-  de la camiseta: la misma tela, con doble pespunte. Debajo de la camiseta
-  sigue su forma a cada altura y queda al menos 5 mm adentro de su tela (hoy
-  5,6 con la femenina; ahí no hay frunce, que no se ve y la haría asomar);
-  debajo de una camiseta larga, las piernas se achican un 10 %. Colores:
-  pierna 1 (la derecha de quien lo lleva) y pierna 2; cada mitad de la
-  cintura y cada dobladillo, del color de su pierna. Estampado: un molde por
-  pierna (con su cintura, 67 × 47 cm, el tiro sube 7 cm hacia atrás como en
-  el molde), visto de afuera, con el anclaje en la cintura en el costado;
-  una imagen que se llame «pierna 1», «pierna derecha» o «leg 1» va a la
-  pierna 1 (sin número, a las dos). Con el short la vista baja y se aleja
-  un poco. En la percha no va. Con broches cuelga debajo de la camiseta (9,5
-  cm bajo su ruedo colgado), de su propia barra con dos broches que aprietan
-  la cintura a 1,6 cm de cada costado (el elástico a la vista); la barra
-  cuelga de un alambre que sube por dentro de la camiseta, en el medio entre
-  el frente y la espalda. No se simula: es una forma fija, plana con algo de
-  volumen, como en una foto de producto. Cada fila mide lo mismo que en la
-  pieza (el estampado no se deforma): hasta la entrepierna, con el ancho de
-  la tela plana y 1,2 cm de volumen (el costado se abre de la cintura a la
-  cadera); de ahí al ruedo se abre suave un 16 % y lo que sobra lo toma el
-  volumen, que no baja del de la cadera (la pierna da más vuelta que la
-  mitad de la cadera y cuelga como un tubo achatado; con el costado derecho
-  desde la cintura el volumen iba y venía y el short se veía en franjas).
-  Ancho y volumen se promedian fila a fila.
+  (`moldes/short/`: tiro de 30, adelante liso hasta la entrepierna) con la
+  entrepierna de 10 cm (Demian: «lo veo largo desde abajo del tiro, le
+  sacaría unos 10 centímetros»): 40 cm de costado. Con cuerpo va debajo de
+  la camiseta (la cintura en -48 cm, 14 cm adentro), del mismo ancho que
+  ella y apenas adentro, y cae derecho (Demian: «como si fueran exactamente
+  del mismo ancho, pero el short queda por adentro»; «que caiga recto y
+  ya»): su contorno es el de la camiseta a cada altura (debajo de su ruedo,
+  el del ruedo) 3,6 mm más adentro, con las mismas ondas suaves de su caída
+  (`torsoFold` de `shirt.js`: ±4 mm, más con calce holgado), que debajo del
+  ruedo se apagan en 4 cm. Así queda a 1,1 mm del dobladillo de la camiseta
+  (que va 2,4 mm hacia adentro) en todo el contorno y con cualquier calce y
+  largo, medido contra la malla de verdad; de afuera casi no se ve escalón.
+  **Con short** o **Sin short**; el remerón y la remera femenina van sin
+  short (el de mujer es otro molde, más corto y un poco más ancho de
+  pierna). (Al lado de la camiseta, entero, se probó y se veía muy grande.)
+  Dos piernas, cada una de una sola pieza: la tela da la vuelta desde la
+  costura del tiro de adelante, por afuera, hasta la de atrás, y debajo de
+  la entrepierna esas dos costuras se juntan (la de la entrepierna). Cada
+  pierna es la mitad del contorno, y del lado de adentro la cierra una pared
+  (la tela de la entrepierna) que dobla hacia atrás a 2 cm del medio: de
+  frente y de costado no cambia nada de arriba abajo, sólo aparece la raya
+  entre las piernas, que en el ruedo se separan 2 cm (con cada pierna
+  redonda, el costado se curvaba y de perfil hacía un pliegue). En los
+  últimos 6 cm arriba de la entrepierna, la curva del tiro lleva la costura
+  del medio hacia atrás. Las columnas de la malla: la del medio en el
+  costado y, hacia cada costura, a una distancia que cambia suave de fila en
+  fila; lo que sobra (la vuelta de la pierna, más larga que la mitad de la
+  cadera) lo toman las columnas más cerca de las costuras, como la extensión
+  del tiro en el molde (repartidas parejo, al cerrarse la pierna todas se
+  corrían de golpe y marcaban una arruga a lo ancho). La cintura elástica
+  (las 7 filas de arriba, 3,9 cm, con dos canales) junta la tela: más
+  angosta, con un frunce fino; abajo, el short liso (sin los pliegues que
+  bajaban al tiro). Abajo, el dobladillo como el de la camiseta: la misma
+  tela, con doble pespunte. Colores: pierna 1 (la derecha de quien lo lleva)
+  y pierna 2; cada mitad de la cintura y cada dobladillo, del color de su
+  pierna. Estampado: un molde por pierna (con su cintura, 66 × 47 cm; con
+  calce holgado, 82 × 49; el tiro sube 7 cm hacia atrás), visto de afuera,
+  con el anclaje en la cintura en el costado; una imagen que se llame
+  «pierna 1», «pierna derecha» o «leg 1» va a la pierna 1 (sin número, a
+  las dos). Con el short la vista baja y se aleja un poco. En la percha no
+  va. Con broches cuelga debajo de la camiseta (9,5 cm bajo su ruedo
+  colgado), de su propia barra con dos broches que aprietan la cintura a 1,6
+  cm de cada costado (el elástico a la vista); la barra cuelga de un alambre
+  que sube por dentro de la camiseta, en el medio entre el frente y la
+  espalda. No se simula: es una forma fija, plana con algo de volumen, como
+  en una foto de producto. Cada fila mide lo mismo que en la pieza (el
+  estampado no se deforma): hasta la entrepierna, con el ancho de la tela
+  plana y 1,2 cm de volumen (el costado se abre de la cintura a la cadera);
+  de ahí al ruedo baja derecho y lo que sobra lo toma el volumen, que no
+  baja del de la cadera (la pierna da más vuelta que la mitad de la cadera y
+  cuelga como un tubo achatado; con el costado derecho desde la cintura el
+  volumen iba y venía y el short se veía en franjas). Ancho y volumen se
+  promedian fila a fila.
 - **Forma**: calce (ajustado, regular, holgado), largo, largo de manga, apertura
   de mangas, puño (con puño, o sin puño: la manga sigue hasta el borde con su
   color y su diseño, sin costura), cuello (redondo o en V) y profundidad del

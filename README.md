@@ -112,10 +112,13 @@ ve flotando con volumen, como puesta en un cuerpo invisible.
     menos. En cada costado, una abertura
     (**Abertura al costado**, de 0 a 30 cm, de entrada 20): ahí frente y
     espalda no están cosidos, cada pieza se angosta un poco alrededor del
-    cuerpo y los bordes se separan (nada arriba, 2,4 cm en el ruedo); cada
-    borde lleva el dobladillo del ruedo y su pespunte, y la costura del
-    costado termina donde empieza la abertura. Por ahora sólo con cuerpo (la
-    caída colgada se fija aparte) y sin short.
+    cuerpo y los bordes se separan en línea recta, un triángulo (nada
+    arriba, 4,8 cm en el ruedo). Primero el corte y después la costura: los
+    bordes del corte quedan limpios, el dobladillo del ruedo y su pespunte
+    corren por abajo de cada pieza y terminan en el borde, y la costura del
+    costado empieza arriba del corte. El molde de estampado sale de la pieza
+    sin abrir (abierta se angosta abajo): un diseño cae como en la tela. Con
+    cuerpo o en movimiento (la caída colgada se fija aparte) y sin short.
   Sin mangas se ocultan el largo, la apertura, el puño y el color de las
   mangas, y sus piezas en la personalización.
 - **Short** (`src/camiseta/shorts.js`): con cuerpo, un short de fútbol debajo

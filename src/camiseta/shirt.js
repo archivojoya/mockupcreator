@@ -125,8 +125,7 @@ const TUNIC = {
   flareB: 0.0033,
   folds: 9, // pliegues alrededor (del ruedo a la cadera)
   fold: 0.009, // y su hondo en el ruedo
-  slitOpen: 0.05, // cuánto se separa cada borde de la abertura en el ruedo (radianes alrededor del cuerpo)
-  slitLip: 0.022, // dobladillo de los bordes de la abertura (como el del ruedo)
+  slitOpen: 0.147, // cuánto se separa cada borde de la abertura en el ruedo (radianes alrededor del cuerpo: unos 5 cm entre los bordes)
 };
 export function measures(p) {
   const f = p.fit;
@@ -586,11 +585,14 @@ function buildTorso(M) {
   };
   // Abertura del remerón: en cada costado, del ruedo hasta `slit` más arriba,
   // frente y espalda dejan de estar cosidos. Cada pieza se angosta un poco
-  // alrededor del cuerpo (parejo en toda la fila) y sus bordes se separan:
-  // nada arriba (la abertura cierra sin escalón) y más hacia el ruedo.
+  // alrededor del cuerpo (parejo en toda la fila) y sus bordes se separan en
+  // línea recta: un triángulo, cerrado arriba y de unos 5 cm en el ruedo
+  // (Demian: «primero el corte y después la costura»; curvo, casi no se abría
+  // hasta abajo). El molde de estampado sale de la pieza sin abrir (ver
+  // flattenPrint).
   const slit = M.flare ? M.flare.slit : 0;
   const tSlit = slit / M.L; // en el costado el escote no baja: y = -L + t·L
-  const slitOpen = (t) => (t < tSlit ? TUNIC.slitOpen * ((tSlit - t) / tSlit) ** 1.5 : 0);
+  const slitOpen = (t) => (t < tSlit ? (TUNIC.slitOpen * (tSlit - t)) / tSlit : 0);
   const panels = {};
   for (const key of ['front', 'back']) {
     const th0 = key === 'front' ? -Math.PI / 2 : Math.PI / 2;
@@ -1262,13 +1264,12 @@ export function buildShirt(params) {
   // ---------- dobladillos (espesor de la tela en ruedo y puños) ----------
   if (torso.slitRows) {
     // Con abertura (remerón), el ruedo son dos tiras sueltas, una por pieza,
-    // y cada borde de la abertura lleva el mismo dobladillo, del ruedo hasta
-    // la primera fila cosida.
+    // que terminan en los bordes del corte: no suben por ellos (subiendo
+    // parecía cosida hacia arriba).
     const lips = [];
     for (const key of ['front', 'back']) {
       const p = panels[key].pos;
       lips.push(buildLip(Array.from({ length: COLS + 1 }, (_, j) => [p, j, W + j]), 0.022, false, true));
-      for (const [j, k] of [[0, 1], [COLS, COLS - 1]]) lips.push(buildLip(Array.from({ length: torso.slitRows + 1 }, (_, i) => [p, i * W + j, i * W + k]), TUNIC.slitLip, false, true));
     }
     parts.hem = mergeParts(lips);
   } else {
@@ -1442,12 +1443,16 @@ export function flattenPrint(built, prev = null) {
   // Con otro cuello el molde es el de la camiseta de referencia (la misma, con
   // el escote redondo de referencia), cortado: un diseño cae igual con
   // cualquier cuello. Esa camiseta se aplana una vez y sirve para todos.
-  const prevRef = prev && prev.cut ? prev.ref : prev;
-  if (built.cut) {
-    const rp = { ...built.params, neckStyle: 'round', neckDepth: NECK_REF };
+  // Con abertura (remerón), lo mismo con la pieza sin abrir: abierta se
+  // angosta abajo, y el molde tiene que ser el de la tela (rectangular).
+  const prevRef = prev && prev.ref ? prev.ref : prev;
+  const slit = built.measures.flare?.slit > 0;
+  if (built.cut || slit) {
+    const rp = { ...built.params, neckStyle: 'round', neckDepth: NECK_REF, slit: 0 };
     const ref = prevRef && prevRef.flatPrint && refKey(prevRef.params) === refKey(rp) ? prevRef : buildShirt(rp);
     flattenPrint(ref, prevRef);
-    cutMold(built, ref);
+    if (built.cut) cutMold(built, ref);
+    else for (const key of ['front', 'back']) built.geos[key].attributes.uv1.array.set(ref.geos[key].attributes.uv1.array);
     built.ref = ref;
     built.flatPrint = true;
     return;
@@ -2042,7 +2047,8 @@ function zoneMarks(parts, M, W) {
 // sigue, con la costura de abajo del brazo, hasta el borde. En V, la tira
 // lleva una costura en la punta (`vTip`, su columna). Con abertura en los
 // costados (las primeras `slitRows` filas del torso), ahí el costado no es
-// costura sino borde: el pespunte del ruedo sube por él.
+// costura sino borde, limpio: el pespunte del ruedo corre por abajo y
+// termina en él.
 function seamMarks(parts, N, W, noCuff = false, vTip = -1, slitRows = 0) {
   const set = (part, f) => {
     const n = part.pos.length / 3;
@@ -2081,7 +2087,7 @@ function seamMarks(parts, N, W, noCuff = false, vTip = -1, slitRows = 0) {
             if (dd < d) d = dd;
           }
       }
-      return [d, open ? Math.min(uvs[v * 2 + 1], side) : uvs[v * 2 + 1]];
+      return [d, uvs[v * 2 + 1]];
     });
   }
   for (const key of ['sleeveL', 'sleeveR']) {

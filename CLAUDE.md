@@ -76,7 +76,11 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   con las medidas del molde FXL (`moldes/worship/`, casi recto, 97 de largo,
   manga de 24 sin puño) y a Demian le gustaba menos: la forma sale de las
   fotos. Que un diseño hecho sobre el molde caiga justo se resuelve en el
-  estampado, sin cambiar la forma.
+  estampado, sin cambiar la forma. La abertura (28 de octubre): «primero el
+  corte y después la costura». Un triángulo de bordes rectos (4,8 cm en el
+  ruedo), los bordes limpios, el ruedo termina en ellos (antes doblaba hacia
+  arriba con su pespunte y parecía cosido para arriba) y la costura del
+  costado empieza arriba del corte; sin presilla.
 - **La vara:** una prenda en 3D tiene que salir más rápido que el mockup a
   mano. Si no, no está lista.
 - **Descartado:** coser los moldes SVG en Blender (artifact «Molde a 3D

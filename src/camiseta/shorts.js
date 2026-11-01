@@ -10,20 +10,22 @@
 // (y = 0 en el hombro, z hacia el frente).
 import * as THREE from 'three';
 import { buildLip, computeNormals, weldNormals, gridIndex, gridUV, orient, torsoFold } from './shirt.js';
+import { hangShortLeg } from './shortdrape.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smooth = (t) => t * t * (3 - 2 * t);
 const spow = (v, e) => Math.sign(v) * Math.abs(v) ** e;
 
-// Alturas: cintura, entrepierna y ruedo (la camiseta de 62 cm termina en
-// -0,62: el short entra 14 cm debajo de ella).
-export const SHORT = { waist: -0.48, crotch: -0.78, hem: -0.88 };
+// Alturas: cintura, entrepierna y ruedo. La camiseta de 62 cm termina en
+// -0,62: el short entra 20 cm debajo de ella y se ven 10 de cadera y 10 de
+// piernas (Demian: «si son 26 ahora, podemos hacerlo en 20»).
+export const SHORT = { waist: -0.42, crotch: -0.72, hem: -0.82 };
 const ROWS = 72; // filas, del ruedo a la cintura (de 5,6 mm)
 const COLS = 160; // columnas de cada pierna, de la costura de adelante a la de atrás (las del frunce, de 3 mm)
 const WAIST_ROWS = 7; // filas de la cintura (3,9 cm)
-const CROTCH_SPAN = 0.11; // cuánto más arriba de la entrepierna empiezan a separarse las piernas
-const HEM_GAP = 0.02; // entre las dos piernas, en el ruedo
+const CROTCH_SPAN = 0.07; // cuánto más arriba de la entrepierna empiezan a separarse las piernas
+const HEM_GAP = 0.012; // entre las dos piernas, en el ruedo
 // El contorno: el de la camiseta a cada altura (debajo de su ruedo, el del
 // ruedo), MARGIN más adentro, con las mismas ondas suaves de su caída (ver
 // followShirt). Su dobladillo va 2,4 mm hacia adentro: así no se traspasan,
@@ -35,15 +37,16 @@ const FOLD_FADE = 0.04; // debajo del ruedo, las ondas se apagan en esto
 // resto; la tela se abre en WAIST_EASE.
 const WAIST_IN = { a: 0.017, d: 0.012 };
 const WAIST_EASE = 0.09;
-// Cada pierna, la mitad del contorno con el lado de adentro cerrado por una
-// pared (la tela de la entrepierna) que dobla hacia atrás en CORNER: de
-// frente y de costado no cambia nada, sólo aparece la raya del medio. (Con
-// cada pierna redonda, el costado se curvaba y de perfil hacía un pliegue.)
-// Arriba de la entrepierna, la curva del tiro lleva la costura del medio
-// hacia atrás en CROTCH_CURVE.
-const CORNER = 0.02;
+// Arriba, del elástico al tiro, el short es el contorno (cada pierna, su
+// mitad), plano por el medio: sólo se ve la costura. Las piernas son dos
+// cilindros, cada uno de la costura de adentro al costado (Demian: «la parte
+// de abajo, las piernitas, tienen que ser dos cilindros; si no, el interior
+// se ve recto, cuadrado»; con cada pierna cerrada por una pared plana,
+// así se veía). El paso de uno a otro, en los CROTCH_SPAN de arriba de la
+// entrepierna; en los últimos CROTCH_CURVE, la curva del tiro lleva la
+// costura del medio hacia atrás.
 const INNER_N = 2;
-const CROTCH_CURVE = 0.06;
+const CROTCH_CURVE = 0.035;
 const HEM_LIP = 0.022; // dobladillo del ruedo (como el de la camiseta)
 const T_SAMPLES = 480;
 const FLAT = 1e3; // medio ancho de un lado plano
@@ -98,10 +101,10 @@ function followShirt(pos, S, M) {
 // Sección a la altura y: superelipse de centro (sx, 0), medio ancho afuera
 // sa y adentro si, hondo adelante sbF y atrás sbB, exponente afuera n y
 // adentro ni. Arriba es el contorno entero (cada pierna, su mitad); en los
-// CROTCH_SPAN de arriba de la entrepierna el centro se corre CORNER hacia
-// afuera, con el borde de afuera en su lugar, y el lado de adentro llega al
-// medio justo en la entrepierna; más abajo, cada pierna sola, apenas
-// separada de la otra.
+// CROTCH_SPAN de arriba de la entrepierna el centro se corre hacia afuera,
+// con el borde de afuera en su lugar, hasta el del cilindro, y el lado de
+// adentro llega al medio justo en la entrepierna; más abajo, cada pierna un
+// cilindro, apenas separado del otro.
 function section(S, y) {
   const U = S.outline(y);
   const pull = smooth(clamp01((y - (SHORT.waist - WAIST_EASE)) / WAIST_EASE));
@@ -111,48 +114,28 @@ function section(S, y) {
   const s = smooth(clamp01((SHORT.crotch + CROTCH_SPAN - y) / CROTCH_SPAN));
   const b = clamp01((SHORT.crotch - y) / (SHORT.crotch - SHORT.hem));
   const inner = y > SHORT.crotch ? 0 : (HEM_GAP / 2) * b ** 1.2;
-  const sx = inner + CORNER * s;
+  const R = (A - inner) / 2; // radio del cilindro
+  const sx = inner + R * s;
   // La costura del medio, en la curva del tiro: de adelante (q = 1) hacia
   // atrás hasta la entrepierna (q = 0), donde se cierra la pierna; el ancho de
   // adentro `si` hace que el lado de adentro la cruce justo ahí (más arriba,
   // plano: infinito).
   const q = clamp01((y - SHORT.crotch) / CROTCH_CURVE);
   const g = (1 - (1 - (1 - q) ** 2) ** INNER_N) ** (1 / INNER_N);
-  return { sx, oa: A, sa: A - sx, si: g > 1e-4 ? (sx - inner) / g : FLAT, sbF: F, sbB: B, n: S.n, ni: INNER_N };
+  return { sx, sa: A - sx, si: g > 1e-4 ? (sx - inner) / g : FLAT, sbF: lerp(F, R, s), sbB: lerp(B, R, s), n: lerp(S.n, 2, s), ni: INNER_N };
 }
 // Punto de la sección para el ángulo t (π/2 adelante, 0 afuera, -π/2 atrás).
-// (Sin `si` ni `ni`, la superelipse es la misma de los dos lados.) Con `oa`,
-// el lado de afuera es el contorno entero (centrado en 0, medio ancho oa)
-// desde x = sx, y el de adentro baja desde ahí (hondo `innerDepth`): las
-// piernas siguen el contorno de la cadera (corridas, se abultaban en
-// diagonal).
+// (Sin `si` ni `ni`, la superelipse es la misma de los dos lados.)
 function sectionPoint(c, t) {
   const ct = Math.cos(t);
   const st = Math.sin(t);
-  const b = st >= 0 ? c.sbF : c.sbB;
-  if (c.oa !== undefined) {
-    if (ct >= 0) {
-      const e = 2 / c.n;
-      const tc = Math.acos(Math.min(1, c.sx / c.oa) ** (c.n / 2));
-      const u = Math.atan2(Math.abs(st), ct) * (tc / (Math.PI / 2));
-      return [c.oa * Math.cos(u) ** e, Math.sign(st) * b * Math.sin(u) ** e];
-    }
-    const e = 2 / c.ni;
-    return [c.sx + c.si * spow(ct, e), innerDepth(c, b) * spow(st, e)];
-  }
   const e = 2 / (ct >= 0 ? c.n : c.ni ?? c.n);
-  return [c.sx + (ct >= 0 ? c.sa : c.si ?? c.sa) * spow(ct, e), b * spow(st, e)];
+  return [c.sx + (ct >= 0 ? c.sa : c.si ?? c.sa) * spow(ct, e), (st >= 0 ? c.sbF : c.sbB) * spow(st, e)];
 }
-const innerDepth = (c, b) => b * (1 - Math.min(1, c.sx / c.oa) ** c.n) ** (1 / c.n);
 // Hacia afuera de la sección en (sx + dx, dz): su gradiente (sin largo
 // fijo).
 function sectionGrad(c, dx, dz) {
   const b = dz >= 0 ? c.sbF : c.sbB;
-  if (c.oa !== undefined) {
-    if (dx >= 0) return [spow((c.sx + dx) / c.oa, c.n - 1) / c.oa, spow(dz / b, c.n - 1) / b];
-    const bi = innerDepth(c, b);
-    return [spow(dx / c.si, c.ni - 1) / c.si, spow(dz / bi, c.ni - 1) / bi];
-  }
   const a = dx >= 0 ? c.sa : c.si ?? c.sa;
   const n = dx >= 0 ? c.n : c.ni ?? c.n;
   return [spow(dx / a, n - 1) / a, spow(dz / b, n - 1) / b];
@@ -255,11 +238,11 @@ function sampleArc(c, ts, cum, pts = null) {
 // ella (abajo, el short liso, como el molde: los pliegues que bajaban al tiro
 // no le gustaron a Demian). Se mueve cada punto hacia afuera de su sección,
 // según dónde está en la tela (u, v de la pieza), así las dos piernas
-// coinciden en las costuras. `k` achica todo (colgado, el short va plano) y
-// `under(y)`, la camiseta encima: ahí no hay frunce (no se ve y la haría
-// asomar).
+// coinciden en las costuras. `out(v)` es hacia afuera en el punto v, `k`
+// achica todo (colgado, el short va plano) y `under(y)`, la camiseta encima:
+// ahí no hay frunce (no se ve y la haría asomar).
 const GATHER = 0.0028; // hondo del frunce en la cintura
-function gather(pos, W, uv, secOf, z0 = 0, k = 1, under = () => 0) {
+function gather(pos, W, uv, out, k = 1, under = () => 0) {
   const waistV = (WAIST_ROWS / ROWS) * (SHORT.waist - SHORT.hem);
   for (let r = 0; r <= ROWS; r++) {
     for (let j = 0; j < W; j++) {
@@ -274,98 +257,38 @@ function gather(pos, W, uv, secOf, z0 = 0, k = 1, under = () => 0) {
       const ripple = 0.5 + 0.5 * (0.6 * Math.sin((2 * Math.PI * u) / 0.013) + 0.4 * Math.sin((2 * Math.PI * u) / 0.0085 + 1.7));
       const d = k * (1 - under(pos[v * 3 + 1])) * GATHER * band * ripple;
       if (!d) continue;
-      const c = secOf(pos[v * 3 + 1]);
-      const [gx, gz] = sectionGrad(c, pos[v * 3] - c.sx, pos[v * 3 + 2] - z0);
-      const l = Math.hypot(gx, gz) || 1;
+      const [gx, gy, gz] = out(v);
+      const l = Math.hypot(gx, gy, gz) || 1;
       pos[v * 3] += (gx / l) * d;
+      pos[v * 3 + 1] += (gy / l) * d;
       pos[v * 3 + 2] += (gz / l) * d;
     }
   }
 }
 
-// Colgado de broches: plano (el frente sobre la espalda) con algo de volumen,
-// como en una foto de producto, y sin arrugas (no se simula). Cada fila mide
-// lo mismo que puesta: su sección es una superelipse finita (n = 4: caras
-// planas y dobleces redondeados) del ancho que haga falta, con las piernas
-// separadas como puestas.
-const HUNG_N = 4;
-const HUNG_T = 0.012; // medio espesor (el volumen)
-const HUNG_T_WAIST = 0.007; // en la cintura, más finito (el elástico)
-const WAIST_H = (WAIST_ROWS / ROWS) * (SHORT.waist - SHORT.hem);
-function hungSection(y, outer, t = null) {
-  const top = SHORT.crotch + CROTCH_SPAN;
-  const s = smooth(clamp01((top - y) / CROTCH_SPAN));
-  const b = clamp01((SHORT.crotch - y) / (SHORT.crotch - SHORT.hem));
-  const inner = y > SHORT.crotch ? -(1 - s) * outer : (HEM_GAP / 2) * b ** 1.2;
-  if (t === null) t = lerp(HUNG_T, HUNG_T_WAIST, smooth(clamp01((y - (SHORT.waist - 1.6 * WAIST_H)) / (0.6 * WAIST_H))));
-  return { sx: (outer + inner) / 2, sa: (outer - inner) / 2, sbF: t, sbB: t, n: HUNG_N };
-}
-// El ancho de cada fila colgada: de la cintura hasta donde las piernas se
-// empiezan a separar, el de la tela plana con el volumen de siempre (el
-// costado se abre de la cintura a la cadera); de ahí hasta el ruedo, derecho
-// (Demian: «que caiga recto»). Cada fila mide lo mismo que puesta: lo que
-// sobra o falta lo toma el volumen (la pierna, que da más vuelta que la
-// mitad de la cadera, cuelga como un tubo achatado). (Con el costado derecho
-// desde la cintura, el volumen iba y venía y el short se veía en franjas.)
-const HUNG_T_MIN = 0.004;
-const HUNG_T_MAX = 0.07;
-function hungSections(worn, W) {
-  const ts = new Float64Array(T_SAMPLES + 1);
-  const cum = new Float64Array(T_SAMPLES + 1);
-  const rowLen = (r) => {
-    let len = 0;
-    for (let j = 1; j <= COLS; j++) {
-      const a = (r * W + j - 1) * 3;
-      const b = (r * W + j) * 3;
-      len += Math.hypot(worn[b] - worn[a], worn[b + 1] - worn[a + 1], worn[b + 2] - worn[a + 2]);
-    }
-    return len;
+// Hacia afuera de una grilla (de abajo arriba, de la costura de adelante a
+// la de atrás): la normal de la superficie en cada punto.
+function gridNormals(pos, W) {
+  const H = pos.length / 3 / W;
+  const p = (r, j) => Math.min(H - 1, Math.max(0, r)) * W + Math.min(W - 1, Math.max(0, j));
+  return (v) => {
+    const r = Math.floor(v / W);
+    const j = v % W;
+    const a = p(r, j + 1) * 3;
+    const b = p(r, j - 1) * 3;
+    const c = p(r + 1, j) * 3;
+    const d = p(r - 1, j) * 3;
+    const ux = pos[a] - pos[b];
+    const uy = pos[a + 1] - pos[b + 1];
+    const uz = pos[a + 2] - pos[b + 2];
+    const vx = pos[c] - pos[d];
+    const vy = pos[c + 1] - pos[d + 1];
+    const vz = pos[c + 2] - pos[d + 2];
+    // (A lo largo de la fila va de adelante hacia atrás por afuera: con la
+    // subida, la normal mira hacia afuera.)
+    return [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
   };
-  const solve = (lo, hi, f, len) => {
-    for (let k = 0; k < 32; k++) {
-      const mid = (lo + hi) / 2;
-      if (f(mid) < len) lo = mid;
-      else hi = mid;
-    }
-    return (lo + hi) / 2;
-  };
-  const yTop = SHORT.crotch + CROTCH_SPAN;
-  const rTop = Math.round(((yTop - SHORT.hem) / (SHORT.waist - SHORT.hem)) * ROWS);
-  // Costado: recto de la cintura a rTop y de ahí al ruedo.
-  const free = (r) => solve(0.02, 0.6, (o) => sampleArc(hungSection(rowY(r), o), ts, cum), rowLen(r));
-  const widths = Array.from({ length: ROWS + 1 }, (_, r) => (r >= rTop ? free(r) : 0));
-  const oT = widths[rTop];
-  const out = [];
-  for (let r = 0; r <= ROWS; r++) {
-    const y = rowY(r);
-    const len = rowLen(r);
-    const outer = r >= rTop ? widths[r] : oT;
-    const arc = (t) => sampleArc(hungSection(y, outer, t), ts, cum);
-    if (arc(HUNG_T_MIN) > len) out.push(hungSection(y, solve(0.02, outer, (o) => sampleArc(hungSection(y, o, HUNG_T_MIN), ts, cum), len), HUNG_T_MIN));
-    else if (arc(HUNG_T_MAX) < len) out.push(hungSection(y, solve(outer, 0.8, (o) => sampleArc(hungSection(y, o, HUNG_T_MAX), ts, cum), len), HUNG_T_MAX));
-    else out.push(hungSection(y, outer, solve(HUNG_T_MIN, HUNG_T_MAX, arc, len)));
-  }
-  // Ancho y volumen parejos fila a fila (el largo de cada fila cambia un poco:
-  // si no, la pierna se infla de golpe en la entrepierna).
-  const avg = (get, R) => out.map((_, r) => {
-    let sum = 0;
-    let n = 0;
-    for (let q = Math.max(0, r - R); q <= Math.min(ROWS, r + R); q++) {
-      sum += get(out[q]);
-      n++;
-    }
-    return sum / n;
-  });
-  // (En las piernas, el volumen no baja del de la cadera: un pozo justo
-  // arriba de la entrepierna era otra franja.)
-  for (let r = 0; r < rTop; r++) if (out[r].sbF < out[rTop].sbF) out[r] = { ...out[r], sbF: out[rTop].sbF, sbB: out[rTop].sbF };
-  const outerS = avg((c) => c.sx + c.sa, HUNG_SMOOTH);
-  const tS = avg((c) => c.sbF, HUNG_SMOOTH);
-  return out.map((_, r) => hungSection(rowY(r), outerS[r], tS[r]));
 }
-const HUNG_SMOOTH = 12; // filas a cada lado
-const CLIP_IN = 0.016; // los broches, a esto del doblez de cada costado
-const CLIP = { width: 0.03, depth: 0.012 };
 
 // Canales del elástico (costuras hundidas a lo largo de la cintura, desde
 // abajo).
@@ -387,23 +310,21 @@ export function buildShorts(M, hung = null) {
   let base = worn.pos;
   let clips = null;
   // Sección de cada fila (por la altura donde quedó).
-  let secOf = (y) => section(S, y);
+  const secOf = (y) => section(S, y);
   if (hung) {
-    const secs = hungSections(piece, W);
-    const sec = (r) => secs[r];
-    secOf = (y) => secs[Math.min(ROWS, Math.max(0, Math.round(((y - hung.top) / (SHORT.waist - SHORT.hem)) * ROWS + ROWS)))];
-    base = legGrid(sec, (y) => hung.top + (y - SHORT.waist), hung.z).pos;
-    gather(base, W, uvPiece, secOf, hung.z, 0.5);
-    // Los broches aprietan las dos capas en la cintura, cerca de cada costado.
-    const top = secs[ROWS];
-    const cx = top.sx + top.sa - CLIP_IN;
-    clips = [-1, 1].map((sd) => ({ x: sd * cx, y: hung.top, z: hung.z, ...CLIP }));
-    for (let v = 0; v < base.length; v += 3) {
-      const wx = 1 - smooth(clamp01((Math.abs(base[v] - cx) - CLIP.width / 2) / 0.012));
-      const wy = smooth(clamp01((base[v + 1] - (hung.top - CLIP.depth - 0.012)) / 0.012));
-      base[v + 2] = hung.z + (base[v + 2] - hung.z) * (1 - 0.8 * wx * wy);
-    }
-  } else gather(base, W, uvPiece, secOf, 0, 1, (y) => 1 - smooth(clamp01((S.hemY - y) / 0.02)));
+    // Colgado: la tela simulada (shortdrape.js), con la mitad del frunce.
+    const h = hangShortLeg(piece, W, ROWS + 1, WAIST_ROWS, SHORT.crotch + CROTCH_SPAN, hung);
+    base = h.pos;
+    clips = h.clips;
+    gather(base, W, uvPiece, gridNormals(base, W), 0.5);
+  } else {
+    const out = (v) => {
+      const c = secOf(base[v * 3 + 1]);
+      const [gx, gz] = sectionGrad(c, base[v * 3] - c.sx, base[v * 3 + 2]);
+      return [gx, 0, gz];
+    };
+    gather(base, W, uvPiece, out, 1, (y) => 1 - smooth(clamp01((S.hemY - y) / 0.02)));
+  }
   const parts = {};
   const c0 = COLS / 2;
   const waistV = (WAIST_ROWS / ROWS) * (SHORT.waist - SHORT.hem);
@@ -412,7 +333,10 @@ export function buildShorts(M, hung = null) {
     ['R', -1],
   ]) {
     const pos = Float32Array.from(base);
+    // (Las caras, orientadas con la pierna puesta: colgada es la misma tela.)
+    const wornPos = Float32Array.from(worn.pos);
     if (side < 0) for (let v = 0; v < pos.length; v += 3) pos[v] = -pos[v];
+    if (side < 0) for (let v = 0; v < wornPos.length; v += 3) wornPos[v] = -wornPos[v];
     // (Las ondas de la camiseta no son iguales de los dos lados.)
     if (!hung) followShirt(pos, S, M);
     // (Tela y molde, los de la pierna puesta: colgada es la misma pieza.)
@@ -427,17 +351,16 @@ export function buildShorts(M, hung = null) {
       uv1[v * 2 + 1] = vTop - uv[v * 2 + 1];
     }
     // Hacia afuera: el gradiente de la superelipse de su fila.
-    const z0 = hung ? hung.z : 0;
     const out = (x, y, z) => {
       const c = secOf(y);
-      const [gx, gz] = sectionGrad(c, side * x - c.sx, z - z0);
+      const [gx, gz] = sectionGrad(c, side * x - c.sx, z);
       return [gx * side, 0, gz];
     };
     const slice = (r0, r1, waist) => {
       const a = r0 * W;
       const b = (r1 + 1) * W;
       const p = pos.slice(a * 3, b * 3);
-      const part = { pos: p, uv: uv.slice(a * 2, b * 2), uv1: uv1.slice(a * 2, b * 2), idx: orient(p, gridIndex(COLS, r1 - r0, W), out) };
+      const part = { pos: p, uv: uv.slice(a * 2, b * 2), uv1: uv1.slice(a * 2, b * 2), idx: orient(wornPos.slice(a * 3, b * 3), gridIndex(COLS, r1 - r0, W), out) };
       // Costuras: los bordes de la pieza (entrepierna y tiro), el corte de la
       // cintura y, en ella, los canales del elástico; en la pierna, el doble
       // pespunte del dobladillo (desde el ruedo).

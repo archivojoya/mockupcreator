@@ -100,7 +100,15 @@ Demian usa casi siempre los mismos moldes: el catálogo de prendas es corto.
   ondas de la camiseta); «que caiga recto y ya» (sin curva al costado ni
   pliegue de perfil). La remera femenina, sin short: el de mujer es otro
   molde, «más corto, estilo los masculinos de rugby, y un poquito más ancho
-  de cada pierna». Falta: las piernas en la zancada.
+  de cada pierna». Charlado (1 de noviembre): arriba, del elástico al tiro,
+  como estaba (pegado a la camiseta, plano, sólo la costura); las piernas,
+  «dos cilindros cosidos» redondos (con paredes planas «el interior se ve
+  recto, cuadrado»); se ven 20 cm, 10 de cadera y 10 de piernas. Con
+  broches, sólo los frentes, la camiseta y a la derecha el short, colgados
+  parejos de sus broches (los del short en los costados de la cintura), que
+  se puedan girar; el short colgado, plano como la camiseta (no «aplastado
+  hasta la mitad y desde la mitad se abre»). Falta: las piernas en la
+  zancada.
 - **La vara:** una prenda en 3D tiene que salir más rápido que el mockup a
   mano. Si no, no está lista.
 - **Descartado:** coser los moldes SVG en Blender (artifact «Molde a 3D

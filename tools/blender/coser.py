@@ -46,16 +46,49 @@ def arc_to_t(ts, arc, s):
     return sg * (ts[lo] + f * (ts[hi] - ts[lo]))
 
 
+# Maniquí para un molde de ~116 cm de pecho: cortes (alto, medio ancho, media
+# profundidad, centro hacia adelante), en metros, con z = 0 en el punto del
+# cuello de la camiseta. Más ancho que hondo, como un torso, y lleno hasta la
+# cadera: la camiseta se apoya en el pecho y la espalda y cae derecha. La
+# espalda alta (omóplatos) sale 1,5 cm más que el pecho: sin eso, a la espalda
+# le sobra largo y hace ondas.
+TORSO = [
+    (0.100, 0.052, 0.052, -0.020),
+    (0.000, 0.055, 0.055, -0.020),
+    (-0.020, 0.072, 0.064, -0.016),
+    (-0.035, 0.118, 0.074, -0.012),
+    (-0.050, 0.162, 0.086, -0.010),
+    (-0.070, 0.184, 0.099, -0.008),
+    (-0.100, 0.194, 0.115, -0.007),
+    (-0.160, 0.197, 0.130, -0.006),
+    (-0.240, 0.194, 0.132, -0.004),
+    (-0.320, 0.187, 0.124, -0.003),
+    (-0.450, 0.178, 0.112, 0.000),
+    (-0.580, 0.182, 0.113, 0.000),
+    (-0.720, 0.190, 0.118, 0.000),
+    (-0.950, 0.190, 0.118, 0.000),
+]
+# Brazo: radio según la distancia a la articulación. Más grueso que uno de
+# verdad: llena la manga (no se ve) y la deja como un tubo, sin que cuelgue.
+ARM = [(0.0, 0.062), (0.05, 0.061), (0.12, 0.058), (0.20, 0.055), (0.30, 0.052), (0.38, 0.050)]
+
+
 def build_body(scene, o):
-    sx, sy = o['body_sx'], o['body_sy']
-    maniqui.TORSO = [(y * sy, a * sx, b * sx, c * sx) for y, a, b, c in maniqui.TORSO]
-    maniqui.ARM = [(s * sy, r * o['arm_s']) for s, r in maniqui.ARM]
+    maniqui.TORSO = TORSO
+    maniqui.ARM = [(s, r * o['arm_s']) for s, r in ARM]
     objs = [maniqui._object(scene, 'cuerpo', *maniqui.torso_mesh())]
-    alpha = math.radians(o['arm_angle'])
+    # Se cose con los brazos abiertos (la axila queda libre para que las
+    # costuras se junten) y después se bajan despacio hasta la pose final.
+    a0, a1 = math.radians(o['arm_angle_start']), math.radians(o['arm_angle'])
     for side in (1, -1):
         arm = maniqui._object(scene, 'brazoL' if side > 0 else 'brazoR', *maniqui.arm_mesh())
         arm.location = (side * o['joint_x'], 0.0, o['joint_z'])
-        arm.rotation_euler = (0.0, -side * alpha, 0.0)
+        # Más angosto de costado que de frente: deja lugar en la axila.
+        arm.scale = (o['arm_sx'], 1.0, 1.0)
+        arm.rotation_euler = (0.0, -side * a0, 0.0)
+        arm.keyframe_insert('rotation_euler', frame=o['arms_down'][0])
+        arm.rotation_euler = (0.0, -side * a1, 0.0)
+        arm.keyframe_insert('rotation_euler', frame=o['arms_down'][1])
         objs.append(arm)
     for ob in objs:
         ob.modifiers.new('col', 'COLLISION')
@@ -85,7 +118,7 @@ def initial_positions(data, o):
             t = arc_to_t(ts, arc, s) + (0 if key == 'front' else math.pi)
             pos[pc['offset'] + k] = (o['wrap_a'] * math.sin(t), -o['wrap_b'] * math.cos(t) + o['wrap_yc'],
                                      o['top_z'] - (y - top) * u)
-    alpha = math.radians(o['arm_angle'])
+    alpha = math.radians(o['arm_angle_start'])
     for key, side in (('sleeveL', 1), ('sleeveR', -1)):
         pc = P[key]
         E = pc['edges']
@@ -218,13 +251,13 @@ def simulate(data, o):
 
 
 DEFAULTS = {
-    'body_sx': 1.2, 'body_sy': 1.1, 'arm_s': 1.15, 'arm_angle': 42.0,
-    'joint_x': 0.18, 'joint_z': -0.094, 'body_thick': 0.004, 'body_friction': 2.0,
-    'wrap_a': 0.21, 'wrap_b': 0.155, 'wrap_yc': 0.0, 'top_z': 0.012,
+    'arm_s': 0.95, 'arm_sx': 0.8, 'arm_angle': 32.0, 'arm_angle_start': 42.0, 'arms_down': [60, 145],
+    'joint_x': 0.215, 'joint_z': -0.115, 'body_thick': 0.004, 'body_friction': 0.3,
+    'wrap_a': 0.228, 'wrap_b': 0.138, 'wrap_yc': 0.006, 'top_z': 0.012,
     'sleeve_s0': -0.03, 'clear': 0.012,
     'quality': 8, 'mass': 0.02, 'air': 3.0, 'tension': 40.0, 'compression': 40.0,
     'shear': 20.0, 'bending': 0.6, 'sewing': 10.0, 'col_dist': 0.003, 'col_quality': 3,
-    'self': False, 'cap_ease': 'auto', 'cap_ease_cm': 5.0, 'clamp': 0.05, 'frames': 150, 'gravity_from': 40,
+    'self': False, 'cap_ease': 'auto', 'cap_ease_cm': 5.0, 'clamp': 0.05, 'frames': 190, 'gravity_from': 40,
 }
 
 if __name__ == '__main__':

@@ -125,7 +125,9 @@ def neckband(obj, data, o):
         t /= np.linalg.norm(t)
         cont -= t * cont.dot(t)
         cont /= np.linalg.norm(cont)
-        d = cont * (1 - o['band_up']) + up * o['band_up']
+        inward = np.array([C[0] - P[i][0], C[1] - P[i][1], 0.0])
+        inward /= np.linalg.norm(inward) + 1e-9
+        d = cont * (1 - o['band_up'] - o['band_in']) + up * o['band_up'] + inward * o['band_in']
         d -= t * d.dot(t)
         rings_dir.append(d / np.linalg.norm(d))
         rings_nrm.append(np.array(v.normal))
@@ -189,7 +191,7 @@ def neckband(obj, data, o):
     return band
 
 
-def fabric_material(name, tex, inside=False):
+def fabric_material(name, tex, inside=False, plain=None, stitch=None, knit=None):
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     nt = mat.node_tree
@@ -197,11 +199,17 @@ def fabric_material(name, tex, inside=False):
     bsdf = N['Principled BSDF']
     uv = N.new('ShaderNodeUVMap')
     uv.uv_map = 'molde'
-    img = N.new('ShaderNodeTexImage')
-    img.image = bpy.data.images.load(tex, check_existing=True)
-    img.interpolation = 'Cubic'
-    L.new(uv.outputs['UV'], img.inputs['Vector'])
-    col = img.outputs['Color']
+    if plain:
+        # Un solo color liso (sin el diseño del molde).
+        rgb = N.new('ShaderNodeRGB')
+        rgb.outputs[0].default_value = srgb(plain)
+        col = rgb.outputs[0]
+    else:
+        img = N.new('ShaderNodeTexImage')
+        img.image = bpy.data.images.load(tex, check_existing=True)
+        img.interpolation = 'Cubic'
+        L.new(uv.outputs['UV'], img.inputs['Vector'])
+        col = img.outputs['Color']
     if inside:
         # El revés de la tela sublimada: el diseño más apagado.
         mix = N.new('ShaderNodeMix')
@@ -223,7 +231,48 @@ def fabric_material(name, tex, inside=False):
     bump.inputs['Strength'].default_value = 0.08
     bump.inputs['Distance'].default_value = 0.0004
     L.new(noise.outputs['Fac'], bump.inputs['Height'])
-    L.new(bump.outputs['Normal'], bsdf.inputs['Normal'])
+    normal = bump.outputs['Normal']
+    if knit:
+        # Trama de malla deportiva: una grilla fina de puntos en relieve, en
+        # centímetros del molde (la UV va de 0 a 1 sobre toda la mesa).
+        mp = N.new('ShaderNodeMapping')
+        mp.inputs['Scale'].default_value = (knit['w_cm'], knit['h_cm'], 1.0)
+        L.new(uv.outputs['UV'], mp.inputs['Vector'])
+        sep = N.new('ShaderNodeSeparateXYZ')
+        L.new(mp.outputs['Vector'], sep.inputs['Vector'])
+        waves = []
+        for axis in ('X', 'Y'):
+            m = N.new('ShaderNodeMath')
+            m.operation = 'MULTIPLY'
+            m.inputs[1].default_value = 2 * math.pi / knit['period_cm']
+            L.new(sep.outputs[axis], m.inputs[0])
+            sn = N.new('ShaderNodeMath')
+            sn.operation = 'SINE'
+            L.new(m.outputs[0], sn.inputs[0])
+            waves.append(sn)
+        prod = N.new('ShaderNodeMath')
+        prod.operation = 'MULTIPLY'
+        L.new(waves[0].outputs[0], prod.inputs[0])
+        L.new(waves[1].outputs[0], prod.inputs[1])
+        kb = N.new('ShaderNodeBump')
+        kb.inputs['Strength'].default_value = knit['strength']
+        kb.inputs['Distance'].default_value = 0.0003
+        L.new(prod.outputs[0], kb.inputs['Height'])
+        L.new(normal, kb.inputs['Normal'])
+        normal = kb.outputs['Normal']
+    if stitch and not inside:
+        # Costuras y pespuntes (costuras.py), en el plano del molde.
+        st = N.new('ShaderNodeTexImage')
+        st.image = bpy.data.images.load(stitch, check_existing=True)
+        st.image.colorspace_settings.name = 'Non-Color'
+        L.new(uv.outputs['UV'], st.inputs['Vector'])
+        b2 = N.new('ShaderNodeBump')
+        b2.inputs['Strength'].default_value = 1.0
+        b2.inputs['Distance'].default_value = 0.0012
+        L.new(st.outputs['Color'], b2.inputs['Height'])
+        L.new(normal, b2.inputs['Normal'])
+        normal = b2.outputs['Normal']
+    L.new(normal, bsdf.inputs['Normal'])
     return mat
 
 
@@ -232,7 +281,7 @@ def aim(ob, target):
     ob.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
 
 
-def area(name, loc, target, size, energy, size_y=None):
+def area(name, loc, target, size, energy, size_y=None, parent=None):
     lt = bpy.data.lights.new(name, 'AREA')
     lt.energy = energy
     if size_y:
@@ -244,6 +293,9 @@ def area(name, loc, target, size, energy, size_y=None):
     bpy.context.scene.collection.objects.link(ob)
     ob.location = loc
     aim(ob, target)
+    if parent:
+        ob.parent = parent
+        ob.matrix_parent_inverse = parent.matrix_world.inverted()
     return ob
 
 
@@ -254,13 +306,17 @@ def main(blend, piezas, tex, prefix, o):
     data = json.load(open(piezas))
     weld_seams(obj, data)
     if o['taubin']:
-        taubin(obj, o['taubin'])
+        taubin(obj, o['taubin'], max_move=o['taubin_max'])
     for p in obj.data.polygons:
         p.use_smooth = True
-    if o['collar_color']:
-        neckband(obj, data, o)
-    obj.data.materials.append(fabric_material('tela', tex))
-    obj.data.materials.append(fabric_material('reves', tex, inside=True))
+    if o['collar_color'] or o['plain']:
+        neckband(obj, data, {**o, 'collar_color': o['plain'] or o['collar_color']})
+    knit = None
+    if o['knit']:
+        vx, vy, vw, vh = data['viewbox']
+        knit = {'w_cm': vw * 2.54 / 72, 'h_cm': vh * 2.54 / 72, 'period_cm': o['knit'], 'strength': o['knit_strength']}
+    obj.data.materials.append(fabric_material('tela', tex, plain=o['plain'], stitch=o['stitch'], knit=knit))
+    obj.data.materials.append(fabric_material('reves', tex, inside=True, plain=o['plain'], knit=knit))
     so = obj.modifiers.new('espesor', 'SOLIDIFY')
     so.thickness = o['thick']
     so.offset = -1
@@ -278,11 +334,17 @@ def main(blend, piezas, tex, prefix, o):
     c = (lo + hi) / 2
     target = (0.0, 0.0, c[2])
 
-    area('clave', (-1.7, -2.3, c[2] + 1.0), target, 1.4, o['key'])
-    area('relleno', (2.4, -1.7, c[2] + 0.2), target, 2.2, o['fill'])
-    area('contra_izq', (-1.8, 1.8, c[2] + 0.4), target, 0.5, o['rim'], 1.6)
-    area('contra_der', (1.8, 1.8, c[2] + 0.4), target, 0.5, o['rim'], 1.6)
-    area('arriba', (0.0, -0.6, c[2] + 2.0), target, 1.5, o['top'])
+    # Las luces cuelgan de un eje que gira con la cámara: cada vista se
+    # ilumina igual (la espalda como el frente).
+    rig = bpy.data.objects.new('luces', None)
+    sc.collection.objects.link(rig)
+    rig.location = target
+    bpy.context.view_layer.update()
+    area('clave', (-1.7, -2.3, c[2] + 1.0), target, 1.4, o['key'], parent=rig)
+    area('relleno', (2.4, -1.7, c[2] + 0.2), target, 2.2, o['fill'], parent=rig)
+    area('contra_izq', (-1.8, 1.8, c[2] + 0.4), target, 0.5, o['rim'], 1.6, parent=rig)
+    area('contra_der', (1.8, 1.8, c[2] + 0.4), target, 0.5, o['rim'], 1.6, parent=rig)
+    area('arriba', (0.0, -0.6, c[2] + 2.0), target, 1.5, o['top'], parent=rig)
     w = bpy.data.worlds.new('estudio')
     sc.world = w
     w.use_nodes = True
@@ -319,6 +381,7 @@ def main(blend, piezas, tex, prefix, o):
         dx, dy = views[name]
         cam.location = (dx * dist, dy * dist, c[2] + dist * math.tan(math.radians(o['elev'])))
         aim(cam, target)
+        rig.rotation_euler = (0.0, 0.0, math.atan2(dx, -dy))
         R.filepath = f'{prefix}_{name}.png'
         bpy.ops.render.render(write_still=True)
         print('listo', R.filepath, flush=True)
@@ -329,9 +392,9 @@ def main(blend, piezas, tex, prefix, o):
 
 
 DEFAULTS = {
-    'taubin': 8, 'thick': 0.0012, 'subdiv': 1, 'key': 140.0, 'fill': 35.0, 'rim': 45.0,
-    'top': 20.0, 'world': 0.12, 'collar_color': '#1e007c', 'band_h': 0.018, 'band_up': 0.35,
-    'band_overlap': 0.004, 'band_out': 0.0015, 'band_tight': 0.06, 'band_thick': 0.0025, 'lens': 85.0, 'margin': 1.12, 'res': [1200, 1500],
+    'taubin': 80, 'taubin_max': 0.009, 'thick': 0.0012, 'subdiv': 1, 'key': 140.0, 'fill': 35.0, 'rim': 45.0,
+    'top': 20.0, 'world': 0.12, 'plain': None, 'stitch': None, 'knit': 0.14, 'knit_strength': 0.35, 'collar_color': '#1e007c', 'band_h': 0.017, 'band_up': 0.3, 'band_in': 0.45,
+    'band_overlap': 0.004, 'band_out': 0.0015, 'band_tight': 0.0, 'band_thick': 0.0025, 'lens': 85.0, 'margin': 1.12, 'res': [1200, 1500],
     'samples': 64, 'exposure': -0.5, 'elev': 6.0, 'views': ['frente', 'espalda'],
 }
 

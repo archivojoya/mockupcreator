@@ -1,0 +1,8 @@
+# Python 3.13 (el de bpy 5.2): python3.13 -m venv .venv && .venv/bin/pip install -r tools/blender/requirements.txt
+bpy==5.2.3
+numpy
+scipy
+shapely
+svgpathtools
+triangle
+pillow

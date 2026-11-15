@@ -1,7 +1,11 @@
 """Corta las piezas de un molde SVG de camiseta (frente, espalda, dos mangas)
 en mallas planas de triángulos y arma los pares de costura.
 
-    python piezas.py molde.svg salida.json [paso_cm]
+    python piezas.py molde.svg salida.json [paso_cm [costura_cm [ruedo_cm]]]
+
+costura_cm y ruedo_cm: márgenes que el molde trae de más (es la línea de
+corte) y que la prenda terminada no tiene: el de costura en cada tramo que se
+cose y el doblez del ruedo y de los puños. Con 0 el molde se toma tal cual.
 
 Cada pieza se toma del contorno (trazo) de su grupo; las esquinas salen de
 los quiebres del trazo. Los bordes que se cosen se reparten con la misma
@@ -83,6 +87,107 @@ def close_notches(P, marks, r=12.0):
     return Q, [new_marks[i] for i in order]
 
 
+def turn_angles(Q):
+    """Cuánto dobla el contorno en cada punto, en grados."""
+    a = Q - np.roll(Q, 1, 0)
+    b = np.roll(Q, -1, 0) - Q
+    ang = np.arctan2(a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0], (a * b).sum(1))
+    return np.degrees(np.abs(ang))
+
+
+def remove_allowances(P, marks, widths):
+    """El molde es la línea de corte: la prenda terminada es más chica. Saca
+    de cada tramo su margen (costura, o el doblez en ruedos y puños) y
+    devuelve el contorno por donde pasa la costura, con sus esquinas.
+
+    widths[k]: margen del tramo que va de la esquina k a la k+1."""
+    from shapely.geometry import LineString, Polygon
+    n = len(marks)
+
+    def area(X):
+        return 0.5 * np.sum(X[:, 0] * np.roll(X[:, 1], -1) - np.roll(X[:, 0], -1) * X[:, 1])
+    left = area(P) > 0  # el interior queda a la izquierda del recorrido
+
+    def inward(t):
+        return np.array([-t[1], t[0]]) if left else np.array([t[1], -t[0]])
+
+    def unit(v):
+        return v / np.linalg.norm(v)
+
+    edges = [walk(P, marks[k], marks[(k + 1) % n]) for k in range(n)]
+
+    # Dirección con la que cada tramo llega a su esquina y sale de ella
+    # (medida a 1,5 cm de la esquina: el contorno es denso).
+    def tangent(Q, at_end):
+        s = arclen(Q)
+        if at_end:
+            i = int(np.searchsorted(s, s[-1] - 1.5 * CM))
+            return unit(Q[-1] - Q[max(0, min(i, len(Q) - 2))])
+        i = int(np.searchsorted(s, 1.5 * CM))
+        return unit(Q[max(1, i)] - Q[0])
+
+    convex, expected = [], []
+    for k in range(n):
+        t_in, t_out = tangent(edges[k - 1], True), tangent(edges[k], False)
+        cross = t_in[0] * t_out[1] - t_in[1] * t_out[0]
+        convex.append((cross > 0) == left)
+        # Donde se cruzan los dos tramos corridos hacia adentro.
+        A = np.array([inward(t_in), inward(t_out)])
+        w = np.array([widths[k - 1], widths[k]])
+        expected.append(P[marks[k]] + np.linalg.lstsq(A, w, rcond=None)[0])
+
+    out = Polygon(P)
+    ext = 4 * max(widths)
+    # Tramos seguidos con el mismo margen van como una sola línea.
+    start = next((k for k in range(n) if widths[k] != widths[k - 1]), 0)
+    order = [(start + i) % n for i in range(n)]
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and widths[order[j + 1]] == widths[order[i]]:
+            j += 1
+        w = widths[order[i]]
+        if w > 0:
+            Q = np.vstack([edges[order[i]]] + [edges[order[m]][1:] for m in range(i + 1, j + 1)])
+            closed = (j - i + 1 == n)
+            if not closed:
+                # El tramo se alarga derecho más allá de sus esquinas: en la
+                # esquina el margen de un tramo corta al del vecino en punta.
+                t0, t1 = tangent(Q, False), tangent(Q, True)
+                if convex[order[i]]:
+                    Q = np.vstack([Q[0] - t0 * ext, Q])
+                if convex[(order[j] + 1) % n]:
+                    Q = np.vstack([Q, Q[-1] + t1 * ext])
+            out = out.difference(LineString(Q).buffer(w, cap_style='round' if closed else 'flat', join_style='round', quad_segs=24))
+        i = j + 1
+    if out.geom_type != 'Polygon':
+        out = max(out.geoms, key=lambda g: g.area)
+    R = np.array(out.exterior.coords)[:-1]
+    turn = turn_angles(R)
+    corners_xy = []
+    for x in expected:
+        d = np.linalg.norm(R - x, axis=1)
+        near = np.where(d < 0.5 * CM)[0]
+        corners_xy.append(R[near[np.argmax(turn[near])]] if len(near) else R[np.argmin(d)])
+    ring = out.exterior.segmentize(1.5)
+    Q = np.array(ring.coords)[:-1]
+    if np.sign(area(Q)) != np.sign(area(P)):
+        Q = Q[::-1]
+    return Q, [int(np.argmin(((Q - c) ** 2).sum(1))) for c in corners_xy]
+
+
+def edge_widths(P, marks, seam, hem, neck=None):
+    """Margen de cada tramo: el de más abajo es el ruedo (o el puño); el de
+    más arriba, el escote (sólo si se pide un margen propio para él)."""
+    n = len(marks)
+    ys = [(P[marks[k]][1] + P[marks[(k + 1) % n]][1]) / 2 for k in range(n)]
+    w = [seam] * n
+    w[int(np.argmax(ys))] = hem
+    if neck is not None:
+        w[int(np.argmin(ys))] = neck
+    return w
+
+
 def label_body(P, marks):
     C = [(m, P[m]) for m in marks]
     assert len(C) == 8, f'el frente/espalda tiene {len(C)} esquinas, se esperaban 8'
@@ -129,13 +234,36 @@ def edge(P, i, j):
     return a if arclen(a)[-1] <= arclen(b)[-1] else b
 
 
-def main(svg, dst, step_cm=1.3):
+def main(svg, dst, step_cm=1.3, seam_cm=0.0, hem_cm=0.0):
     h = step_cm * CM
     paths = outline_paths(svg)
     pieces = {}
+    raw = {}
     for key, path in paths.items():
         P, marks = corners(path)
-        P, marks = close_notches(P, marks)
+        raw[key] = close_notches(P, marks)
+
+    def shoulder_len(P, marks):
+        lab = label_body(P, marks)
+        return arclen(edge(P, lab['NPa'], lab['SPa']))[-1]
+
+    for key, (P, marks) in raw.items():
+        if seam_cm or hem_cm:
+            sw, hw = seam_cm * CM, hem_cm * CM
+            neck = None
+            if key == 'back' and 'front' in raw:
+                # Los hombros se cosen borde con borde: la costura de la
+                # espalda termina donde termina la del frente. Como el escote
+                # de adelante es más hondo, su costura corta al hombro más
+                # lejos; el margen del escote de atrás se agranda lo justo.
+                Pf, mf = raw['front']
+                target = shoulder_len(*remove_allowances(Pf, mf, edge_widths(Pf, mf, sw, hw)))
+                lo, hi = sw, 4 * sw
+                for _ in range(24):
+                    neck = (lo + hi) / 2
+                    got = shoulder_len(*remove_allowances(P, marks, edge_widths(P, marks, sw, hw, neck)))
+                    lo, hi = (neck, hi) if got > target else (lo, neck)
+            P, marks = remove_allowances(P, marks, edge_widths(P, marks, sw, hw, neck))
         lab = label_body(P, marks) if key in ('front', 'back') else label_sleeve(P, marks)
         pieces[key] = {'P': P, 'lab': lab}
 
@@ -199,7 +327,7 @@ def main(svg, dst, step_cm=1.3):
     print('\n'.join(report))
 
     vb = [float(x) for x in re.split(r'[\s,]+', ET.parse(svg).getroot().get('viewBox').strip())]
-    out = {'unit_m': 0.0254 / 72, 'viewbox': vb, 'pieces': [], 'seams': []}
+    out = {'unit_m': 0.0254 / 72, 'viewbox': vb, 'seam_cm': seam_cm, 'hem_cm': hem_cm, 'pieces': [], 'seams': []}
     where = {}  # (pieza, tramo) -> índices globales de sus puntos, en orden
     offset = 0
     order = {
@@ -257,4 +385,5 @@ def main(svg, dst, step_cm=1.3):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2], float(sys.argv[3]) if len(sys.argv) > 3 else 1.3)
+    a = [float(x) for x in sys.argv[3:]]
+    main(sys.argv[1], sys.argv[2], *a)

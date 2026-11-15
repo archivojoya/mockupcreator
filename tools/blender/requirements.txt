@@ -6,3 +6,4 @@ shapely
 svgpathtools
 triangle
 pillow
+scikit-image

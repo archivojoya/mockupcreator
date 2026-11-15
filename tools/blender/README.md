@@ -1,5 +1,17 @@
 # Camiseta desde el molde, en Blender
 
+> **Estado al 15 de noviembre de 2026: a medio rehacer, la simulación no da
+> una prenda buena.** Lo que sigue describe la versión del 2 de noviembre
+> (commit `84ac118`); el código de esta carpeta ya cambió y este texto no se
+> actualizó. Cambios sin terminar: `cuerpo.py` (horma nueva, hombros rectos y
+> brazos a 21°, que arranca fina y se infla), `piezas.py` (saca márgenes de
+> costura y de ruedo, opcional) y `coser.py` (usa la horma; el reposo de la
+> tela sale del molde plano con la base dinámica, porque `rest_shape_key` no
+> hace efecto en Blender 5.2). Con esto la prenda todavía queda arrugada en
+> los hombros y colgada de la axila. Demian preguntó si conviene dejar de
+> coser y armar la forma directamente desde la muestra
+> (`referencias/blender/`); está por decidirse.
+
 Prueba del 2 de noviembre de 2026: la camiseta sale del molde real de
 Illustrator, cosida y simulada en Blender sobre un cuerpo invisible, y se
 renderiza con Cycles (luz de estudio, tela, fondo transparente). El diseño

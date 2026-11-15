@@ -393,8 +393,8 @@ def main(blend, piezas, tex, prefix, o):
 
 DEFAULTS = {
     'taubin': 80, 'taubin_max': 0.009, 'thick': 0.0012, 'subdiv': 1, 'key': 140.0, 'fill': 35.0, 'rim': 45.0,
-    'top': 20.0, 'world': 0.12, 'plain': None, 'stitch': None, 'knit': 0.14, 'knit_strength': 0.35, 'collar_color': '#1e007c', 'band_h': 0.017, 'band_up': 0.3, 'band_in': 0.45,
-    'band_overlap': 0.004, 'band_out': 0.0015, 'band_tight': 0.0, 'band_thick': 0.0025, 'lens': 85.0, 'margin': 1.12, 'res': [1200, 1500],
+    'top': 20.0, 'world': 0.12, 'plain': None, 'stitch': None, 'knit': 0.14, 'knit_strength': 0.35, 'collar_color': '#1e007c', 'band_h': 0.02, 'band_up': 0.12, 'band_in': 0.0,
+    'band_overlap': 0.004, 'band_out': 0.0015, 'band_tight': 0.03, 'band_thick': 0.0025, 'lens': 85.0, 'margin': 1.12, 'res': [1200, 1500],
     'samples': 64, 'exposure': -0.5, 'elev': 6.0, 'views': ['frente', 'espalda'],
 }
 
